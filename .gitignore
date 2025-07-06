@@ -1,0 +1,11 @@
+# VSCode workspace configuration file
+.vscode/settings.json
+
+*.exe
+*.obj
+*.map
+
+ignore/*
+
+# master.lib
+3rd-party/master.lib/include/master*.lib

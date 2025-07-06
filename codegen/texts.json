@@ -1,0 +1,61 @@
+{
+  "glossary": {
+    "THPRAC_LAUNCHER_TITLE": [
+      "thprac98 - “Œ•û‹Œì—V‹YŒ[“®Ší",
+      "thprac98 - PC-98 Touhou Game Launcher",
+      "thprac98 - “Œ•û‹ŒìƒQ[ƒ€ƒ‰ƒ“ƒ`ƒƒ["
+    ],
+    "THPRAC_GIRLS_ARE_PRAYING": [
+      "­—‹F“˜’†cc",
+      "Girls are now praying...",
+      "­—‹F“˜’†cc"
+    ],
+
+    // These lines must be of width 6.
+    "THPRAC_F1_GAME": [" —V‹Y ", " Game ", " ¹Ş°Ñ "],
+    "THPRAC_F2_LINK": [" èYÚ ", " Link ", " Øİ¸  "],
+    "THPRAC_F3_TOOLS": [" H‹ï ", " Tool ", " Â°Ù  "],
+    "THPRAC_F4_CONFIG": [" İ’u ", "Config", " İ’è "],
+
+    "THPRAC_TH01_TITLE": [
+      "“Œ•ûèËˆÙ“`@` Highly Responsive to Prayers.",
+      "Touhou Reiiden ~ Highly Responsive to Prayers.",
+      "“Œ•ûèËˆÙ“`@` Highly Responsive to Prayers."
+    ],
+    "THPRAC_TH02_TITLE": [
+      "“Œ•û••–‚˜^@` the Story of Eastern Wonderland.",
+      "Touhou Fuumaroku ~ the Story of Eastern Wonderland.",
+      "“Œ•û••–‚˜^@` the Story of Eastern Wonderland."
+    ],
+    "THPRAC_TH03_TITLE": [
+      "“Œ•û–²‹ó@` Phantasmagoria of Dim.Dream.",
+      "Touhou Yumejikuu ~ Phantasmagoria of Dim.Dream.",
+      "“Œ•û–²‹ó@` Phantasmagoria of Dim.Dream."
+    ],
+    "THPRAC_TH04_TITLE": [
+      "“Œ•ûŒ¶‘z‹½@` Lotus Land Story.",
+      "Touhou Gensokyo ~ Lotus Land Story.",
+      "“Œ•ûŒ¶‘z‹½@` Lotus Land Story."
+    ],
+    "THPRAC_TH05_TITLE": [
+      "“Œ•û‰öãY’k@` Mystic Square.",
+      "Touhou Kaikidan ~ Mystic Square.",
+      "“Œ•û‰öãY’k@` Mystic Square."
+    ]
+  },
+  "groups": {
+    "THPRAC_FX_MENUS": [
+      "THPRAC_F1_GAME",
+      "THPRAC_F2_LINK",
+      "THPRAC_F3_TOOLS",
+      "THPRAC_F4_CONFIG"
+    ],
+    "THPRAC_GAME_TITLES": [
+      "THPRAC_TH01_TITLE",
+      "THPRAC_TH02_TITLE",
+      "THPRAC_TH03_TITLE",
+      "THPRAC_TH04_TITLE",
+      "THPRAC_TH05_TITLE"
+    ]
+  }
+}
