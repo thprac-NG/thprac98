@@ -1,3 +1,5 @@
+[English](https://github.com/H-J-Granger/thprac98/blob/main/README.md)
+
 # thprac98
 
 thprac98 是 [thprac](https://github.com/touhouworldcup/thprac)（一个东方 STG 练习器）在 PC-98 系列机器上的移植。
