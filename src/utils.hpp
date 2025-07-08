@@ -126,7 +126,7 @@ enum key_t {
   KEY_COLON_KE,            //   :        *      ケ
   KEY_RIGHT_BRACKET_MU,    //   ]        }      ム       」
   KEY_COMMA_NE,            //   ,        <      ネ       、
-  KEY_DOT_RU,              //   .        >      ル       。
+  KEY_DOT_RU,              //   .        >      ル       ゜
   KEY_SLASH_NU,            //   /        ?      ヌ       ・
   KEY_RO,                  //            _      ロ
 
