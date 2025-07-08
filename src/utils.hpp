@@ -119,15 +119,15 @@ enum key_t {
 
   KEY_MINUS_HO,            //   -        =      ホ
   KEY_CARET_HE,            //   ^               ヘ
-  KEY_YEN_CHOONPU,         //   ￥       |      ー
-  KEY_AT_DAKUTEN,          //   @        ~      ゛
-  KEY_LEFT_BRACKET_KUTEN,  //   [        {      。      「
+  KEY_YEN_CHOONPU,         //   ￥       |      ー(長音符)
+  KEY_AT_DAKUTEN,          //   @        ~      ゛(濁点)
+  KEY_LEFT_BRACKET_KUTEN,  //   [        {      。(句点)   「(始め鉤括弧)
   KEY_SEMICOLON_RE,        //   ;        +      レ
   KEY_COLON_KE,            //   :        *      ケ
-  KEY_RIGHT_BRACKET_MU,    //   ]        }      ム       」
-  KEY_COMMA_NE,            //   ,        <      ネ       、
-  KEY_DOT_RU,              //   .        >      ル       ゜
-  KEY_SLASH_NU,            //   /        ?      ヌ       ・
+  KEY_RIGHT_BRACKET_MU,    //   ]        }      ム       」(終わり鉤括弧)
+  KEY_COMMA_NE,            //   ,        <      ネ       、(読点)
+  KEY_DOT_RU,              //   .        >      ル       ゜(半濁点)
+  KEY_SLASH_NU,            //   /        ?      ヌ       ・(中黒)
   KEY_RO,                  //            _      ロ
 
   KEY_ESC,
