@@ -77,56 +77,58 @@ bool test_stdint(void);
 enum key_t {
   KEY_NULL = 0,  // not a real key, for configuration use
 
-  KEY_1_NU,  // 1 ! ヌ
-  KEY_2_FU,  // 2 " フ
-  KEY_3_A,   // 3 # ア ァ
-  KEY_4_U,   // 4 $ ウ ゥ
-  KEY_5_E,   // 5 % エ ェ
-  KEY_6_O,   // 6 & オ ォ
-  KEY_7_YA,  // 7 ' ヤ ャ
-  KEY_8_YU,  // 8 ( ユ ュ
-  KEY_9_YO,  // 9 ) ヨ ョ
-  KEY_0_WA,  // 0   ワ ヲ
+  // character typed:          none | +shift | +kana | +shift+kana
 
-  KEY_A_CHI,  // A チ
-  KEY_B_KO,   // B コ
-  KEY_C_SO,   // C ソ
-  KEY_D_SHI,  // D シ
-  KEY_E_I,    // E イ
-  KEY_F_HA,   // F ハ
-  KEY_G_KI,   // G キ
-  KEY_H_KU,   // H ク
-  KEY_I_NI,   // I ニ
-  KEY_J_MA,   // J マ
-  KEY_K_NO,   // K ノ
-  KEY_L_RI,   // L リ
-  KEY_M_MO,   // M モ
-  KEY_N_MI,   // N ミ
-  KEY_O_RA,   // O ラ
-  KEY_P_SE,   // P セ
-  KEY_Q_TA,   // Q タ
-  KEY_R_SU,   // R ス
-  KEY_S_TO,   // S ト
-  KEY_T_KA,   // T カ
-  KEY_U_NA,   // U ナ
-  KEY_V_HI,   // V ヒ
-  KEY_W_TE,   // W テ
-  KEY_X_SA,   // X サ
-  KEY_Y_N,    // Y ン
-  KEY_Z_TSU,  // Z ツ ッ
+  KEY_1_NU,   //                1        !      ヌ      
+  KEY_2_FU,   //                2        "      フ      
+  KEY_3_A,    //                3        #      ア       ァ
+  KEY_4_U,    //                4        $      ウ       ゥ
+  KEY_5_E,    //                5        %      エ       ェ
+  KEY_6_O,    //                6        &      オ       ォ
+  KEY_7_YA,   //                7        '      ヤ       ャ
+  KEY_8_YU,   //                8        (      ユ       ュ
+  KEY_9_YO,   //                9        )      ヨ       ョ
+  KEY_0_WA,   //                0               ワ       ヲ
 
-  KEY_MINUS_HO,            // - = ホ
-  KEY_CARET_HE,            // ^   ヘ
-  KEY_YEN_CHOONPU,         // ￥ | ー
-  KEY_AT_DAKUTEN,          // @ ~ ゛
-  KEY_LEFT_BRACKET_KUTEN,  // [ { 。「
-  KEY_SEMICOLON_RE,        // ; + レ
-  KEY_COLON_KE,            // : * ケ
-  KEY_RIGHT_BRACKET_MU,    // ] } ム 」
-  KEY_COMMA_NE,            // , < ネ 、
-  KEY_DOT_RU,              // . > ル 。
-  KEY_SLASH_NU,            // / ? ヌ ・
-  KEY_RO,                  //   _ ロ
+  KEY_A_CHI,  //                A               チ      
+  KEY_B_KO,   //                B               コ      
+  KEY_C_SO,   //                C               ソ      
+  KEY_D_SHI,  //                D               シ      
+  KEY_E_I,    //                E               イ      
+  KEY_F_HA,   //                F               ハ      
+  KEY_G_KI,   //                G               キ      
+  KEY_H_KU,   //                H               ク      
+  KEY_I_NI,   //                I               ニ      
+  KEY_J_MA,   //                J               マ      
+  KEY_K_NO,   //                K               ノ      
+  KEY_L_RI,   //                L               リ      
+  KEY_M_MO,   //                M               モ      
+  KEY_N_MI,   //                N               ミ      
+  KEY_O_RA,   //                O               ラ      
+  KEY_P_SE,   //                P               セ      
+  KEY_Q_TA,   //                Q               タ      
+  KEY_R_SU,   //                R               ス      
+  KEY_S_TO,   //                S               ト      
+  KEY_T_KA,   //                T               カ      
+  KEY_U_NA,   //                U               ナ      
+  KEY_V_HI,   //                V               ヒ      
+  KEY_W_TE,   //                W               テ      
+  KEY_X_SA,   //                X               サ      
+  KEY_Y_N,    //                Y               ン      
+  KEY_Z_TSU,  //                Z               ツ       ッ
+
+  KEY_MINUS_HO,            //   -        =      ホ
+  KEY_CARET_HE,            //   ^               ヘ
+  KEY_YEN_CHOONPU,         //   ￥       |      ー
+  KEY_AT_DAKUTEN,          //   @        ~      ゛
+  KEY_LEFT_BRACKET_KUTEN,  //   [        {      。      「
+  KEY_SEMICOLON_RE,        //   ;        +      レ
+  KEY_COLON_KE,            //   :        *      ケ
+  KEY_RIGHT_BRACKET_MU,    //   ]        }      ム       」
+  KEY_COMMA_NE,            //   ,        <      ネ       、
+  KEY_DOT_RU,              //   .        >      ル       。
+  KEY_SLASH_NU,            //   /        ?      ヌ       ・
+  KEY_RO,                  //            _      ロ
 
   KEY_ESC,
   KEY_BS,  // backspace
