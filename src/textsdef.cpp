@@ -11,7 +11,7 @@ const char* th_glossary_str[3][11] = {
     " H‹ï ",
     " İ’u ",
     "­—‹F“˜’†cc",
-    "thprac98 - “Œ•û‹Œì—V‹YŒ[“®Ší²›•D",
+    "thprac98 - “Œ•û‹Œì—V‹YŒ[“®Ší",
     "“Œ•ûèËˆÙ“`@` Highly Responsive to Prayers.",
     "“Œ•û••–‚˜^@` the Story of Eastern Wonderland.",
     "“Œ•û–²‹ó@` Phantasmagoria of Dim.Dream.",
