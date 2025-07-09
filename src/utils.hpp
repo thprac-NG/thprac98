@@ -11,9 +11,6 @@
 #define CPLUSPLUS20 202002L
 #define CPLUSPLUS23 202302L
 
-#if __cplusplus < CPLUSPLUS97
-#define ANCIENT_CXX 1
-#endif
 #if (__cplusplus == CPLUSPLUS97) && !defined(__INTELLISENSE__)
 #error C++97 is not supported. Please use >=C++11 if you're not using ancient \
        C++ compilers.
@@ -21,15 +18,21 @@
 
 #pragma endregion 
 
-#ifndef ANCIENT_CXX
+#if (ANCIENT_CXX == 0)
 #include <cstdint>
 #include <type_traits>
 #endif 
 
 #pragma region "Fundamental" Types
 
-#if IS_ANCIENT_CXX || (__cplusplus < CPLUSPLUS20)
-# ifndef IS_ANCIENT_CXX
+#if (ANCIENT_CXX == 1)
+#define bool unsigned char
+#define false ((bool)(0))
+#define true ((bool)(1))
+#endif
+
+#if (ANCIENT_CXX == 1) || (__cplusplus < CPLUSPLUS20)
+#if (ANCIENT_CXX == 0)
 static_assert(
   sizeof(signed char) == 1 && std::is_signed<signed char>::value == true,
   "Type 'signed char' should have a size of 1, and be signed."
@@ -38,7 +41,7 @@ static_assert(
   sizeof(unsigned char) == 1 && std::is_signed<unsigned char>::value == false,
   "Type 'unsigned char' should have a size of 1, and be unsigned."
 );
-# endif
+#endif
 typedef signed char int8;
 typedef unsigned char uint8;
 #else 
@@ -46,7 +49,7 @@ typedef int8_t int8;
 typedef uint8_t int uint8;
 #endif
 
-#if IS_ANCIENT_CXX
+#if (ANCIENT_CXX == 1)
 typedef signed short int16;
 typedef unsigned short uint16;
 typedef signed long int32;
@@ -68,6 +71,8 @@ typedef uint32_t uint32;
  */
 bool test_stdint(void);
 #endif
+
+#pragma endregion
 
 #pragma region Keyboard handling
 
