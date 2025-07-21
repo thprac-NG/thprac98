@@ -1,5 +1,7 @@
 @echo off
 
+del thprac98.exe
+
 set ReC98_DOS=msdos -e -x
 set include_path_arg=-I3rd-party\master.lib\include
 set other_arg=-ms -wall
