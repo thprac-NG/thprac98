@@ -1,7 +1,7 @@
-[ç®€ä½“ä¸­æ–‡](https://github.com/H-J-Granger/thprac98/blob/main/README_CN.md)
+[’†•¶”Å](https://github.com/H-J-Granger/thprac98/blob/main/READMEcn.md)
 
 # thprac98
 
-thprac98 is the PC-98 version of [thprac](https://github.com/touhouworldcup/thprac), which is a tool for practising Touhou shmups.
+Thprac98 is a PC-98 module of [thprac](https://github.com/touhouworldcup/thprac), which is an unofficial tool for practising Touhou shmups. Aiming to provide support to the first five official Touhou games, thprac98 is being developed by the current maintainers of thprac right now.
 
-**With many proof-of-concepts unimplemented, this project is still highly work in progress!**
+**With many proof-of-concepts unimplemented, this project is still a _highly_ work-in-progress!**
