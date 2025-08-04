@@ -1,4 +1,4 @@
-[’†•¶”Å](https://github.com/H-J-Granger/thprac98/blob/main/README_CN.md)
+[’†•¶”Å](https://github.com/H-J-Granger/thprac98/blob/main/READMECN.md)
 
 # thprac98
 
