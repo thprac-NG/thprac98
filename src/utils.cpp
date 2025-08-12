@@ -12,7 +12,7 @@ bool test_stdint(void) {
   if (!((sizeof(int##bit_length) * 8 == bit_length) &&          \
         ((int##bit_length)(-1) < (int##bit_length)(0)))) {      \
     return false;                                               \
-  }                                                             
+  }
 
   test_stdint_macro(8);
   test_stdint_macro(16);
