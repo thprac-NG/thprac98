@@ -2,6 +2,8 @@
 
 #include "master.h"
 
+#include <stdio.h>  // putchar
+
 #ifdef DEBUG
 bool test_stdint(void) {
 #define test_stdint_macro(bit_length)                           \
@@ -27,6 +29,18 @@ bool is_pressed(key_t key) {
   return result & (0x01 << keygroup_and_index_of[key][1]);
 }
 
+int char_width(unsigned ch) {
+  return (ch <= 0x00FFu || (0x8540u <= ch && ch <= 0x869Du)) + 1;
+}
+
+void wputchar(unsigned ch) {
+  putchar(ch >> 8);
+  putchar(ch & 0xFF);
+  return;
+}
+
 unsigned rot(unsigned n) {
   return (n >> 8) | ((n & 0xff) << 8);
 }
+
+bool is_epson = false;

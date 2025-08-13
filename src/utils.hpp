@@ -11,17 +11,28 @@
 #define CPLUSPLUS20 202002L
 #define CPLUSPLUS23 202302L
 
-#if (__cplusplus == CPLUSPLUS97) && !defined(__INTELLISENSE__)
+#if !defined(ANCIENT_CXX) && (__cplusplus < CPLUSPLUS11) && \
+    !defined(__INTELLISENSE__)
 #error C++97 is not supported. Please use >=C++11 if you're not using ancient \
        C++ compilers.
 #endif
 
-#pragma endregion
+#pragma endregion  // #pragma region Macros
+#pragma region CXX Keywords
+
+#if (ANCIENT_CXX == 1)
+#define CONSTEXPR
+#else
+#define CONSTEXPR constexpr
+#endif
+
+#pragma endregion  // #pragma region CXX Keywords
 
 #if (ANCIENT_CXX == 0)
 #include <cstdint>
 #include <type_traits>
 #endif
+#include "master.h"
 
 #pragma region "Fundamental" Types
 
@@ -72,8 +83,7 @@ typedef uint32_t uint32;
 bool test_stdint(void);
 #endif
 
-#pragma endregion
-
+#pragma endregion  // #pragma region "Fundamental" Types
 #pragma region Keyboard handling
 
 /**
@@ -136,7 +146,7 @@ enum key_t {
   KEY_RO,                  //            _      Éç
 
   KEY_ESC,
-  KEY_BS,  // backspace
+  KEY_BS,  // BackSpace
   KEY_TAB,
   KEY_ENTER,
   KEY_SPACE,
@@ -157,7 +167,7 @@ enum key_t {
   KEY_COPY,
   KEY_SHIFT,
   KEY_CAPS,
-  KEY_KANA,
+  KEY_KANA,  // âºñº
   KEY_GRPH,
   KEY_CTRL,
 
@@ -287,18 +297,39 @@ const int keygroup_and_index_of[127][2] = {
   {13, 2}, {13, 3}, {10, 2}, {10, 3}, {10, 4}, {10, 5}, {10, 6}
 };
 
-bool is_pressed(key_t);
+bool is_pressed(key_t x);
+
+#pragma endregion  // #pragma region Keyboard handling
+#pragma region Character handling
+
+/**
+ * @brief Check whether a character is half-width or full-width when printed.
+ * Reference: PC-9801 Programers' Bible, Section 4-10 ~ 4-11,
+ * https://ja.wikipedia.org/wiki/JIS_X_0213%E9%9D%9E%E6%BC%A2%E5%AD%97%E4%B8%80%E8%A6%A7 .
+ *
+ * @param ch The character to be checked, should be valid.
+ * @return int 1 if the character is half-width, 2 if otherwise.
+ */
+int char_width(unsigned ch);
+
+/**
+ * @brief Print wide char by `putchar`-ing its first and second bit.
+ *
+ * @param ch The character to be printed.
+ */
+void wputchar(unsigned ch);
+
+#pragma endregion  // #pragma region Character handling
+#pragma region Miscellaneous
 
 // Rotates first and second byte.
 unsigned rot(unsigned n);
 
-/**
- * @brief The "width" of a character. For example, latin characters are
- * half-width, and kanjis are full-width.
- *
- * @param ch The character, in Shift-JIS format.
- * @return int The width of the character, 1 for half-width, 2 for full-width.
- */
-int width(unsigned int ch);
+extern bool is_epson;
+
+const int SCREEN_WIDTH = 80;
+const int SCREEN_HEIGHT = 25;
+
+#pragma endregion  // #pragma region Miscellaneous
 
 #endif  // #ifndef THPRAC98_SRC_UTILS_HPP_
