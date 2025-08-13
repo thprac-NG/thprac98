@@ -319,6 +319,17 @@ int char_width(unsigned ch);
  */
 void wputchar(unsigned ch);
 
+/**
+ * @brief Convert a JIS code into the corresponding Shift-JIS code.
+ * Returns ch if the encoding is invalid.
+ */
+unsigned jis_to_shiftjis(unsigned ch);
+/**
+ * @brief Convert a Shift-JIS code into the corresponding JIS code.
+ * Returns ch if the encoding is invalid.
+ */
+unsigned shiftjis_to_jis(unsigned ch);
+
 #pragma endregion  // #pragma region Character handling
 #pragma region Miscellaneous
 
