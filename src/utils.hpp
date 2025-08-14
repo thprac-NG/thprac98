@@ -72,17 +72,6 @@ typedef int32_t int32;
 typedef uint32_t uint32;
 #endif
 
-#ifdef DEBUG
-/**
- * @brief Designed for ancient C++.
- * Test if type int8, uint16, uint32, ... works as intended.
- * @details Both sizes and signedness will be tested.
- *
- * @return true If they work as intended.
- */
-bool test_stdint(void);
-#endif
-
 #pragma endregion  // #pragma region "Fundamental" Types
 #pragma region Keyboard handling
 
