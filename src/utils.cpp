@@ -65,4 +65,27 @@ unsigned rot(unsigned n) {
   return (n >> 8) | ((n & 0xff) << 8);
 }
 
+const unsigned popcount_data[16] = {
+  0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+};
+unsigned popcount(unsigned n) {
+  return popcount_data[n & 0xF] + popcount_data[(n >> 4) & 0xF]
+         + popcount_data[(n >> 8) & 0xF] + popcount_data[(n >> 12) & 0xF];
+}
+
+void graph_mode(void) {
+  printf("\x1b)3");
+  return;
+}
+void kanji_mode(void) {
+  printf("\x1b)0");
+  return;
+}
+
+template <class T, class U>
+pair<T, U> make_pair(T first, U second) {
+  pair<T, U> ret(first, second);
+  return ret;
+}
+
 bool is_epson = false;

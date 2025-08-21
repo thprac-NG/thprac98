@@ -325,6 +325,34 @@ unsigned shiftjis_to_jis(unsigned ch);
 // Rotates first and second byte.
 unsigned rot(unsigned n);
 
+// popcount(x) for x from 0 to 15.
+extern const unsigned popcount_data[16];
+// The number of 1s in the binary representation of n.
+unsigned popcount(unsigned n);
+
+/**
+ * @brief Switch the printing mode to "graph mode", allowing to print characters
+ * in 0x0081~0x009F and 0x00E0~0x00EF.
+ */
+void graph_mode(void);
+/**
+ * @brief Switch the printing mode to "kanji mode", allowing to print characters
+ * in 0x0081~0x009F and 0x00E0~0x00EF.
+ */
+void kanji_mode(void);
+
+template <class T, class U>
+struct pair {
+  typedef T first_type;
+  typedef U second_type;
+  T first;
+  U second;
+  pair() {}
+  pair(T first_, U second_) : first(first_), second(second_) {}
+};
+template <class T, class U>
+pair<T, U> make_pair(T first, U second);
+
 extern bool is_epson;
 
 const int SCREEN_WIDTH = 80;
