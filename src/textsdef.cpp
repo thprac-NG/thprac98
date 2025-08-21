@@ -4,12 +4,13 @@
 
 #include "src/textsdef.hpp"
 
-const char* th_glossary_str[3][11] = {
+const char* th_glossary_str[3][12] = {
   {
     " —V‹Y ",
     " èYÚ ",
     " H‹ï ",
     " İ’u ",
+    " ›ñ• ",
     "­—‹F“˜’†cc",
     "thprac98 - “Œ•û‹Œì—V‹YŒ[“®Ší",
     "“Œ•ûèËˆÙ“`@` Highly Responsive to Prayers.",
@@ -23,6 +24,7 @@ const char* th_glossary_str[3][11] = {
     " Link ",
     " Tool ",
     "Config",
+    " Help ",
     "Girls are now praying...",
     "thprac98 - PC-98 Touhou Game Launcher",
     "Touhou Reiiden ~ Highly Responsive to Prayers.",
@@ -36,6 +38,7 @@ const char* th_glossary_str[3][11] = {
     " Øİ¸  ",
     " Â°Ù  ",
     " İ’è ",
+    " ÍÙÌß ",
     "­—‹F“˜’†cc",
     "thprac98 - “Œ•û‹ŒìƒQ[ƒ€ƒ‰ƒ“ƒ`ƒƒ[",
     "“Œ•ûèËˆÙ“`@` Highly Responsive to Prayers.",
@@ -46,11 +49,12 @@ const char* th_glossary_str[3][11] = {
   }
 };
 
-const th_glossary_t THPRAC_FX_MENUS[4] = {
+const th_glossary_t THPRAC_FX_MENUS[5] = {
   THPRAC_F1_GAME,
   THPRAC_F2_LINK,
   THPRAC_F3_TOOLS,
-  THPRAC_F4_CONFIG
+  THPRAC_F4_CONFIG,
+  THPRAC_F5_HELP
 };
 
 const th_glossary_t THPRAC_GAME_TITLES[5] = {
