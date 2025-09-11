@@ -79,7 +79,7 @@ typedef uint32_t uint32;
  * @brief The keys on a PC-98 keyboard.
  */
 enum key_t {
-#include "utils01.inc"
+#include "src/utils01.inc"
 };
 
 /**
