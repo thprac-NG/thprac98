@@ -1,4 +1,8 @@
-src\menu.cpp src\utils.cpp src\texts.cpp src\textsdef.cpp
+src\menu.cpp
+src\utils.cpp
+src\texts.cpp
+src\textsdef.cpp
 src\tui\chars.cpp
-3rd-party\master.lib\include\masters.lib
-3rd-party\ReC98\platform\x86real\noexcept.cpp
+src\tui\tui.cpp
+3rdparty\master.lib\include\masters.lib
+3rdparty\ReC98\platform\x86real\noexcept.cpp
