@@ -208,8 +208,13 @@ unsigned jis_to_shiftjis(unsigned ch);
 unsigned shiftjis_to_jis(unsigned ch);
 /**
  * @brief Determine whether the character is a valid Shift-JIS code.
+ * Don't use this function: its table is incorrect (e.g. 0x8C49 isn't in it)
  */
-bool valid_shiftjis(unsigned ch);
+// bool valid_shiftjis(unsigned ch);
+/**
+ * @brief Determine whether a byte is a Shift-JIS starting byte.
+ */
+bool shiftjis_starting_byte(unsigned ch);
 
 #pragma endregion  // #pragma region Character handling
 #pragma region Miscellaneous
@@ -249,6 +254,27 @@ extern bool is_epson;
 
 const int SCREEN_WIDTH = 80;
 const int SCREEN_HEIGHT = 25;
+
+void wait_for_enter_key();
+void print_delimiter(char ch = '=');
+/**
+ * @brief Print a Shift-JIS-encoded string to the screen.
+ * @details Invalid Shift-JIS codes will be converted by "?" (0x3F) (currently
+ *          unusable)
+ *
+ * @param str the string
+ * @param pause If passed with `true`, wait for a key input after printing
+ *              several rows (default to 23, configurable in parameter `rows`).
+ * @param kanji If passed with `true`, combine bytes of adjacent characters into
+ *              a Shift-JIS 2-byte character if possible.
+ *              If passed with `false`, treat every character as a Shift-JIS
+ *              1-byte character.
+ * @param rows The number of printed rows before a pause. Must be >0.
+ *
+ * @returns 0 if succeed, 1 if `rows` <= 0.
+ */
+int print_string(const char* str, bool pause = true, bool kanji = true,
+                 int rows = 23);
 
 #pragma endregion  // #pragma region Miscellaneous
 

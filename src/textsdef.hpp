@@ -22,7 +22,7 @@ enum th_glossary_t {
 
 extern const char* th_glossary_str[3][12];
 
-extern const th_glossary_t THPRAC_FX_MENUS[5];
+extern const th_glossary_t THPRAC_FX_MENUS[4];
 extern const th_glossary_t THPRAC_GAME_TITLES[5];
 
 #endif  // #ifndef THPRAC98_SRC_TEXTSDEF_HPP_

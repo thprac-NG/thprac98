@@ -10,7 +10,7 @@ bool is_pressed(key_t key) {
 }
 
 int char_width(unsigned ch) {
-  return (ch <= 0x00FFu || (0x8540u <= ch && ch <= 0x869Du)) + 1;
+  return 2 - (ch <= 0x00FFu || (0x8540u <= ch && ch <= 0x869Du));
 }
 
 void wputchar(unsigned ch) {
@@ -91,9 +91,10 @@ pair<T, U> make_pair(T first, U second) {
 bool is_epson = false;
 
 bool valid_shiftjis(unsigned ch) {
+  // FIXME: 0x8C49 will return false. Fix it.
   if (ch <= 0x7F) { return true; }  // ASCII
   if (0xA1 <= ch && ch <= 0xDF) { return true; }  // Half-width katakana
-  unsigned upper = ch >> 16, lower = ch & 0xFF;
+  unsigned upper = ch >> 8, lower = ch & 0xFF;
   if (!((0x81 <= upper && upper <= 0x9F) || (0xE0 <= upper && upper <= 0xEF))) {
     return false;  // First byte out of range
   }
@@ -105,4 +106,75 @@ bool valid_shiftjis(unsigned ch) {
     if (!(0x9F <= lower && lower <= 0xFC)) { return false; }
   }
   return true;
+}
+bool shiftjis_starting_byte(unsigned ch) {
+  return (0x81 <= ch && ch <= 0x9F) || (0xE0 <= ch && ch <= 0xEF);
+}
+
+void wait_for_enter_key() {
+  printf("--- Press enter key to continue ---");
+  getchar();
+  return;
+}
+void print_delimiter(char ch) {
+  int i = 0;
+  putchar('\n');
+  for (i = 0; i < 80; ++i) {
+    putchar(ch);
+  }
+  putchar('\n');
+  return;
+}
+int print_string(const char* str, bool pause, bool kanji, int rows) {
+  if (rows <= 0) { return 1; }
+  if (kanji) {
+    kanji_mode();
+  } else {
+    graph_mode();
+  }
+  int row = 0, col = 0, i = 0;
+  unsigned previous_byte = 0;
+  unsigned ch = 0;
+  for (i = 0; str[i]; ++i) {
+    ch = str[i] & 0xFF;
+    if (previous_byte) {
+      ch |= previous_byte << 8;
+      previous_byte = 0;
+    } else if (shiftjis_starting_byte(ch) && kanji) {
+      previous_byte = ch;
+      continue;
+    }
+    if (ch == '\n') {
+      putchar('\n');
+      col = 0;
+      row++;
+    }
+    if (col == 80) {
+      putchar('\n');
+      col = 0;
+      row++;
+    } else if (col == 79) {
+      if (ch > 0xFF && valid_shiftjis(ch) && char_width(ch) == 2) {
+        putchar('\n');
+        col = 0;
+        row++;
+      }
+    }
+    if (row == rows && pause) {
+      wait_for_enter_key();
+      row = 0;
+    }
+    if (ch == '\n' || ch == '\r') { continue; }
+    col += char_width(ch);
+    // if (!valid_shiftjis(ch)) {
+    //   putchar('?');
+    //   continue;
+    // }
+    if (ch > 0xFF) {
+      putchar(ch >> 8);
+    }
+    putchar(ch & 0xFF);
+    ch = 0;
+  }
+  return 0;
 }

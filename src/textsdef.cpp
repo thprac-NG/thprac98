@@ -49,12 +49,11 @@ const char* th_glossary_str[3][12] = {
   }
 };
 
-const th_glossary_t THPRAC_FX_MENUS[5] = {
+const th_glossary_t THPRAC_FX_MENUS[4] = {
   THPRAC_F1_GAME,
   THPRAC_F2_LINK,
   THPRAC_F3_TOOLS,
-  THPRAC_F4_CONFIG,
-  THPRAC_F5_HELP
+  THPRAC_F4_CONFIG
 };
 
 const th_glossary_t THPRAC_GAME_TITLES[5] = {

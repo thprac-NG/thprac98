@@ -1,3 +1,4 @@
+@rem Unusable in PC-98 environment. TODO: make a build98.bat.
 @echo off
 
 set ReC98_DOS=msdos -e -x
@@ -28,10 +29,10 @@ if not %1.==test. goto :end_test
   if exist test.exe del test.exe
   %ReC98_DOS% tcc %include_path_arg% %other_arg% src\test.cpp @srcfiles ^
     || goto :error
-  echo [build.bat] Building tuitest.exe...
-  if exist tuitest.exe del tuitest.exe
-  %ReC98_DOS% tcc %include_path_arg% %other_arg% src\tuitest.cpp @srcfiles ^
-    || goto :error
+  @REM echo [build.bat] Building tuitest.exe...
+  @REM if exist tuitest.exe del tuitest.exe
+  @REM %ReC98_DOS% tcc %include_path_arg% %other_arg% src\tuitest.cpp @srcfiles ^
+  @REM   || goto :error
   echo [build.bat] Successfully built all test suites.
 :end_test
 
@@ -47,10 +48,16 @@ if not %1.==clean. goto :end_clean
 @rem Doing code-generation using command `build.bat codegen`
 if not %1.==codegen. goto :end_codegen
   echo [build.bat] Building text_gen.exe...
-  c++ codegen/text_gen.cpp -o text_gen.exe -I3rdparty/json/include -std=c++11 ^
-    || goto :error
+  c++ codegen/text_gen.cpp -o text_gen.exe -I. -I3rdparty/json/include ^
+    -std=c++11 || goto :error
   echo [build.bat] Generating textsdef.hpp and textsdef.cpp...
   text_gen.exe || goto :error
+  echo [build.bat] Building licengen.exe from licengen.cpp...
+  %ReC98_DOS% tcc %include_path_arg% %other_arg% codegen\licengen.cpp ^
+    @srcfiles || goto :error
+  echo [build.bat] Generating license.hpp and license.cpp...
+  %ReC98_DOS% licengen.exe || goto :error
+  echo [build.bat] Successfully generated all the code.
 :end_codegen
 
 goto :end_of_file

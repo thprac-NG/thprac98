@@ -1,42 +1,17 @@
 #include <stdio.h>
-#include <string.h>  // memset
+#include <string.h>  // memset, strcmp
 
 #include "master.h"
 
-#include "src/utils.hpp"
+#include "src/license.hpp"
 #include "src/menu.hpp"
+#include "src/utils.hpp"
+#include "src/version.hpp"
 
-/**
- * @brief Print a Shift-JIS-encoded string to the screen.
- * @details Invalid 1-byte Shift-JIS codes will be converted by "?" (0x3F), and
- *          2-byte ones will be converted by full-width "?" (0x8148).
- *
- * @param str the string
- * @param pause If pass with `true`, wait for a key input after printing
- *              several rows (default to 24, configurable in parameter `rows`).
- * @param kanji If pass with `true`, combine bytes of adjacent characters into a
- *              Shift-JIS 2-byte character if possible.
- *              If pass with `false`, treat every character as a Shift-JIS
- *              1-byte character.
- * @param rows The number of printed rows before a pause. Must be >0.
- *
- * @returns 0 if succeed, 1 if `rows` <= 0.
- */
-int print_string(const char* str, bool pause = false, bool kanji = true,
-                 int rows = 24) {
-  if (rows <= 0) { return 1; }
-  if (kanji) {
-    kanji_mode();
-  } else {
-    graph_mode();
-  }
-  int col = 0;
-  // TODO: finish it.
-  return 0;
-}
+bool pause = true;
 
 void print_help_message() {
-  printf(
+  print_string(
     "Usage: thprac98 [options] file...\n"
     "Options:\n"
     "  --help                 Show this help message\n"
@@ -51,20 +26,84 @@ void print_help_message() {
     "  --import               Import the save data of a game\n"
     "  --license              Show license\n"
     "  --version              Show the version of thprac98\n"
+    "  --no-pause             No pause after printing several lines\n",
+    pause
   );
+  return;
+}
+void print_links() {
+  print_string("(There's currently no links)\n", pause);
+  return;
+}
+void print_version() {
+  print_string(
+    "thprac98 ver." THPRAC98_VERSION "\n"
+    "Website: https://github.com/thprac-NG/thprac98\n"
+    "Website (main project thprac): https://github.com/touhouworldcup/thprac\n"
+    "Special Thanks: \n"
+    "You!\n",
+    pause
+  );
+  return;
+}
+void print_license() {
+  print_delimiter();
+  puts("The license of thprac:");
+  wait_for_enter_key();
+  print_string(license_thprac98);
+  wait_for_enter_key();
+
+  print_delimiter();
+  puts("The license of Lohmann's JSON:");
+  wait_for_enter_key();
+  print_string(license_lohmann_json);
+  wait_for_enter_key();
+
+  print_delimiter();
+  puts("The license of master.lib:");
+  wait_for_enter_key();
+  print_string(license_master_lib);
+  wait_for_enter_key();
+
+  print_delimiter();
+  puts("The license of Takeda Toshiya's MS-DOS Player:");
+  wait_for_enter_key();
+  print_string(license_takeda_msdos);
+  wait_for_enter_key();
   return;
 }
 
 int main(int argc, char** argv) {
+  int i = 0;
+  for (i = 0; i < argc; ++i) {
+    if (strcmp(argv[i], "--no-pause")) {
+      pause = false;
+    }
+  }
+  if (argc == 1) {
+    print_help_message();
+    return 0;
+  }
   // Parse the standalone arguments
-  enum standalone_argument_t {
-    ARGUMENT_HELP,
-    ARGUMENT_LINKS,
-    ARGUMENT_RESET,
-    ARGUMENT_ROLL,
-    ARGUMENT_LICENSE,
-    ARGUMENT_VERSION
-  };
-  print_help_message();
+  if (argc == 2 || (argc == 3 && !pause)) {
+    for (i = 1; i <= 2; ++i) {
+      if (strcmp(argv[i], "--help") == 0) {
+        print_help_message();
+        return 0;
+      }
+      if (strcmp(argv[i], "--links") == 0) {
+        print_links();
+        return 0;
+      }
+      if (strcmp(argv[i], "--version") == 0) {
+        print_version();
+        return 0;
+      }
+      if (strcmp(argv[i], "--license") == 0) {
+        print_license();
+        return 0;
+      }
+    }
+  }
   return 0;
 }

@@ -2,5 +2,9 @@ src\menu.cpp
 src\utils.cpp
 src\texts.cpp
 src\textsdef.cpp
+src\version.cpp
+src\license.cpp
+src\tui\chars.cpp
+src\tui\tui.cpp
 3rdparty\master.lib\include\masters.lib
 3rdparty\ReC98\platform\x86real\noexcept.cpp

@@ -1,0 +1,13 @@
+#ifndef THPRAC98_SRC_VERSION_HPP_
+#define THPRAC98_SRC_VERSION_HPP_
+
+#define THPRAC98_VERSION_NUMBER "0.1.0"
+extern const int version_number_int[3];
+
+#ifdef THPRAC98_RELEASE
+#define THPRAC98_VERSION THPRAC98_VERSION_NUMBER
+#else
+#define THPRAC98_VERSION THPRAC98_VERSION_NUMBER "-beta"
+#endif
+
+#endif  // #ifndef THPRAC98_SRC_VERSION_HPP_
