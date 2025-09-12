@@ -6,6 +6,3 @@
 *.map
 
 ignore/*
-
-# master.lib
-3rdparty/master.lib/include/master*.lib
