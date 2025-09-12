@@ -161,7 +161,6 @@ int main(int argc, char** argv) {
   ch = fgetc(fin);
   while (ch != EOF) {
     fputc(ch, fout);
-    printf("%X ", ch);
     ch = fgetc(fin);
   }
   fclose(fin);
