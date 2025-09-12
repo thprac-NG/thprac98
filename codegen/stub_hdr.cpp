@@ -4,7 +4,7 @@
 #include "src/utils.hpp"
 
 // Reference:
-// https://www.tavi.co.uk/phobos/exeformat.html#reloctable ,
+// https://www.tavi.co.uk/phobos/exeformat.html ,
 // https://alon-alush.github.io/pe%20file%20format/dosheader/ .
 // Page: typically of a size of 512 bytes; Paragraph: a size of 16 bytes.
 struct exe_header_t {
@@ -34,9 +34,40 @@ struct exe_header_t {
 uint8 header[0x10 * 100];
 uint16 relocated_table[10][2];
 
+struct checksum_t {
+  uint16 checksum, current_word;
+  bool at_odd_byte;
+  checksum_t() {
+    checksum = current_word = 0;
+    at_odd_byte = false;
+  }
+  void pushback(uint8 byte) {
+    if (at_odd_byte) {
+      current_word = (current_word << 8) | byte;
+    } else {
+      checksum += current_word;
+      current_word = 0;
+    }
+    at_odd_byte ^= 1;
+    return;
+  }
+};
+
 int main(int argc, char** argv) {
-  if (argc != 3) { return 1; }
+  // TODO: add a correct checksum
+  // TODO: use only one input argument and modify it using another temp file
+  if (argc != 3) {
+    printf("stub_hdr: Incorrect argument. "
+           "Expecting stub_hdr [input_exe] [output_exe].\n");
+    return 1;
+  }
   FILE *fin = fopen(argv[1], "rb");
+  if (fin == NULL) {
+    printf("stub_hdr: Cannot open input file %s.\n", argv[1]);
+    return 6;
+  }
+
+  // Read the file header
   int ch = 0, i = 0;
   while (i < 0x20) {
     ch = fgetc(fin);
@@ -51,7 +82,7 @@ int main(int argc, char** argv) {
     fclose(fin);
     return 5;
   }
-  while (i < exe_header->header_paragraphs * 0x20) {
+  while (i < exe_header->header_paragraphs * 0x10) {
     ch = fgetc(fin);
     if (ch == EOF) { break; }
     header[i] = ch;
@@ -74,8 +105,12 @@ int main(int argc, char** argv) {
     printf("stub_hdr: Relocation table is not completely inside the header.\n");
     return 4;
   }
+
+  // Generate the new header
+  int old_header_paragraphs = exe_header->header_paragraphs;
   exe_header->header_paragraphs = 4;
-  // These two for loops cannot be merged, since the memory region can overlap.
+  // The two following loops can't be merged, since the memory region can
+  // overlap to each other.
   for (i = 0; i < exe_header->relocation_items; ++i) {
     relocated_table[i][0] = *(uint16*)(
       (uint8*)header + exe_header->relocation_table_offset + i * 4
@@ -91,13 +126,42 @@ int main(int argc, char** argv) {
   exe_header->relocation_table_offset =
       (uint8*)exe_header->reserved2 - header;
   exe_header->new_exe_header_offset = 0;
+  exe_header->checksum = 0;
+  checksum_t checksum;
+  for (i = 0; i < exe_header->header_paragraphs * 0x10; ++i) {
+    checksum.pushback(header[i]);
+  }
+  ch = fgetc(fin);
+  while (ch != EOF) {
+    checksum.pushback(ch);
+    ch = fgetc(fin);
+  }
+  if (checksum.at_odd_byte) {
+    checksum.pushback(0);
+  }
+  exe_header->checksum = ~checksum.checksum;
+  fclose(fin);
+
+  fin = fopen(argv[1], "rb");
+  if (fin == NULL) {
+    printf("stub_hdr: Cannot open input file %s.\n", argv[1]);
+    return 6;
+  }
   FILE *fout = fopen(argv[2], "wb");
+  if (fout == NULL) {
+    printf("stub_hdr: Cannot open output file %s.\n", argv[1]);
+    return 7;
+  }
+  for (i = 0; i < old_header_paragraphs * 0x10; ++i) {
+    fgetc(fin);
+  }
   for (i = 0; i < exe_header->header_paragraphs * 0x10; ++i) {
     fputc(header[i], fout);
   }
   ch = fgetc(fin);
   while (ch != EOF) {
     fputc(ch, fout);
+    printf("%X ", ch);
     ch = fgetc(fin);
   }
   fclose(fin);
