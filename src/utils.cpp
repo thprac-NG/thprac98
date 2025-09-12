@@ -89,3 +89,20 @@ pair<T, U> make_pair(T first, U second) {
 }
 
 bool is_epson = false;
+
+bool valid_shiftjis(unsigned ch) {
+  if (ch <= 0x7F) { return true; }  // ASCII
+  if (0xA1 <= ch && ch <= 0xDF) { return true; }  // Half-width katakana
+  unsigned upper = ch >> 16, lower = ch & 0xFF;
+  if (!((0x81 <= upper && upper <= 0x9F) || (0xE0 <= upper && upper <= 0xEF))) {
+    return false;  // First byte out of range
+  }
+  // Second byte out of range
+  if (upper & 1) {
+    if (lower == 0x7F) { return false; }
+    if (!(0x40 <= lower && lower <= 0x9E)) { return false; }
+  } else {
+    if (!(0x9F <= lower && lower <= 0xFC)) { return false; }
+  }
+  return true;
+}

@@ -83,9 +83,10 @@ enum key_t {
 };
 
 /**
- * @brief Key group used by INT 18h/04h. When using it, one should provide a
- * keygroup index, and get an 8-bit return value representing whether each key
- * of this keygroup is pressed, from low to high.
+ * @brief Key group used by INT 18h/04h.
+ * @details When using it, one should provide a keygroup index, and get an
+ * 8-bit return value representing whether each key of this keygroup is pressed,
+ * from low to high.
  */
 const key_t keygroups[16][8] = {
   {
@@ -205,6 +206,10 @@ unsigned jis_to_shiftjis(unsigned ch);
  * Returns ch if the encoding is invalid.
  */
 unsigned shiftjis_to_jis(unsigned ch);
+/**
+ * @brief Determine whether the character is a valid Shift-JIS code.
+ */
+bool valid_shiftjis(unsigned ch);
 
 #pragma endregion  // #pragma region Character handling
 #pragma region Miscellaneous

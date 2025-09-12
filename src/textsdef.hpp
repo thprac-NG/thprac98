@@ -1,6 +1,6 @@
 // WARNING: THIS FILE IS AUTO-GENERATED
 // To modify this file, edit codegen/texts.json and use
-// codegen/texts_gen.cpp to regenerate this file.
+// codegen/text_gen.cpp to regenerate this file.
 
 #ifndef THPRAC98_SRC_TEXTSDEF_HPP_
 #define THPRAC98_SRC_TEXTSDEF_HPP_
