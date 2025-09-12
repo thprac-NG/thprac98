@@ -18,7 +18,13 @@
 
 #include "nlohmann/json.hpp"
 
-#include "codegen/common/warning.hpp"
+#include "codegen/common.hpp"
+
+#define THPRAC98_CODEGEN_WARNING_TEXT \
+    "// WARNING: THIS FILE IS AUTO-GENERATED" ENDL                  \
+    "// To modify this file, edit codegen/texts.json and use" ENDL  \
+    "// codegen/text_gen.cpp to regenerate this file." ENDL ENDL
+
 
 /**
  * @brief Check if a byte is a leading byte in Shift JIS.
