@@ -5,7 +5,7 @@ set include_path_arg=-I3rdparty\master.lib\include -I3rdparty\ReC98
 set other_arg=-ms -wall -DANCIENT_CXX=1 -v
 
 @rem Building thprac98.exe using command `build.bat` (without args)
-if not %1.==. goto end_build
+if not %1.==. goto :end_build
   echo [build.bat] Building thprac98.exe...
   if exist thprac98.exe del thprac98.exe
   %ReC98_DOS% tcc %include_path_arg% %other_arg% src\thprac98.cpp @srcfiles ^
@@ -23,7 +23,7 @@ if not %1.==. goto end_build
 :end_build
 
 @rem Building test suite using command `build.bat test`
-if not %1.==test. goto end_test
+if not %1.==test. goto :end_test
   echo [build.bat] Building test.exe...
   if exist test.exe del test.exe
   %ReC98_DOS% tcc %include_path_arg% %other_arg% src\test.cpp @srcfiles ^
@@ -36,13 +36,22 @@ if not %1.==test. goto end_test
 :end_test
 
 @rem Cleaning build stuffs using command `build.bat clean`
-if not %1.==clean. goto end_clean
+if not %1.==clean. goto :end_clean
   echo [build.bat] Cleaning .map, .exe, .obj files...
   del /s *.map
   del /s *.obj
   del /s *.exe
   echo [build.bat] Successfully cleaned all the build-related stuffs.
 :end_clean
+
+@rem Doing code-generation using command `build.bat codegen`
+if not %1.==codegen. goto :end_codegen
+  echo [build.bat] Building text_gen.exe...
+  c++ codegen/text_gen.cpp -o text_gen.exe -I3rdparty/json/include -std=c++11 ^
+    || goto :error
+  echo [build.bat] Generating textsdef.hpp and textsdef.cpp...
+  text_gen.exe || goto :error
+:end_codegen
 
 goto :end_of_file
 :error
