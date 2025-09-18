@@ -3,7 +3,7 @@
 
 set ReC98_DOS=msdos -e -x
 set include_path_arg=-I3rdparty\master.lib\include -I3rdparty\ReC98
-set other_arg=-ms -wall -DANCIENT_CXX=1 -v
+set other_arg=-ms -wall -DANCIENT_CXX=1 -v -3
 
 @rem Building thprac98.exe using command `build.bat` (without args)
 if not %1.==. goto :end_build
