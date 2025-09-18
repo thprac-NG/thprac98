@@ -113,7 +113,10 @@ bool shiftjis_starting_byte(unsigned ch) {
 
 void wait_for_enter_key() {
   printf("--- Press enter key to continue ---");
-  getchar();
+  int ch = getchar();
+  while (ch != '\n' && ch != EOF) {
+    ch = getchar();
+  }
   return;
 }
 void print_delimiter(char ch) {
