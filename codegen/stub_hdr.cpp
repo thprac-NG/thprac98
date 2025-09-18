@@ -3,6 +3,9 @@
 
 #include "src/utils.hpp"
 
+const int MAX_RELOCATION_TABLE_SIZE = 16;  // must be a multiple of 8
+uint16 relocation_table[MAX_RELOCATION_TABLE_SIZE + 1][2];
+
 // Reference:
 // https://www.tavi.co.uk/phobos/exeformat.html ,
 // https://alon-alush.github.io/pe%20file%20format/dosheader/ .
@@ -29,10 +32,10 @@ struct exe_header_t {
   uint16 oem_information;
   uint16 reserved2[10];  // we use this field to store the relocation table
   uint32 new_exe_header_offset;
+  uint16 relocation_table[MAX_RELOCATION_TABLE_SIZE * 2];
 };
 
 uint8 header[0x10 * 100];
-uint16 relocated_table[10][2];
 
 struct checksum_t {
   uint16 checksum, current_word;
@@ -54,7 +57,6 @@ struct checksum_t {
 };
 
 int main(int argc, char** argv) {
-  // TODO: add a correct checksum
   // TODO: use only one input argument and modify it using another temp file
   if (argc != 3) {
     printf("stub_hdr: Incorrect argument. "
@@ -93,9 +95,9 @@ int main(int argc, char** argv) {
     fclose(fin);
     return 2;
   }
-  if (exe_header->relocation_items > 5) {
-    printf("stub_hdr: Too many (%d) relocation items, should be <= 5.\n",
-           exe_header->relocation_items);
+  if (exe_header->relocation_items > MAX_RELOCATION_TABLE_SIZE) {
+    printf("stub_hdr: Too many (%d) relocation items, should be <= %d.\n",
+           exe_header->relocation_items, MAX_RELOCATION_TABLE_SIZE);
     fclose(fin);
     return 3;
   }
@@ -108,23 +110,23 @@ int main(int argc, char** argv) {
 
   // Generate the new header
   int old_header_paragraphs = exe_header->header_paragraphs;
-  exe_header->header_paragraphs = 4;
+  exe_header->header_paragraphs = 4 + MAX_RELOCATION_TABLE_SIZE / 4;
   // The two following loops can't be merged, since the memory region can
   // overlap to each other.
   for (i = 0; i < exe_header->relocation_items; ++i) {
-    relocated_table[i][0] = *(uint16*)(
+    relocation_table[i][0] = *(uint16*)(
       (uint8*)header + exe_header->relocation_table_offset + i * 4
     );
-    relocated_table[i][1] = *(uint16*)(
+    relocation_table[i][1] = *(uint16*)(
       (uint8*)header + exe_header->relocation_table_offset + i * 4 + 2
     );
   }
   for (i = 0; i < exe_header->relocation_items; ++i) {
-    exe_header->reserved2[i * 2] = relocated_table[i][0];
-    exe_header->reserved2[i * 2 + 1] = relocated_table[i][1];
+    exe_header->relocation_table[i * 2] = relocation_table[i][0];
+    exe_header->relocation_table[i * 2 + 1] = relocation_table[i][1];
   }
   exe_header->relocation_table_offset =
-      (uint8*)exe_header->reserved2 - header;
+      (uint8*)exe_header->relocation_table - header;
   exe_header->new_exe_header_offset = 0;
   exe_header->checksum = 0;
   checksum_t checksum;
