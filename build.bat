@@ -39,9 +39,11 @@ if not %1.==test. goto :end_test
 @rem Cleaning build stuffs using command `build.bat clean`
 if not %1.==clean. goto :end_clean
   echo [build.bat] Cleaning .map, .exe, .obj files...
-  del /s *.map
-  del /s *.obj
-  del /s *.exe
+  @rem # TODO: Come up with a better solution than below.
+  for %%i in (chars, license, menu, noexcept, stub_hdr, texts, textsdef,
+      thprac98, tui, utils, version) do (
+    del %%i.map %%i.obj %%i.exe
+  )
   echo [build.bat] Successfully cleaned all the build-related stuffs.
 :end_clean
 
