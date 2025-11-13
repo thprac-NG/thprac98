@@ -32,7 +32,7 @@
 #endif
 
 #if __MASTER_VERSION < 23
-# error master.lib 0.23以上が必要です!!
+# error "master.lib 0.23以上が必要です!!"
 #endif
 
 #define	JOY_COMPLETE	1

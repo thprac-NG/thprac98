@@ -26,7 +26,7 @@
 #endif
 
 #if __MASTER_VERSION < 22
-# error master.lib 0.22以上が必要です!!
+# error "master.lib 0.22以上が必要です!!"
 #endif
 
 /*

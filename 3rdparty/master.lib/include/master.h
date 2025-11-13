@@ -62,7 +62,7 @@
 #endif
 
 #ifndef MASTER_RET
-#  error master.lib:モデルが特定できません。 master.h を直接includeせずに、masters.h などのモデル別ヘッダをインクルードしてください!
+#  error "master.lib:モデルが特定できません。 master.h を直接includeせずに、masters.h などのモデル別ヘッダをインクルードしてください!"
 #endif
 
 #ifndef EXIT_SUCCESS	/* stdlib.h は EXIT_SUCCESS で2重includeを防止できる */
@@ -279,7 +279,7 @@ void MASTER_RET text_pset( int x, int y );
 void MASTER_RET text_preset( int x, int y );
 void MASTER_RET text_worddota( int x, int y, unsigned image, unsigned dotlen, unsigned atr );
 void MASTER_RET text_showpage( int page );
-void MASTER_RET text_frame( int x1, int y1, int x2,int y2, unsigned wattr, unsigned iattr, int round ); 
+void MASTER_RET text_frame( int x1, int y1, int x2,int y2, unsigned wattr, unsigned iattr, int round );
 
 #define text_shown()	TextShown
 #define text_smooth(shiftdot)	OUTB(0x76,shiftdot)
@@ -342,8 +342,8 @@ void MASTER_RET vtext_roll_up_ca( unsigned fillchar, unsigned filatr );
 void MASTER_RET vtext_roll_down_ca( unsigned fillchar, unsigned filatr );
 
 void MASTER_RET vtext_clear(void);
-void MASTER_RET vtext_frame(int x1, int y1, int x2, int y2, unsigned attrl, unsigned attri, int dummy); 
-void MASTER_RET vtext_boxfilla(int x1, int y1, int x2, int y2, unsigned attr ); 
+void MASTER_RET vtext_frame(int x1, int y1, int x2, int y2, unsigned attrl, unsigned attri, int dummy);
+void MASTER_RET vtext_boxfilla(int x1, int y1, int x2, int y2, unsigned attr );
 
 int MASTER_RET vtext_color_98( int color98 );
 void MASTER_RET vtext_refresh(unsigned x, unsigned y, unsigned len);
@@ -2192,7 +2192,7 @@ void MASTER_RET vga4_super_zoom(int x, int y, int num, int zoom);
 void MASTER_RET vga4_super_zoom_put(int x, int y, int num, unsigned x_rate, int y_rate);
 # if !MASTER98	/* DOS/Vでは super_*_tinyは無効 */
 #  define super_zoom(x,y,n,z)			vga4_super_zoom(x,y,n,z)
-#  define super_zoom_put(x,y,num,xr,yr)	vga4_super_zoom_put(x,y,num,xr,yr) 
+#  define super_zoom_put(x,y,num,xr,yr)	vga4_super_zoom_put(x,y,num,xr,yr)
 #  define super_put_tiny(x,y,n)			super_put(x,y,n)
 #  define super_put_tiny_small(x,y,n)	super_put(x,y,n)
 #  define super_roll_put_tiny(x,y,n)	super_roll_put(x,y,n)
@@ -2225,7 +2225,7 @@ void MASTER_RET virtual_free(void);
 void MASTER_RET super_wave_put(int x, int y, int num, int len, char amp, int ph);
 void MASTER_RET super_wave_put_1plane(int x, int y, int num, int len, char amp, int ph, int pattern_plane, unsigned put_plane);
 void MASTER_RET super_vibra_put(int x, int y, int num, int len, int ph);
-void MASTER_RET super_vibra_put_1plane(int x, int y, int num, int len, int ph, int pattern_plane, unsigned put_plane); 
+void MASTER_RET super_vibra_put_1plane(int x, int y, int num, int len, int ph, int pattern_plane, unsigned put_plane);
 void MASTER_RET super_zoom_v_put(int x, int y, int num, unsigned y_rate);
 void MASTER_RET super_zoom_v_put_1plane(int x, int y, int num, unsigned rate, int pattern_plane, unsigned put_plane);
 
@@ -2245,7 +2245,7 @@ void MASTER_RET vga4_super_zoom_v_put_1plane(int x, int y, int num, unsigned rat
 #if !MASTER98
 # define super_wave_put(x,y,num,len,amp,ph)	vga4_super_wave_put(x,y,num,len,amp,ph)
 # define super_wave_put_1plane(x,y,num,len,amp,ph,pat,put) vga4_super_wave_put_1plane(x,y,num,len,amp,ph,pat,put)
-# define super_vibra_put(x,y,num,len,ph)	vga4_super_vibra_put(x,y,num,len,ph)	
+# define super_vibra_put(x,y,num,len,ph)	vga4_super_vibra_put(x,y,num,len,ph)
 # define super_vibra_put_1plane(x,y,num,len,ph,pat,put) super_put_1plane(x,y,num,pat,put)
 # define super_zoom_v_put(x,y,num,yrate)	super_zoom_put(x,y,num,256,yrate)
 # define super_zoom_v_put_1plane(x,y,num,rate,pat,put) vga4_super_zoom_v_put_1plane(x,y,num,rate,pat,put)
