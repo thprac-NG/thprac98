@@ -3,14 +3,10 @@
 
 #include "src/textsdef.hpp"
 
-enum language_t {
-  LANGUAGE_CHINESE = 0,
-  LANGUAGE_ENGLISH,
-  LANGUAGE_JAPANESE
-};
+enum language_t { LANGUAGE_CHINESE = 0, LANGUAGE_ENGLISH, LANGUAGE_JAPANESE };
 extern language_t language;
 
-#define S(identifier)  \
+#define S(identifier) \
   (th_glossary_str[static_cast<size_t>(language)][identifier])
 
 #endif  // #ifndef THPRAC98_SRC_TEXTS_HPP_

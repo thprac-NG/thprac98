@@ -2,9 +2,8 @@
 #define THPRAC98_SRC_MENU_HPP_
 
 #include "master.h"
-
-#include "src/utils.hpp"
 #include "src/texts.hpp"
+#include "src/utils.hpp"
 
 enum launcher_page_t {
   LAUNCHER_GAME_LIST,
@@ -67,8 +66,8 @@ void render_page(void);
  * @return 0 if success, non-zero if failed.
  */
 int print_table(int x_min, int y_min, int x_max, int y_max,
-                int vertical_line_num, const int* vertical_line_xs,
-                int horizontal_line_num, const int* horizontal_line_ys,
+                int vertical_line_num, const int *vertical_line_xs,
+                int horizontal_line_num, const int *horizontal_line_ys,
                 int attribute);
 
 #endif  // #ifndef THPRAC98_SRC_MENU_HPP_

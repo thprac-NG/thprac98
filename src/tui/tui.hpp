@@ -1,8 +1,9 @@
 #ifndef THPRAC98_SRC_TUI_TUI_HPP_
 #define THPRAC98_SRC_TUI_TUI_HPP_
 
-#include "src/utils.hpp"
 #include "src/tui/chars.hpp"
+#include "src/utils.hpp"
+
 
 /**
  * @brief Controlling class tui (Text-based User Interface).
@@ -56,9 +57,7 @@ class tui {
    */
   static bool set_next_window_size(unsigned width, unsigned height);
 
-  class widget_t {
-
-  };
+  class widget_t {};
 };
 
 #endif  // #ifndef THPRAC98_SRC_TUI_TUI_HPP_

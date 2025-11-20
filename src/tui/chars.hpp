@@ -53,8 +53,8 @@ enum ank_box_drawing_t {
   ANK_BD_VERTICAL = 0x0C,
   ANK_BD_ANTI_DIAGONAL = 0x10,  // the diagonal from topright to bottomleft
   ANK_BD_MAIN_DIAGONAL = 0x20,  // the diagonal from topleft to bottomright
-  ANK_BD_ARC = 0x40,  // make the 90-degree turn an arc.
-  ANK_BD_DOUBLE = 0x80,  // doublize the existing horizontal lines
+  ANK_BD_ARC = 0x40,            // make the 90-degree turn an arc.
+  ANK_BD_DOUBLE = 0x80,         // doublize the existing horizontal lines
   ANK_BD_TOPMOST_HORIZONTAL = 0x100,
   ANK_BD_RIGHTMOST_VERTICAL = 0x200
 };

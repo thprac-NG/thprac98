@@ -1,8 +1,8 @@
 #include "src/utils.hpp"
 
-#include "master.h"
-
 #include <stdio.h>  // putchar
+
+#include "master.h"
 
 bool is_pressed(key_t key) {
   int result = key_sense(keygroup_and_index_of[key][0]);
@@ -61,16 +61,13 @@ unsigned shiftjis_to_jis(unsigned ch) {
   return (j1 << 8) | j2;
 }
 
-unsigned rot(unsigned n) {
-  return (n >> 8) | ((n & 0xff) << 8);
-}
+unsigned rot(unsigned n) { return (n >> 8) | ((n & 0xff) << 8); }
 
-const unsigned popcount_data[16] = {
-  0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
-};
+const unsigned popcount_data[16] = {0, 1, 1, 2, 1, 2, 2, 3,
+                                    1, 2, 2, 3, 2, 3, 3, 4};
 unsigned popcount(unsigned n) {
-  return popcount_data[n & 0xF] + popcount_data[(n >> 4) & 0xF]
-         + popcount_data[(n >> 8) & 0xF] + popcount_data[(n >> 12) & 0xF];
+  return popcount_data[n & 0xF] + popcount_data[(n >> 4) & 0xF] +
+         popcount_data[(n >> 8) & 0xF] + popcount_data[(n >> 12) & 0xF];
 }
 
 void graph_mode(void) {
@@ -92,18 +89,28 @@ bool is_epson = false;
 
 bool valid_shiftjis(unsigned ch) {
   // FIXME: 0x8C49 will return false. Fix it.
-  if (ch <= 0x7F) { return true; }  // ASCII
-  if (0xA1 <= ch && ch <= 0xDF) { return true; }  // Half-width katakana
+  if (ch <= 0x7F) {
+    return true;
+  }  // ASCII
+  if (0xA1 <= ch && ch <= 0xDF) {
+    return true;
+  }  // Half-width katakana
   unsigned upper = ch >> 8, lower = ch & 0xFF;
   if (!((0x81 <= upper && upper <= 0x9F) || (0xE0 <= upper && upper <= 0xEF))) {
     return false;  // First byte out of range
   }
   // Second byte out of range
   if (upper & 1) {
-    if (lower == 0x7F) { return false; }
-    if (!(0x40 <= lower && lower <= 0x9E)) { return false; }
+    if (lower == 0x7F) {
+      return false;
+    }
+    if (!(0x40 <= lower && lower <= 0x9E)) {
+      return false;
+    }
   } else {
-    if (!(0x9F <= lower && lower <= 0xFC)) { return false; }
+    if (!(0x9F <= lower && lower <= 0xFC)) {
+      return false;
+    }
   }
   return true;
 }
@@ -128,8 +135,10 @@ void print_delimiter(char ch) {
   putchar('\n');
   return;
 }
-int print_string(const char* str, bool pause, bool kanji, int rows) {
-  if (rows <= 0) { return 1; }
+int print_string(const char *str, bool pause, bool kanji, int rows) {
+  if (rows <= 0) {
+    return 1;
+  }
   if (kanji) {
     kanji_mode();
   } else {
@@ -167,7 +176,9 @@ int print_string(const char* str, bool pause, bool kanji, int rows) {
       wait_for_enter_key();
       row = 0;
     }
-    if (ch == '\n' || ch == '\r') { continue; }
+    if (ch == '\n' || ch == '\r') {
+      continue;
+    }
     col += char_width(ch);
     // if (!valid_shiftjis(ch)) {
     //   putchar('?');

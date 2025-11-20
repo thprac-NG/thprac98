@@ -44,14 +44,12 @@
 
 #if (ANCIENT_CXX == 1) || (__cplusplus < CPLUSPLUS20)
 #if (ANCIENT_CXX == 0)
-static_assert(
-  sizeof(signed char) == 1 && std::is_signed<signed char>::value == true,
-  "Type 'signed char' should have a size of 1, and be signed."
-);
-static_assert(
-  sizeof(unsigned char) == 1 && std::is_signed<unsigned char>::value == false,
-  "Type 'unsigned char' should have a size of 1, and be unsigned."
-);
+static_assert(sizeof(signed char) == 1 &&
+                  std::is_signed<signed char>::value == true,
+              "Type 'signed char' should have a size of 1, and be signed.");
+static_assert(sizeof(unsigned char) == 1 &&
+                  std::is_signed<unsigned char>::value == false,
+              "Type 'unsigned char' should have a size of 1, and be unsigned.");
 #endif
 typedef signed char int8;
 typedef unsigned char uint8;
@@ -79,7 +77,120 @@ typedef uint32_t uint32;
  * @brief The keys on a PC-98 keyboard.
  */
 enum key_t {
-#include "src/utils01.inc"
+  KEY_NULL = 0,  // not a real key, for configuration use
+
+  // character typed:          none | +shift | +kana | +shift+kana
+
+  KEY_1_NU,  //                1        !      ヌ
+  KEY_2_FU,  //                2        "      フ
+  KEY_3_A,   //                3        #      ア       ァ
+  KEY_4_U,   //                4        $      ウ       ゥ
+  KEY_5_E,   //                5        %      エ       ェ
+  KEY_6_O,   //                6        &      オ       ォ
+  KEY_7_YA,  //                7        '      ヤ       ャ
+  KEY_8_YU,  //                8        (      ユ       ュ
+  KEY_9_YO,  //                9        )      ヨ       ョ
+  KEY_0_WA,  //                0               ワ       ヲ
+
+  KEY_A_CHI,  //                A               チ
+  KEY_B_KO,   //                B               コ
+  KEY_C_SO,   //                C               ソ
+  KEY_D_SHI,  //                D               シ
+  KEY_E_I,    //                E               イ
+  KEY_F_HA,   //                F               ハ
+  KEY_G_KI,   //                G               キ
+  KEY_H_KU,   //                H               ク
+  KEY_I_NI,   //                I               ニ
+  KEY_J_MA,   //                J               マ
+  KEY_K_NO,   //                K               ノ
+  KEY_L_RI,   //                L               リ
+  KEY_M_MO,   //                M               モ
+  KEY_N_MI,   //                N               ミ
+  KEY_O_RA,   //                O               ラ
+  KEY_P_SE,   //                P               セ
+  KEY_Q_TA,   //                Q               タ
+  KEY_R_SU,   //                R               ス
+  KEY_S_TO,   //                S               ト
+  KEY_T_KA,   //                T               カ
+  KEY_U_NA,   //                U               ナ
+  KEY_V_HI,   //                V               ヒ
+  KEY_W_TE,   //                W               テ
+  KEY_X_SA,   //                X               サ
+  KEY_Y_N,    //                Y               ン
+  KEY_Z_TSU,  //                Z               ツ       ッ
+
+  KEY_MINUS_HO,            //   -        =      ホ
+  KEY_CARET_HE,            //   ^               ヘ
+  KEY_YEN_CHOONPU,         //   ￥       |      ー(長音符)
+  KEY_AT_DAKUTEN,          //   @        ~      ゛(濁点)
+  KEY_LEFT_BRACKET_KUTEN,  //   [        {      。(句点)   「(始め鉤括弧)
+  KEY_SEMICOLON_RE,        //   ;        +      レ
+  KEY_COLON_KE,            //   :        *      ケ
+  KEY_RIGHT_BRACKET_MU,    //   ]        }      ム       」(終わり鉤括弧)
+  KEY_COMMA_NE,            //   ,        <      ネ       、(読点)
+  KEY_DOT_RU,              //   .        >      ル       ゜(半濁点)
+  KEY_SLASH_NU,            //   /        ?      ヌ       ・(中黒)
+  KEY_RO,                  //            _      ロ
+
+  KEY_ESC,
+  KEY_BS,  // BackSpace
+  KEY_TAB,
+  KEY_ENTER,
+  KEY_SPACE,
+  KEY_XFER,
+  KEY_ROLL_UP,
+  KEY_ROLL_DOWN,
+  KEY_INS,
+  KEY_DEL,
+  KEY_UP,
+  KEY_LEFT,
+  KEY_RIGHT,
+  KEY_DOWN,
+  KEY_HOME_CLR,
+  KEY_HELP,
+  KEY_NFER,
+  KEY_HOME,
+  KEY_STOP,
+  KEY_COPY,
+  KEY_SHIFT,
+  KEY_CAPS,
+  KEY_KANA,  // 仮名
+  KEY_GRPH,
+  KEY_CTRL,
+
+  KEY_NUMPAD_PLUS,
+  KEY_NUMPAD_MINUS,
+  KEY_NUMPAD_MULTIPLY,
+  KEY_NUMPAD_DIVIDE,
+  KEY_NUMPAD_EQUAL,
+  KEY_NUMPAD_COMMA,
+  KEY_NUMPAD_DOT,
+  KEY_NUMPAD_0,
+  KEY_NUMPAD_1,
+  KEY_NUMPAD_2,
+  KEY_NUMPAD_3,
+  KEY_NUMPAD_4,
+  KEY_NUMPAD_5,
+  KEY_NUMPAD_6,
+  KEY_NUMPAD_7,
+  KEY_NUMPAD_8,
+  KEY_NUMPAD_9,
+
+  KEY_F1,
+  KEY_F2,
+  KEY_F3,
+  KEY_F4,
+  KEY_F5,
+  KEY_F6,
+  KEY_F7,
+  KEY_F8,
+  KEY_F9,
+  KEY_F10,
+  KEY_VF1,
+  KEY_VF2,
+  KEY_VF3,
+  KEY_VF4,
+  KEY_VF5
 };
 
 /**
@@ -89,90 +200,54 @@ enum key_t {
  * from low to high.
  */
 const key_t keygroups[16][8] = {
-  {
-    KEY_ESC, KEY_1_NU, KEY_2_FU, KEY_3_A,
-    KEY_4_U, KEY_5_E, KEY_6_O, KEY_7_YA
-  },
-  {
-    KEY_8_YU, KEY_9_YO, KEY_0_WA, KEY_MINUS_HO,
-    KEY_CARET_HE, KEY_YEN_CHOONPU, KEY_BS, KEY_TAB
-  },
-  {
-    KEY_Q_TA, KEY_W_TE, KEY_E_I, KEY_R_SU,
-    KEY_T_KA, KEY_Y_N, KEY_U_NA, KEY_I_NI
-  },
-  {
-    KEY_O_RA, KEY_P_SE, KEY_AT_DAKUTEN, KEY_LEFT_BRACKET_KUTEN,
-    KEY_ENTER, KEY_A_CHI, KEY_S_TO, KEY_D_SHI
-  },
-  {
-    KEY_F_HA, KEY_G_KI, KEY_H_KU, KEY_J_MA,
-    KEY_K_NO, KEY_L_RI, KEY_SEMICOLON_RE, KEY_COLON_KE
-  },
-  {
-    KEY_RIGHT_BRACKET_MU, KEY_Z_TSU, KEY_X_SA, KEY_C_SO,
-    KEY_V_HI, KEY_B_KO, KEY_N_MI, KEY_M_MO
-  },
-  {
-    KEY_COMMA_NE, KEY_DOT_RU, KEY_SLASH_NU, KEY_RO,
-    KEY_SPACE, KEY_XFER, KEY_ROLL_UP, KEY_ROLL_DOWN
-  },
-  {
-    KEY_INS, KEY_DEL, KEY_UP, KEY_LEFT,
-    KEY_RIGHT, KEY_DOWN, KEY_HOME_CLR, KEY_HELP
-  },
-  {
-    KEY_NUMPAD_MINUS, KEY_NUMPAD_DIVIDE, KEY_NUMPAD_7, KEY_NUMPAD_8,
-    KEY_NUMPAD_9, KEY_NUMPAD_MULTIPLY, KEY_NUMPAD_4, KEY_NUMPAD_5
-  },
-  {
-    KEY_NUMPAD_6, KEY_NUMPAD_PLUS, KEY_NUMPAD_1, KEY_NUMPAD_2,
-    KEY_NUMPAD_3, KEY_NUMPAD_EQUAL, KEY_NUMPAD_0, KEY_NUMPAD_DOT
-  },
-  {
-    KEY_NUMPAD_DOT, KEY_NFER, KEY_VF1, KEY_VF2,
-    KEY_VF3, KEY_VF4, KEY_VF5, KEY_NULL
-  },
-  {
-    KEY_NULL, KEY_NULL, KEY_NULL, KEY_NULL,
-    KEY_NULL, KEY_NULL, KEY_HOME, KEY_NULL
-  },
-  {
-    KEY_STOP, KEY_COPY, KEY_F1, KEY_F2,
-    KEY_F3, KEY_F4, KEY_F5, KEY_F6
-  },
-  {
-    KEY_F7, KEY_F8, KEY_F9, KEY_F10,
-    KEY_NULL, KEY_NULL, KEY_NULL, KEY_NULL
-  },
-  {
-    KEY_SHIFT, KEY_CAPS, KEY_KANA, KEY_GRPH,
-    KEY_CTRL, KEY_NULL, KEY_NULL, KEY_NULL
-  },
-  {
-    KEY_NULL, KEY_NULL, KEY_NULL, KEY_NULL,
-    KEY_NULL, KEY_NULL, KEY_NULL, KEY_NULL
-  }
-};
+    {KEY_ESC, KEY_1_NU, KEY_2_FU, KEY_3_A, KEY_4_U, KEY_5_E, KEY_6_O, KEY_7_YA},
+    {KEY_8_YU, KEY_9_YO, KEY_0_WA, KEY_MINUS_HO, KEY_CARET_HE, KEY_YEN_CHOONPU,
+     KEY_BS, KEY_TAB},
+    {KEY_Q_TA, KEY_W_TE, KEY_E_I, KEY_R_SU, KEY_T_KA, KEY_Y_N, KEY_U_NA,
+     KEY_I_NI},
+    {KEY_O_RA, KEY_P_SE, KEY_AT_DAKUTEN, KEY_LEFT_BRACKET_KUTEN, KEY_ENTER,
+     KEY_A_CHI, KEY_S_TO, KEY_D_SHI},
+    {KEY_F_HA, KEY_G_KI, KEY_H_KU, KEY_J_MA, KEY_K_NO, KEY_L_RI,
+     KEY_SEMICOLON_RE, KEY_COLON_KE},
+    {KEY_RIGHT_BRACKET_MU, KEY_Z_TSU, KEY_X_SA, KEY_C_SO, KEY_V_HI, KEY_B_KO,
+     KEY_N_MI, KEY_M_MO},
+    {KEY_COMMA_NE, KEY_DOT_RU, KEY_SLASH_NU, KEY_RO, KEY_SPACE, KEY_XFER,
+     KEY_ROLL_UP, KEY_ROLL_DOWN},
+    {KEY_INS, KEY_DEL, KEY_UP, KEY_LEFT, KEY_RIGHT, KEY_DOWN, KEY_HOME_CLR,
+     KEY_HELP},
+    {KEY_NUMPAD_MINUS, KEY_NUMPAD_DIVIDE, KEY_NUMPAD_7, KEY_NUMPAD_8,
+     KEY_NUMPAD_9, KEY_NUMPAD_MULTIPLY, KEY_NUMPAD_4, KEY_NUMPAD_5},
+    {KEY_NUMPAD_6, KEY_NUMPAD_PLUS, KEY_NUMPAD_1, KEY_NUMPAD_2, KEY_NUMPAD_3,
+     KEY_NUMPAD_EQUAL, KEY_NUMPAD_0, KEY_NUMPAD_DOT},
+    {KEY_NUMPAD_DOT, KEY_NFER, KEY_VF1, KEY_VF2, KEY_VF3, KEY_VF4, KEY_VF5,
+     KEY_NULL},
+    {KEY_NULL, KEY_NULL, KEY_NULL, KEY_NULL, KEY_NULL, KEY_NULL, KEY_HOME,
+     KEY_NULL},
+    {KEY_STOP, KEY_COPY, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6},
+    {KEY_F7, KEY_F8, KEY_F9, KEY_F10, KEY_NULL, KEY_NULL, KEY_NULL, KEY_NULL},
+    {KEY_SHIFT, KEY_CAPS, KEY_KANA, KEY_GRPH, KEY_CTRL, KEY_NULL, KEY_NULL,
+     KEY_NULL},
+    {KEY_NULL, KEY_NULL, KEY_NULL, KEY_NULL, KEY_NULL, KEY_NULL, KEY_NULL,
+     KEY_NULL}};
 
 /**
  * @brief Indicates which keygroup a key belongs to and its index.
  */
 const int keygroup_and_index_of[127][2] = {
-  {15, 0},  // KEY_NULL
-  {0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5}, {0, 6}, {0, 7}, {1, 0}, {1, 1},
-  {1, 2}, {3, 5}, {5, 5}, {5, 3}, {3, 7}, {2, 2}, {4, 0}, {4, 1}, {4, 2},
-  {2, 7}, {4, 3}, {4, 4}, {4, 5}, {5, 7}, {5, 6}, {3, 0}, {3, 1}, {2, 0},
-  {2, 3}, {3, 6}, {2, 4}, {2, 6}, {5, 4}, {2, 1}, {5, 2}, {2, 5}, {5, 1},
-  {1, 3}, {1, 4}, {1, 5}, {3, 2}, {3, 3}, {4, 6}, {4, 7}, {5, 0}, {6, 0},
-  {6, 1}, {6, 2}, {6, 3}, {0, 0}, {1, 6}, {1, 7}, {3, 4}, {6, 4}, {6, 5},
-  {6, 6}, {6, 7}, {7, 0}, {7, 1}, {7, 2}, {7, 3}, {7, 4}, {7, 5}, {7, 6},
-  {7, 7}, {10, 1}, {11, 6}, {12, 0}, {12, 1}, {14, 0}, {14, 1}, {14, 2},
-  {14, 3}, {14, 4}, {9, 1}, {8, 0}, {8, 5}, {8, 1}, {9, 5}, {9, 7}, {9, 6},
-  {9, 2}, {9, 3}, {9, 4}, {8, 6}, {8, 7}, {9, 0}, {8, 2}, {8, 3}, {8, 4},
-  {12, 2}, {12, 3}, {12, 4}, {12, 5}, {12, 6}, {12, 7}, {13, 0}, {13, 1},
-  {13, 2}, {13, 3}, {10, 2}, {10, 3}, {10, 4}, {10, 5}, {10, 6}
-};
+    {15, 0},  // KEY_NULL
+    {0, 1},  {0, 2},  {0, 3},  {0, 4},  {0, 5},  {0, 6},  {0, 7},  {1, 0},
+    {1, 1},  {1, 2},  {3, 5},  {5, 5},  {5, 3},  {3, 7},  {2, 2},  {4, 0},
+    {4, 1},  {4, 2},  {2, 7},  {4, 3},  {4, 4},  {4, 5},  {5, 7},  {5, 6},
+    {3, 0},  {3, 1},  {2, 0},  {2, 3},  {3, 6},  {2, 4},  {2, 6},  {5, 4},
+    {2, 1},  {5, 2},  {2, 5},  {5, 1},  {1, 3},  {1, 4},  {1, 5},  {3, 2},
+    {3, 3},  {4, 6},  {4, 7},  {5, 0},  {6, 0},  {6, 1},  {6, 2},  {6, 3},
+    {0, 0},  {1, 6},  {1, 7},  {3, 4},  {6, 4},  {6, 5},  {6, 6},  {6, 7},
+    {7, 0},  {7, 1},  {7, 2},  {7, 3},  {7, 4},  {7, 5},  {7, 6},  {7, 7},
+    {10, 1}, {11, 6}, {12, 0}, {12, 1}, {14, 0}, {14, 1}, {14, 2}, {14, 3},
+    {14, 4}, {9, 1},  {8, 0},  {8, 5},  {8, 1},  {9, 5},  {9, 7},  {9, 6},
+    {9, 2},  {9, 3},  {9, 4},  {8, 6},  {8, 7},  {9, 0},  {8, 2},  {8, 3},
+    {8, 4},  {12, 2}, {12, 3}, {12, 4}, {12, 5}, {12, 6}, {12, 7}, {13, 0},
+    {13, 1}, {13, 2}, {13, 3}, {10, 2}, {10, 3}, {10, 4}, {10, 5}, {10, 6}};
 
 bool is_pressed(key_t x);
 
@@ -182,7 +257,8 @@ bool is_pressed(key_t x);
 /**
  * @brief Check whether a character is half-width or full-width when printed.
  * Reference: PC-9801 Programers' Bible, Section 4-10 ~ 4-11,
- * https://ja.wikipedia.org/wiki/JIS_X_0213%E9%9D%9E%E6%BC%A2%E5%AD%97%E4%B8%80%E8%A6%A7 .
+ * https://ja.wikipedia.org/wiki/JIS_X_0213%E9%9D%9E%E6%BC%A2%E5%AD%97%E4%B8%80%E8%A6%A7
+ * .
  *
  * @param ch The character to be checked, should be valid.
  * @return int 1 if the character is half-width, 2 if otherwise.
@@ -273,7 +349,7 @@ void print_delimiter(char ch = '=');
  *
  * @returns 0 if succeed, 1 if `rows` <= 0.
  */
-int print_string(const char* str, bool pause = true, bool kanji = true,
+int print_string(const char *str, bool pause = true, bool kanji = true,
                  int rows = 23);
 
 #pragma endregion  // #pragma region Miscellaneous

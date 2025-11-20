@@ -2,48 +2,46 @@
 
 #include <stdio.h>
 
-#include "src/utils.hpp"
 #include "src/tui/chars.hpp"
+#include "src/utils.hpp"
 
 int test_stdint(void) {
-#define test_stdint_macro(bit_length) bit_length * !(    \
-    (sizeof(uint##bit_length) * 8 == bit_length) &&      \
-    ((uint##bit_length)(-1) > (uint##bit_length)(0)) &&  \
-    (sizeof(int##bit_length) * 8 == bit_length) &&       \
-    ((int##bit_length)(-1) < (int##bit_length)(0))       \
-  )
+#define test_stdint_macro(bit_length)                                \
+  bit_length * !((sizeof(uint##bit_length) * 8 == bit_length) &&     \
+                 ((uint##bit_length)(-1) > (uint##bit_length)(0)) && \
+                 (sizeof(int##bit_length) * 8 == bit_length) &&      \
+                 ((int##bit_length)(-1) < (int##bit_length)(0)))
   return test_stdint_macro(8) | test_stdint_macro(16) | test_stdint_macro(32);
 #undef test_stdint_macro
 }
 
 int test_ank_box_drawing(void) {
   static const unsigned test_cases[][2] = {
-    {0, ' '},
-    {ANK_BD_HORIZONTAL | ANK_BD_VERTICAL, 0x8F},
-    {ANK_BD_HORIZONTAL | ANK_BD_UP, 0x90},
-    {ANK_BD_HORIZONTAL | ANK_BD_DOWN, 0x91},
-    {ANK_BD_VERTICAL | ANK_BD_LEFT, 0x92},
-    {ANK_BD_VERTICAL | ANK_BD_RIGHT, 0x93},
-    {ANK_BD_TOPMOST_HORIZONTAL, 0x94},
-    {ANK_BD_HORIZONTAL, 0x95},
-    {ANK_BD_VERTICAL, 0x96},
-    {ANK_BD_RIGHTMOST_VERTICAL, 0x97},
-    {ANK_BD_RIGHT | ANK_BD_DOWN, 0x98},
-    {ANK_BD_LEFT | ANK_BD_DOWN, 0x99},
-    {ANK_BD_RIGHT | ANK_BD_UP, 0x9A},
-    {ANK_BD_LEFT | ANK_BD_UP, 0x9B},
-    {ANK_BD_RIGHT | ANK_BD_DOWN | ANK_BD_ARC, 0x9C},
-    {ANK_BD_LEFT | ANK_BD_DOWN | ANK_BD_ARC, 0x9D},
-    {ANK_BD_RIGHT | ANK_BD_UP | ANK_BD_ARC, 0x9E},
-    {ANK_BD_LEFT | ANK_BD_UP | ANK_BD_ARC, 0x9F},
-    {ANK_BD_DOUBLE | ANK_BD_HORIZONTAL, 0xE0},
-    {ANK_BD_DOUBLE | ANK_BD_RIGHT | ANK_BD_VERTICAL, 0xE1},
-    {ANK_BD_DOUBLE | ANK_BD_HORIZONTAL | ANK_BD_VERTICAL, 0xE2},
-    {ANK_BD_DOUBLE | ANK_BD_LEFT | ANK_BD_VERTICAL, 0xE3},
-    {ANK_BD_ANTI_DIAGONAL, 0xEE},
-    {ANK_BD_MAIN_DIAGONAL, 0xEF},
-    {ANK_BD_ANTI_DIAGONAL | ANK_BD_MAIN_DIAGONAL, 0xF0}
-  };
+      {0, ' '},
+      {ANK_BD_HORIZONTAL | ANK_BD_VERTICAL, 0x8F},
+      {ANK_BD_HORIZONTAL | ANK_BD_UP, 0x90},
+      {ANK_BD_HORIZONTAL | ANK_BD_DOWN, 0x91},
+      {ANK_BD_VERTICAL | ANK_BD_LEFT, 0x92},
+      {ANK_BD_VERTICAL | ANK_BD_RIGHT, 0x93},
+      {ANK_BD_TOPMOST_HORIZONTAL, 0x94},
+      {ANK_BD_HORIZONTAL, 0x95},
+      {ANK_BD_VERTICAL, 0x96},
+      {ANK_BD_RIGHTMOST_VERTICAL, 0x97},
+      {ANK_BD_RIGHT | ANK_BD_DOWN, 0x98},
+      {ANK_BD_LEFT | ANK_BD_DOWN, 0x99},
+      {ANK_BD_RIGHT | ANK_BD_UP, 0x9A},
+      {ANK_BD_LEFT | ANK_BD_UP, 0x9B},
+      {ANK_BD_RIGHT | ANK_BD_DOWN | ANK_BD_ARC, 0x9C},
+      {ANK_BD_LEFT | ANK_BD_DOWN | ANK_BD_ARC, 0x9D},
+      {ANK_BD_RIGHT | ANK_BD_UP | ANK_BD_ARC, 0x9E},
+      {ANK_BD_LEFT | ANK_BD_UP | ANK_BD_ARC, 0x9F},
+      {ANK_BD_DOUBLE | ANK_BD_HORIZONTAL, 0xE0},
+      {ANK_BD_DOUBLE | ANK_BD_RIGHT | ANK_BD_VERTICAL, 0xE1},
+      {ANK_BD_DOUBLE | ANK_BD_HORIZONTAL | ANK_BD_VERTICAL, 0xE2},
+      {ANK_BD_DOUBLE | ANK_BD_LEFT | ANK_BD_VERTICAL, 0xE3},
+      {ANK_BD_ANTI_DIAGONAL, 0xEE},
+      {ANK_BD_MAIN_DIAGONAL, 0xEF},
+      {ANK_BD_ANTI_DIAGONAL | ANK_BD_MAIN_DIAGONAL, 0xF0}};
   static const int test_case_count = sizeof(test_cases) / sizeof(unsigned) / 2;
   int i = 0;
   for (i = 0; i < test_case_count; ++i) {
@@ -73,39 +71,38 @@ void check_glyph(unsigned jis, unsigned lines[16]) {
 
 int test_box_drawing(void) {
   static const unsigned modern_charset[] = {
-    BD_HORIZONTAL,
-    BD_VERTICAL,
-    BD_RIGHT | BD_DOWN,
-    BD_LEFT | BD_DOWN,
-    BD_LEFT | BD_UP,
-    BD_RIGHT | BD_UP,
-    BD_VERTICAL | BD_RIGHT,
-    BD_HORIZONTAL | BD_DOWN,
-    BD_VERTICAL | BD_LEFT,
-    BD_HORIZONTAL | BD_UP,
-    BD_HORIZONTAL | BD_VERTICAL,
-    BD_HEAVY_HORIZONTAL,
-    BD_HEAVY_VERTICAL,
-    BD_HEAVY_RIGHT | BD_HEAVY_DOWN,
-    BD_HEAVY_LEFT | BD_HEAVY_DOWN,
-    BD_HEAVY_LEFT | BD_HEAVY_UP,
-    BD_HEAVY_RIGHT | BD_HEAVY_UP,
-    BD_HEAVY_VERTICAL | BD_HEAVY_RIGHT,
-    BD_HEAVY_HORIZONTAL | BD_HEAVY_DOWN,
-    BD_HEAVY_VERTICAL | BD_HEAVY_LEFT,
-    BD_HEAVY_HORIZONTAL | BD_HEAVY_UP,
-    BD_HEAVY_HORIZONTAL | BD_HEAVY_VERTICAL,
-    BD_HEAVY_VERTICAL | BD_RIGHT,
-    BD_HEAVY_HORIZONTAL | BD_DOWN,
-    BD_HEAVY_VERTICAL | BD_LEFT,
-    BD_HEAVY_HORIZONTAL | BD_UP,
-    BD_HEAVY_HORIZONTAL | BD_VERTICAL,
-    BD_HEAVY_RIGHT | BD_VERTICAL,
-    BD_HEAVY_DOWN | BD_HORIZONTAL,
-    BD_HEAVY_LEFT | BD_VERTICAL,
-    BD_HEAVY_UP | BD_HORIZONTAL,
-    BD_HEAVY_VERTICAL | BD_HORIZONTAL
-  };
+      BD_HORIZONTAL,
+      BD_VERTICAL,
+      BD_RIGHT | BD_DOWN,
+      BD_LEFT | BD_DOWN,
+      BD_LEFT | BD_UP,
+      BD_RIGHT | BD_UP,
+      BD_VERTICAL | BD_RIGHT,
+      BD_HORIZONTAL | BD_DOWN,
+      BD_VERTICAL | BD_LEFT,
+      BD_HORIZONTAL | BD_UP,
+      BD_HORIZONTAL | BD_VERTICAL,
+      BD_HEAVY_HORIZONTAL,
+      BD_HEAVY_VERTICAL,
+      BD_HEAVY_RIGHT | BD_HEAVY_DOWN,
+      BD_HEAVY_LEFT | BD_HEAVY_DOWN,
+      BD_HEAVY_LEFT | BD_HEAVY_UP,
+      BD_HEAVY_RIGHT | BD_HEAVY_UP,
+      BD_HEAVY_VERTICAL | BD_HEAVY_RIGHT,
+      BD_HEAVY_HORIZONTAL | BD_HEAVY_DOWN,
+      BD_HEAVY_VERTICAL | BD_HEAVY_LEFT,
+      BD_HEAVY_HORIZONTAL | BD_HEAVY_UP,
+      BD_HEAVY_HORIZONTAL | BD_HEAVY_VERTICAL,
+      BD_HEAVY_VERTICAL | BD_RIGHT,
+      BD_HEAVY_HORIZONTAL | BD_DOWN,
+      BD_HEAVY_VERTICAL | BD_LEFT,
+      BD_HEAVY_HORIZONTAL | BD_UP,
+      BD_HEAVY_HORIZONTAL | BD_VERTICAL,
+      BD_HEAVY_RIGHT | BD_VERTICAL,
+      BD_HEAVY_DOWN | BD_HORIZONTAL,
+      BD_HEAVY_LEFT | BD_VERTICAL,
+      BD_HEAVY_UP | BD_HORIZONTAL,
+      BD_HEAVY_VERTICAL | BD_HORIZONTAL};
   static const int modern_charset_size =
       sizeof(modern_charset) / sizeof(unsigned);
   unsigned i = 0;
@@ -123,15 +120,14 @@ int test_box_drawing(void) {
     return 52;
   }
   static const unsigned dashed_charset[] = {
-    BD_HORIZONTAL | BD_DENSELY_DASHED,
-    BD_HEAVY_HORIZONTAL | BD_DENSELY_DASHED,
-    BD_VERTICAL | BD_DENSELY_DASHED,
-    BD_HEAVY_VERTICAL | BD_DENSELY_DASHED,
-    BD_HORIZONTAL | BD_DASHED,
-    BD_HEAVY_HORIZONTAL | BD_DASHED,
-    BD_VERTICAL | BD_DASHED,
-    BD_HEAVY_VERTICAL | BD_DASHED
-  };
+      BD_HORIZONTAL | BD_DENSELY_DASHED,
+      BD_HEAVY_HORIZONTAL | BD_DENSELY_DASHED,
+      BD_VERTICAL | BD_DENSELY_DASHED,
+      BD_HEAVY_VERTICAL | BD_DENSELY_DASHED,
+      BD_HORIZONTAL | BD_DASHED,
+      BD_HEAVY_HORIZONTAL | BD_DASHED,
+      BD_VERTICAL | BD_DASHED,
+      BD_HEAVY_VERTICAL | BD_DASHED};
   for (i = 0; i < 8; ++i) {
     if (box_drawing((box_drawing_t)(dashed_charset[i]), false) != 0x2C28 + i) {
       return i + 100;
@@ -142,14 +138,14 @@ int test_box_drawing(void) {
   for (shape = 0; shape <= 0xF; ++shape) {
     for (heaviness = 0; heaviness <= 0xF; ++heaviness) {
       unsigned ret = 10000 + shape * 100 + heaviness;
-      unsigned jis = box_drawing((box_drawing_t)(shape | (heaviness << 4)),
-                                 false);
-      if (
-          (popcount_data[shape] == 1) ||
+      unsigned jis =
+          box_drawing((box_drawing_t)(shape | (heaviness << 4)), false);
+      if ((popcount_data[shape] == 1) ||
           ((shape == BD_HORIZONTAL || shape == BD_VERTICAL) &&
-           (heaviness & shape) != 0 && (heaviness & shape) != shape)
-      ) {
-        if (jis != JIS_FULLWIDTH_QUESTION_MARK) { return ret; }
+           (heaviness & shape) != 0 && (heaviness & shape) != shape)) {
+        if (jis != JIS_FULLWIDTH_QUESTION_MARK) {
+          return ret;
+        }
         continue;
       }
       check_glyph(jis, glyph);
@@ -163,13 +159,19 @@ int test_box_drawing(void) {
       for (i = 0; i < 4; ++i) {
         switch (pops[i]) {
           case 0:
-            if (shape & mask) { return ret; }
+            if (shape & mask) {
+              return ret;
+            }
             break;
           case 1:
-            if (!((shape & mask) && !(heaviness & mask))) { return ret; }
+            if (!((shape & mask) && !(heaviness & mask))) {
+              return ret;
+            }
             break;
           case 2:
-            if (!((shape & mask) && (heaviness & mask))) { return ret; }
+            if (!((shape & mask) && (heaviness & mask))) {
+              return ret;
+            }
             break;
           default:
             return ret;
@@ -181,7 +183,7 @@ int test_box_drawing(void) {
   return 0;
 }
 
-void test_function(const char* name, int test_func(void)) {
+void test_function(const char *name, int test_func(void)) {
   printf("Testing %s... ", name);
   fflush(stdout);
   int ret = test_func();

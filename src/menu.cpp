@@ -1,10 +1,11 @@
 #include "src/menu.hpp"
 
+#include <stdio.h>
+#include <string.h>  // memset
+
 #include "src/texts.hpp"
 #include "src/utils.hpp"
 
-#include <stdio.h>
-#include <string.h>  // memset
 
 menu_t menu;
 
@@ -47,14 +48,12 @@ int print_table(int x_min, int y_min, int x_max, int y_max,
                 int horizontal_line_num, const int* horizontal_line_ys,
                 int attribute) {
   int i = 0, j = 0;
-  if (!(0 <= x_min && x_min < SCREEN_WIDTH &&
-        0 <= x_max && x_max < SCREEN_WIDTH &&
-        x_min + 2 < x_max)) {
+  if (!(0 <= x_min && x_min < SCREEN_WIDTH && 0 <= x_max &&
+        x_max < SCREEN_WIDTH && x_min + 2 < x_max)) {
     return 1;
   }
-  if (!(0 <= y_min && y_min < SCREEN_HEIGHT &&
-        0 <= y_max && y_max < SCREEN_HEIGHT &&
-        y_min < y_max)) {
+  if (!(0 <= y_min && y_min < SCREEN_HEIGHT && 0 <= y_max &&
+        y_max < SCREEN_HEIGHT && y_min < y_max)) {
     return 2;
   }
   class helper_t {
@@ -78,12 +77,8 @@ int print_table(int x_min, int y_min, int x_max, int y_max,
       y_bucket |= 1ul << y;
       return;
     }
-    inline bool check_x(int x) {
-      return (x_bucket[x >> 4] >> (x & 0xF)) & 1;
-    }
-    inline bool check_y(int y) {
-      return (y_bucket >> y) & 1;
-    }
+    inline bool check_x(int x) { return (x_bucket[x >> 4] >> (x & 0xF)) & 1; }
+    inline bool check_y(int y) { return (y_bucket >> y) & 1; }
   };
   static helper_t helper;
   helper.init();
@@ -127,7 +122,7 @@ int print_table(int x_min, int y_min, int x_max, int y_max,
   }
   text_putca(x_max - 1, y_min, 0x86B5, attribute);  // „­
   for (i = y_min + 1; i < y_max; ++i) {
-    text_putca(x_min, i, 0x86A5, attribute);  // „«
+    text_putca(x_min, i, 0x86A5, attribute);      // „«
     text_putca(x_max - 1, i, 0x86A5, attribute);  // „«
   }
   text_putca(x_min, y_max, 0x86B9, attribute);  // „¯

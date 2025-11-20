@@ -2,7 +2,6 @@
 #include <string.h>  // memset, strcmp
 
 #include "master.h"
-
 #include "src/license.hpp"
 #include "src/menu.hpp"
 #include "src/utils.hpp"
@@ -12,23 +11,22 @@ bool pause = true;
 
 void print_help_message() {
   print_string(
-    "Usage: thprac98 [options] file...\n"
-    "Options:\n"
-    "  --help                 Show this help message\n"
-    "  --launch               Launch the game\n"
-    "  --force                Ignore any warning\n"
-    "  --without-thprac       Launch the game without thprac injected\n"
-    "  --links                Show \"Links\"\n"
-    "  --reset                Reset configuration file\n"
-    "  --roll                 Use the rolling feature\n"
-    "  --scan <game version>  Scan the file location of a game\n"
-    "  --export               Export the save data of a game\n"
-    "  --import               Import the save data of a game\n"
-    "  --license              Show license\n"
-    "  --version              Show the version of thprac98\n"
-    "  --no-pause             No pause after printing several lines\n",
-    pause
-  );
+      "Usage: thprac98 [options] file...\n"
+      "Options:\n"
+      "  --help                 Show this help message\n"
+      "  --launch               Launch the game\n"
+      "  --force                Ignore any warning\n"
+      "  --without-thprac       Launch the game without thprac injected\n"
+      "  --links                Show \"Links\"\n"
+      "  --reset                Reset configuration file\n"
+      "  --roll                 Use the rolling feature\n"
+      "  --scan <game version>  Scan the file location of a game\n"
+      "  --export               Export the save data of a game\n"
+      "  --import               Import the save data of a game\n"
+      "  --license              Show license\n"
+      "  --version              Show the version of thprac98\n"
+      "  --no-pause             No pause after printing several lines\n",
+      pause);
   return;
 }
 void print_links() {
@@ -36,14 +34,14 @@ void print_links() {
   return;
 }
 void print_version() {
-  print_string(
-    "thprac98 ver." THPRAC98_VERSION "\n"
-    "Website: https://github.com/thprac-NG/thprac98\n"
-    "Website (main project thprac): https://github.com/touhouworldcup/thprac\n"
-    "Special Thanks: \n"
-    "You!\n",
-    pause
-  );
+  print_string("thprac98 ver." THPRAC98_VERSION
+               "\n"
+               "Website: https://github.com/thprac-NG/thprac98\n"
+               "Website (main project thprac): "
+               "https://github.com/touhouworldcup/thprac\n"
+               "Special Thanks: \n"
+               "You!\n",
+               pause);
   return;
 }
 void print_license() {
@@ -73,7 +71,7 @@ void print_license() {
   return;
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   int i = 0;
   for (i = 0; i < argc; ++i) {
     if (strcmp(argv[i], "--no-pause")) {

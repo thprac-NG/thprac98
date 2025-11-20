@@ -75,4 +75,4 @@ extern const char_chunk_t char_chunks[THPRAC_CHAR_CHUNKS_SIZE];
  */
 char_chunk_t chtype(unsigned int ch);
 
-#endif   // #ifndef THPRAC98_SRC_CHARANGE_HPP_
+#endif  // #ifndef THPRAC98_SRC_CHARANGE_HPP_

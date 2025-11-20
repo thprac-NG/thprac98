@@ -2,11 +2,16 @@
 
 int modern_box_drawing_helper(unsigned shape) {
   switch (shape ^ 0xF) {
-    case BD_LEFT:  return 0;
-    case BD_UP:    return 1;
-    case BD_RIGHT: return 2;
-    case BD_DOWN:  return 3;
-    case 0:        return 4;
+    case BD_LEFT:
+      return 0;
+    case BD_UP:
+      return 1;
+    case BD_RIGHT:
+      return 2;
+    case BD_DOWN:
+      return 3;
+    case 0:
+      return 4;
   }
   return -1;
 }
@@ -29,12 +34,18 @@ unsigned modern_box_drawing(box_drawing_t bitmap) {
         return 0xFFFF;
       case 2:
         switch (shape) {
-          case BD_HORIZONTAL:      return offset + 0x2821;
-          case BD_VERTICAL:        return offset + 0x2822;
-          case BD_RIGHT | BD_DOWN: return offset + 0x2823;
-          case BD_LEFT | BD_DOWN:  return offset + 0x2824;
-          case BD_LEFT | BD_UP:    return offset + 0x2825;
-          case BD_RIGHT | BD_UP:   return offset + 0x2826;
+          case BD_HORIZONTAL:
+            return offset + 0x2821;
+          case BD_VERTICAL:
+            return offset + 0x2822;
+          case BD_RIGHT | BD_DOWN:
+            return offset + 0x2823;
+          case BD_LEFT | BD_DOWN:
+            return offset + 0x2824;
+          case BD_LEFT | BD_UP:
+            return offset + 0x2825;
+          case BD_RIGHT | BD_UP:
+            return offset + 0x2826;
         }
         return 0xFFFF;  // unreachable
       case 3:
@@ -46,12 +57,11 @@ unsigned modern_box_drawing(box_drawing_t bitmap) {
   int code = modern_box_drawing_helper(shape);
   unsigned heaviness = (bitmap >> 4) & bitmap & 0xF;
   static const box_drawing_t heaviness_check[5][2] = {
-    {BD_VERTICAL, BD_RIGHT},
-    {BD_HORIZONTAL, BD_DOWN},
-    {BD_VERTICAL, BD_LEFT},
-    {BD_HORIZONTAL, BD_UP},
-    {BD_HORIZONTAL, BD_VERTICAL}
-  };
+      {BD_VERTICAL, BD_RIGHT},
+      {BD_HORIZONTAL, BD_DOWN},
+      {BD_VERTICAL, BD_LEFT},
+      {BD_HORIZONTAL, BD_UP},
+      {BD_HORIZONTAL, BD_VERTICAL}};
   if (code != -1) {
     if (heaviness == heaviness_check[code][0]) {
       return code + 0x2837;
@@ -87,9 +97,8 @@ unsigned box_drawing(box_drawing_t bitmap, bool use_shift_jis) {
   }
 
   static const uint8 x2C40_rearrange[8] = {0, 1, 2, 5, 3, 6, 4, 7};
-  static const uint8 x2C60_rearrange[16] = {
-    0, 1, 2, 3, 4, 7, 8, 11, 5, 9, 10, 12, 6, 13, 14, 15
-  };
+  static const uint8 x2C60_rearrange[16] = {0, 1, 2,  3,  4, 7,  8,  11,
+                                            5, 9, 10, 12, 6, 13, 14, 15};
   unsigned bitmask = 0x01, shift = 0x01, offset = 0;
   switch (popcount_data[shape]) {
     case 0:
@@ -103,26 +112,42 @@ unsigned box_drawing(box_drawing_t bitmap, bool use_shift_jis) {
         if (heaviness != 0 && heaviness != shape) {
           jis = JIS_FULLWIDTH_QUESTION_MARK;
         } else {
-          jis = 0x2C24 | (0x01 & -!!heaviness) |
-                (0x02 & -(shape == BD_VERTICAL));
+          jis =
+              0x2C24 | (0x01 & -!!heaviness) | (0x02 & -(shape == BD_VERTICAL));
         }
         break;
       }
       switch (shape) {
-        case BD_RIGHT | BD_DOWN: jis = 0x2C30; break;
-        case BD_LEFT | BD_DOWN:  jis = 0x2C34; break;
-        case BD_RIGHT | BD_UP:   jis = 0x2C38; break;
-        case BD_LEFT | BD_UP:    jis = 0x2C3C; break;
+        case BD_RIGHT | BD_DOWN:
+          jis = 0x2C30;
+          break;
+        case BD_LEFT | BD_DOWN:
+          jis = 0x2C34;
+          break;
+        case BD_RIGHT | BD_UP:
+          jis = 0x2C38;
+          break;
+        case BD_LEFT | BD_UP:
+          jis = 0x2C3C;
+          break;
       }
       jis |= (0x01 & -!!(heaviness & BD_HORIZONTAL));
       jis |= (0x02 & -!!(heaviness & BD_VERTICAL));
       break;
     case 3:
       switch (shape ^ 0x0F) {
-        case BD_LEFT:  jis = 0x2C40; break;
-        case BD_RIGHT: jis = 0x2C48; break;
-        case BD_UP:    jis = 0x2C50; break;
-        case BD_DOWN:  jis = 0x2C58; break;
+        case BD_LEFT:
+          jis = 0x2C40;
+          break;
+        case BD_RIGHT:
+          jis = 0x2C48;
+          break;
+        case BD_UP:
+          jis = 0x2C50;
+          break;
+        case BD_DOWN:
+          jis = 0x2C58;
+          break;
       }
       for (bitmask = 0x01; bitmask != 0x10; bitmask <<= 1) {
         if (shape & bitmask) {
@@ -172,11 +197,16 @@ unsigned ank_box_drawing(ank_box_drawing_t bitmap) {
 
   if ((bitmap & ANK_BD_DOUBLE) && (bitmap & (ANK_BD_HORIZONTAL))) {
     switch (bitmap ^ ANK_BD_DOUBLE) {
-      case ANK_BD_HORIZONTAL:                   return 0xE0;
-      case ANK_BD_VERTICAL | ANK_BD_RIGHT:      return 0xE1;
-      case ANK_BD_VERTICAL | ANK_BD_HORIZONTAL: return 0xE2;
-      case ANK_BD_VERTICAL | ANK_BD_LEFT:       return 0xE3;
-      default:                                  return '?';
+      case ANK_BD_HORIZONTAL:
+        return 0xE0;
+      case ANK_BD_VERTICAL | ANK_BD_RIGHT:
+        return 0xE1;
+      case ANK_BD_VERTICAL | ANK_BD_HORIZONTAL:
+        return 0xE2;
+      case ANK_BD_VERTICAL | ANK_BD_LEFT:
+        return 0xE3;
+      default:
+        return '?';
     }
   }
 
@@ -196,18 +226,26 @@ unsigned ank_box_drawing(ank_box_drawing_t bitmap) {
       }
       offset = (bitmap & ANK_BD_ARC) ? 4 : 0;
       switch (shape) {
-        case ANK_BD_RIGHT | ANK_BD_DOWN: return 0x98 + offset;
-        case ANK_BD_LEFT | ANK_BD_DOWN:  return 0x99 + offset;
-        case ANK_BD_RIGHT | ANK_BD_UP:   return 0x9a + offset;
-        case ANK_BD_LEFT | ANK_BD_UP:    return 0x9b + offset;
+        case ANK_BD_RIGHT | ANK_BD_DOWN:
+          return 0x98 + offset;
+        case ANK_BD_LEFT | ANK_BD_DOWN:
+          return 0x99 + offset;
+        case ANK_BD_RIGHT | ANK_BD_UP:
+          return 0x9a + offset;
+        case ANK_BD_LEFT | ANK_BD_UP:
+          return 0x9b + offset;
       }
       return '?';  // unreachable
     case 3:
       switch (shape ^ 0xF) {
-        case ANK_BD_DOWN:  return 0x90;
-        case ANK_BD_UP:    return 0x91;
-        case ANK_BD_RIGHT: return 0x92;
-        case ANK_BD_LEFT:  return 0x93;
+        case ANK_BD_DOWN:
+          return 0x90;
+        case ANK_BD_UP:
+          return 0x91;
+        case ANK_BD_RIGHT:
+          return 0x92;
+        case ANK_BD_LEFT:
+          return 0x93;
       }
     case 4:
       return 0x8F;
@@ -216,13 +254,23 @@ unsigned ank_box_drawing(ank_box_drawing_t bitmap) {
 }
 
 unsigned ank_left_x_of_8_square(unsigned x) {
-  if (x == 0) { return ' '; }
-  if (x == 8) { return 0x87; }
-  if (x < 8) { return 0x87 + x; }
+  if (x == 0) {
+    return ' ';
+  }
+  if (x == 8) {
+    return 0x87;
+  }
+  if (x < 8) {
+    return 0x87 + x;
+  }
   return '?';
 }
 unsigned ank_bottom_x_of_8_square(unsigned x) {
-  if (x == 0) { return ' '; }
-  if (x <= 8) { return 0x7F + x; }
+  if (x == 0) {
+    return ' ';
+  }
+  if (x <= 8) {
+    return 0x7F + x;
+  }
   return '?';
 }
