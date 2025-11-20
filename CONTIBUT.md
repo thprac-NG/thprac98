@@ -15,3 +15,7 @@
 - Please fit the filenames of as many files as possible into the 8.3 filename
   format.
 - Use space for indentation.
+- Keep the size of file `thprac98.EXE` under 500,000 Bytes. This is because
+  the Chinese forum to publish thprac(98),
+  Nyasama([bbs.nyasama.com](https://bbs.nyasama.com/)), requires every
+  attachment to have a size below 500KB.
