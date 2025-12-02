@@ -4,18 +4,16 @@
 #include "codegen/common.hpp"
 #include "src/utils.hpp"
 
-#define THPRAC98_LICENSE_WARNING_TEXT \
-    "// WARNING: THIS FILE IS AUTO-GENERATED" ENDL                  \
-    "// To modify this file, edit files under codegen/licenses and use" ENDL  \
-    "// codegen/licengen.cpp to regenerate this file." ENDL ENDL
+#define THPRAC98_LICENSE_WARNING_TEXT                                      \
+  "// WARNING: THIS FILE IS AUTO-GENERATED" ENDL                           \
+  "// To modify this file, edit files under codegen/licenses and use" ENDL \
+  "// codegen/licengen.cpp to regenerate this file." ENDL ENDL
 
 const int LICENSE_COUNT = 4;
-const char* license_name[LICENSE_COUNT] = {
-  "thprac98", "lohmann_json", "master_lib", "takeda_msdos"
-};
-const char* license_filename[LICENSE_COUNT] = {
-  "thprac.txt", "lohmjson.txt", "masterlb.txt", "tkdmsdos.txt"
-};
+const char* license_name[LICENSE_COUNT] = {"thprac98", "lohmann_json",
+                                           "master_lib", "takeda_msdos"};
+const char* license_filename[LICENSE_COUNT] = {"thprac.txt", "lohmjson.txt",
+                                               "masterlb.txt", "tkdmsdos.txt"};
 FILE* handler[LICENSE_COUNT];
 char buffer[100];
 
@@ -47,12 +45,9 @@ int main() {
     close_all_handler();
     return 1;
   }
-  fprintf(fout,
-    THPRAC98_LICENSE_WARNING_TEXT
-    "#ifndef THPRAC98_SRC_LICENSE_HPP_" ENDL
-    "#define THPRAC98_SRC_LICENSE_HPP_" ENDL
-    "" ENDL
-  );
+  fprintf(fout, THPRAC98_LICENSE_WARNING_TEXT
+          "#ifndef THPRAC98_SRC_LICENSE_HPP_" ENDL
+          "#define THPRAC98_SRC_LICENSE_HPP_" ENDL "" ENDL);
   for (i = 0; i < LICENSE_COUNT; ++i) {
     fprintf(fout, "extern const char* const license_%s;" ENDL, license_name[i]);
   }
