@@ -33,44 +33,8 @@
 #include <type_traits>
 #endif
 #include "master.h"
+#include "src/tsrutils.hpp"
 
-#pragma region "Fundamental" Types
-
-#if (ANCIENT_CXX == 1)
-#define bool unsigned char
-#define false ((bool)(0))
-#define true ((bool)(1))
-#endif
-
-#if (ANCIENT_CXX == 1) || (__cplusplus < CPLUSPLUS20)
-#if (ANCIENT_CXX == 0)
-static_assert(sizeof(signed char) == 1 &&
-                  std::is_signed<signed char>::value == true,
-              "Type 'signed char' should have a size of 1, and be signed.");
-static_assert(sizeof(unsigned char) == 1 &&
-                  std::is_signed<unsigned char>::value == false,
-              "Type 'unsigned char' should have a size of 1, and be unsigned.");
-#endif
-typedef signed char int8;
-typedef unsigned char uint8;
-#else
-typedef int8_t int8;
-typedef uint8_t int uint8;
-#endif
-
-#if (ANCIENT_CXX == 1)
-typedef signed short int16;
-typedef unsigned short uint16;
-typedef signed long int32;
-typedef unsigned long uint32;
-#else
-typedef int16_t int16;
-typedef uint16_t uint16;
-typedef int32_t int32;
-typedef uint32_t uint32;
-#endif
-
-#pragma endregion  // #pragma region "Fundamental" Types
 #pragma region Keyboard handling
 
 /**
@@ -264,6 +228,10 @@ bool is_pressed(key_t x);
  * @return int 1 if the character is half-width, 2 if otherwise.
  */
 int char_width(unsigned ch);
+template <unsigned ch>
+struct char_width_c {
+  enum { value = 2 - (ch <= 0x00FFu || (0x8540u <= ch && ch <= 0x869Du)) };
+};
 
 /**
  * @brief Print wide char by `putchar`-ing its first and second bit.

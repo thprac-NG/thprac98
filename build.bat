@@ -7,6 +7,12 @@ set other_arg=-ms -wall -DANCIENT_CXX=1 -v -3
 
 @rem Building thprac98.exe using command `build.bat` (without args)
 if not %1.==. goto :end_build
+  @REM echo [build.bat] Building th01.exe...
+  @REM if exist th01.exe del th01.exe
+  @REM %ReC98_DOS% tcc %include_path_arg% %other_arg% src\games\th01.cpp @tsr_src ^
+  @REM   || goto :error
+  @REM echo [build.bat] Successfully built th01.exe.
+
   echo [build.bat] Building thprac98.exe...
   if exist thprac98.exe del thprac98.exe
   %ReC98_DOS% tcc %include_path_arg% %other_arg% src\thprac98.cpp @srcfiles ^

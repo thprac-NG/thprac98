@@ -4,5 +4,6 @@
 *.exe
 *.obj
 *.map
+*.com
 
 ignore/*
