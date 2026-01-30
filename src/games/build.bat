@@ -1,7 +1,7 @@
 @echo off
 
 @rem /ml, /mx is used so that the symbols are all case-sensitive.
-msdos tasm /m /ml /mx th01.asm || goto :error
+msdos tasm /m /ml /mx /mv80 th01.asm || goto :error
 @rem /t is for generating .COM files.
 msdos tlink /t th01.obj || goto :error
 echo th01.com has been successfully built.
