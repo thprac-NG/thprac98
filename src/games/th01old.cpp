@@ -90,9 +90,6 @@ NOPs:
 3bytes: 8D xx 00 (lea r16, [r16 + 00h]). 5F (bx), 6E (bp), 74 (si), 7D (di)
 4bytes: 8D xx 00 00 (lea r16, [r16 + 0000h]). 9F (bx), AE (bp), B4 (si), BD (di)
 
-The instruction "A1 72 3E" is in 1E36:0007.
-(temp) 1B50 -> 1A7D, 2967 -> 2894
-
 Note that these addresses are from Ghidra, having a 1000:0 offset.
 F1: Invincibile (
   1B50:29A9 | 7E 2F -> 89 DB
@@ -104,7 +101,10 @@ F2: Inf. Lives (
                        ^^ ^^  Note that this is an absolute call, the segment
                               address might differ.
 )
-F3: Inf. Bombs
+F3: Inf. Bombs (
+  2967:08B3 | 40 -> 90
+  2967:08AB | FE 0E 92 00 -> 8D 9F 00 00
+)
 F4: Inf. Card Combo
 F5: Inf. Item Combo
 F6: Everlasting BGM
