@@ -31,6 +31,7 @@ bs_covered_tvram_attr   dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
 bs_state        dw 0
 fx_state        dw FX_COUNT dup(0)
 
+old_int7        dd ?
 old_int8        dd ?
 heartbeat_value dw 30h
 
@@ -39,15 +40,65 @@ heartbeat_value dw 30h
 indos_flag_addr                 dd ?
 critical_error_flag_addr        dd ?
 
+UPDATE_INTERVAL EQU 5   ; unit: 10ms
+update_counter  db (UPDATE_INTERVAL - 1)
+
+int1c_counter   dw 0
+int1c_using     db 0
+int1c_routine   dd ?
+original_int1c  dd ?
+
 proc my_int8_wrapper far
         push    ax bx cx dx si di bp es ds
         assume  ds:nothing
+
+        ; For some reason, we still need to
         pushf
         call    [dword ptr cs:[old_int8]]
+        cmp     [cs:int1c_using], 0
+        je      @@skip_int1c_processing
+        dec     [cs:int1c_counter]
+        cmp     [cs:int1c_counter], 0
+        jne     @@L2
+        mov     [cs:int1c_using], 0
+        pushf
+        call    [dword ptr cs:[int1c_routine]]
+@@L2:
+@@skip_int1c_processing:
+
+        inc     [cs:update_counter]
+        cmp     [cs:update_counter], UPDATE_INTERVAL
+        jne     @@skip_processing
+        mov     [cs:update_counter], 0
         call    my_int8
+@@skip_processing:
+
         pop     ds es bp di si dx cx bx ax
         iret
 endp my_int8_wrapper
+
+proc my_int1c far
+        push    ax bx cx dx si di bp es ds
+        assume  ds:nothing
+
+        cmp     ah, 02h
+        jne     @@back_to_original_int1c
+        mov     [cs:int1c_counter], cx
+        mov     [word ptr cs:int1c_routine], bx
+        mov     [word ptr cs:int1c_routine + 2], es
+        mov     [cs:int1c_using], 1
+        jmp     @@return
+
+@@back_to_original_int1c:
+        pushf
+        call    [dword ptr cs:original_int1c]
+
+@@return:
+        pop     ds es bp di si dx cx bx ax
+        iret
+endp my_int1c
+
+ENABLE_HEARTBEAT        EQU 0
 
 proc my_int8 near
         assume  cs:cseg
@@ -56,13 +107,15 @@ proc my_int8 near
         mov     ds, bx
 
         ; Heartbeat on (10,10)
-        ; push    TEXT_WHITE 10 10 [cs:heartbeat_value]
-        ; call    print_ch
-        ; add     sp, 8
-        ; inc     [cs:heartbeat_value]
-        ; cmp     [cs:heartbeat_value], 3Ah
-        ; jne     @@L1
-        ; mov     [cs:heartbeat_value], 30h
+        IF ENABLE_HEARTBEAT
+        push    TEXT_WHITE 10 10 [cs:heartbeat_value]
+        call    print_ch
+        add     sp, 8
+        inc     [cs:heartbeat_value]
+        cmp     [cs:heartbeat_value], 3Ah
+        jne     @@L1
+        mov     [cs:heartbeat_value], 30h
+        ENDIF
 @@L1:
 
         call    maintain_bs_menu_ui
@@ -75,6 +128,7 @@ proc my_int8 near
         ret
 endp my_int8
 
+; Multiline comment is only available in MASM mode.
 masm
 comment $
 NOPs:
@@ -703,7 +757,7 @@ real_start:
         jmp     @@return_with_error_code
 @@using_dos_3_plus:
 
-        ; Set up the two flags for DOS calls in TSR
+        ; Get the address of two flags for DOS calls in TSR
         mov     ah, 34h
         int     21h
         mov     [word ptr indos_flag_addr], bx
@@ -728,16 +782,39 @@ real_start:
         mov     ah, 03h
         int     18h
 
-        ; Hook INT8
+        ; Hook INT7, INT8, and INT1Ch/02h
+        ; In the original INT1Ch/02h routine, it will store your CX input (i.e.,
+        ; the delay before calling the routine) 0000:058A, and store your ES:BX
+        ; (i.e., the address of the routine) input into the vector of INT7.
+        ; Normally, INT8 is masked out if there is no INT1Ch/02h routine
+        ; running, and if one hooks into INT8, it won't be called anyway.
+        ; If one manually calls INT8 without setting 0000:058A, they effectively
+        ; make a call of INT1Ch/02h with CX=0000h, ES:BX=(whatever in the INT7
+        ; vector), causing a General Protection Fault to occur after 655.36s.
+        ; To prevent this from happening, we can set 0000:058A to an arbitrary
+        ; non-zero value and set INT7 to be as INT8.
         mov     ax, 3508h
-        int     21h  ; get the old INT8 vector
+        int     21h
         mov     [word ptr old_int8], bx
         mov     [word ptr old_int8 + 2], es
         mov     dx, offset my_int8_wrapper
         mov     ax, 2508h
-        int     21h  ; set the INT8 vector
-        pushf
-        call    [dword ptr cs:[old_int8]]  ; call old_int8 once to initalize
+        int     21h
+        mov     dx, offset my_int8_wrapper
+        mov     ax, 2507h
+        int     21h
+        mov     ax, 351Ch
+        int     21h
+        mov     [word ptr original_int1c], bx
+        mov     [word ptr original_int1c + 2], es
+        mov     dx, offset my_int1c
+        mov     ax, 251Ch
+        int     21h
+        mov     ax, 00h
+        mov     es, ax
+        mov     si, 058Ah
+        mov     [word ptr es:si], 500
+        int     08h
 
         ; Terminate and stay resident
         mov     dx, offset end_of_resident
