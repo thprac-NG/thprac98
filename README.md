@@ -8,7 +8,7 @@ support to the first five official Touhou games, thprac98 is being developed
 by the current maintainers of thprac right now.
 
 **With some proof-of-concepts unimplemented, this project is still a
-_work-in-progress_!**
+work-in-progress!**
 
 ---
 
