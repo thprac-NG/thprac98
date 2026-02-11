@@ -24,14 +24,13 @@ f2_text         db  'F2: Inf. Lives', 0
 f3_text         db  'F3: Inf. Bombs', 0
 fx_text         dw offset f1_text, offset f2_text, offset f3_text
 
-bs_covered_tvram        dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
-bs_covered_tvram_attr   dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
+bs_covered_tram         dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
+bs_covered_tram_attr    dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
 
 ; The high byte represents "down", and the low byte alternates each time pressed
 bs_state        dw 0
 fx_state        dw FX_COUNT dup(0)
 
-old_int7        dd ?
 old_int8        dd ?
 heartbeat_value dw 30h
 
@@ -48,11 +47,14 @@ int1c_using     db 0
 int1c_routine   dd ?
 original_int1c  dd ?
 
+old_int21       dd ?
+just_loaded     db 0
+WAIT_LOAD_TIME  EQU 5   ; unit: 10ms
+
 proc my_int8_wrapper far
         push    ax bx cx dx si di bp es ds
         assume  ds:nothing
 
-        ; For some reason, we still need to
         pushf
         call    [dword ptr cs:[old_int8]]
         cmp     [cs:int1c_using], 0
@@ -65,6 +67,21 @@ proc my_int8_wrapper far
         call    [dword ptr cs:[int1c_routine]]
 @@L2:
 @@skip_int1c_processing:
+
+        mov     ax, cs
+        mov     ds, ax
+        ; If just loaded, wait for some time for the program to load, then
+        ; update the menu and inject the code.
+        cmp     [just_loaded], 0
+        je      @@skip_load_check
+        dec     [just_loaded]
+        cmp     [just_loaded], 0
+        jne     @@skip_processing
+        call    store_covered_tram
+        call    show_bs_menu
+        call    inject
+        jmp     @@skip_processing
+@@skip_load_check:
 
         inc     [cs:update_counter]
         cmp     [cs:update_counter], UPDATE_INTERVAL
@@ -97,6 +114,15 @@ proc my_int1c far
         pop     ds es bp di si dx cx bx ax
         iret
 endp my_int1c
+
+
+proc my_int21 far
+        cmp     ah, 4Bh
+        jne     @@L1
+        mov     [cs:just_loaded], WAIT_LOAD_TIME
+@@L1:
+        jmp     [dword ptr cs:old_int21]
+endp my_int21
 
 ENABLE_HEARTBEAT        EQU 0
 
@@ -483,11 +509,52 @@ local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
         ; FX update.
         jmp     @@show_bs_menu_without_storing
 @@show_bs_menu:
-        ; Store the covered TVRAM space
-        mov     ax, TVRAM_SEG
+        ; Store the covered TRAM space
+        call    store_covered_tram
+@@show_bs_menu_without_storing:
+        ; Show the BS menu
+        call    show_bs_menu
+        jmp     @@end_of_bs_menu_update
+@@restore_bs_covered:
+        ; Restore the covered TRAM space
+        mov     ax, TRAM_SEG
         mov     es, ax
         mov     ax, 0
-        mov     bx, offset bs_covered_tvram
+        mov     bx, offset bs_covered_tram
+@@L11:
+        push    ax bx es
+        push    (2 * BS_MENU_WIDTH) ax es bx ds
+        call    memory_copy
+        add     sp, 10
+        pop     es bx ax
+        add     ax, 0A0h
+        add     bx, (2 * BS_MENU_WIDTH)
+        cmp     ax, (0A0h * BS_MENU_HEIGHT)
+        jne     @@L11
+        mov     ax, TRAM_ATTR_SEG
+        mov     es, ax
+        mov     ax, 0
+        mov     bx, offset bs_covered_tram_attr
+@@L12:
+        push    ax bx es
+        push    (2 * BS_MENU_WIDTH) ax es bx ds
+        call    memory_copy
+        add     sp, 10
+        pop     es bx ax
+        add     ax, 0A0h
+        add     bx, (2 * BS_MENU_WIDTH)
+        cmp     ax, (0A0h * BS_MENU_HEIGHT)
+        jne     @@L12
+@@end_of_bs_menu_update:
+        mov     ax, [@@return_val]
+        ret
+endp maintain_bs_menu_ui
+
+proc store_covered_tram near
+        mov     ax, TRAM_SEG
+        mov     es, ax
+        mov     ax, 0
+        mov     bx, offset bs_covered_tram
 @@L4:
         push    ax bx es
         push    (2 * BS_MENU_WIDTH) bx ds ax es
@@ -498,10 +565,10 @@ local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
         add     bx, (2 * BS_MENU_WIDTH)
         cmp     ax, (0A0h * BS_MENU_HEIGHT)
         jne     @@L4
-        mov     ax, TVRAM_ATTR_SEG
+        mov     ax, TRAM_ATTR_SEG
         mov     es, ax
         mov     ax, 0
-        mov     bx, offset bs_covered_tvram_attr
+        mov     bx, offset bs_covered_tram_attr
 @@L5:
         push    ax bx es
         push    (2 * BS_MENU_WIDTH) bx ds ax es
@@ -512,8 +579,10 @@ local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
         add     bx, (2 * BS_MENU_WIDTH)
         cmp     ax, (0A0h * BS_MENU_HEIGHT)
         jne     @@L5
-@@show_bs_menu_without_storing:
-        ; Show the BS menu
+        ret
+endp store_covered_tram
+
+proc show_bs_menu near
         push    TEXT_WHITE 0 0 offset bs_frame1 ds
         call    print_str
         add     sp, 10
@@ -553,49 +622,16 @@ local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
         inc     dx
         cmp     dx, FX_COUNT + 1
         jne     @@L7
-        jmp     @@end_of_bs_menu_update
-@@restore_bs_covered:
-        ; Restore the covered TVRAM space
-        mov     ax, TVRAM_SEG
-        mov     es, ax
-        mov     ax, 0
-        mov     bx, offset bs_covered_tvram
-@@L11:
-        push    ax bx es
-        push    (2 * BS_MENU_WIDTH) ax es bx ds
-        call    memory_copy
-        add     sp, 10
-        pop     es bx ax
-        add     ax, 0A0h
-        add     bx, (2 * BS_MENU_WIDTH)
-        cmp     ax, (0A0h * BS_MENU_HEIGHT)
-        jne     @@L11
-        mov     ax, TVRAM_ATTR_SEG
-        mov     es, ax
-        mov     ax, 0
-        mov     bx, offset bs_covered_tvram_attr
-@@L12:
-        push    ax bx es
-        push    (2 * BS_MENU_WIDTH) ax es bx ds
-        call    memory_copy
-        add     sp, 10
-        pop     es bx ax
-        add     ax, 0A0h
-        add     bx, (2 * BS_MENU_WIDTH)
-        cmp     ax, (0A0h * BS_MENU_HEIGHT)
-        jne     @@L12
-@@end_of_bs_menu_update:
-        mov     ax, [@@return_val]
         ret
-endp maintain_bs_menu_ui
+endp show_bs_menu
 
 TEXT_WHITE      EQU 0E1h
 TEXT_GREEN      EQU 81h
 
 SCREEN_WIDTH    EQU 80
 SCREEN_HEIGHT   EQU 25
-TVRAM_SEG       EQU 0A000h
-TVRAM_ATTR_SEG  EQU 0A200h
+TRAM_SEG        EQU 0A000h
+TRAM_ATTR_SEG   EQU 0A200h
 
 ; Print an ASCIIZ string onto screen.
 ; Argument 1: segment of pointer to string (byte array)
@@ -624,11 +660,11 @@ arg @@str_seg:word, @@str_off:word, @@x:word, @@y:word, @@attr:word
         je      @@return
         mov     dx, bx
         add     dx, bx
-        add     si, dx   ; si: current offset of TVRAM
-        mov     ax, TVRAM_SEG
+        add     si, dx   ; si: current offset of TRAM
+        mov     ax, TRAM_SEG
         mov     es, ax
         mov     [word ptr es:si], cx
-        mov     ax, TVRAM_ATTR_SEG
+        mov     ax, TRAM_ATTR_SEG
         mov     es, ax
         mov     ax, [@@attr]
         mov     [word ptr es:si], ax
@@ -660,11 +696,11 @@ arg @@char:word, @@x:word, @@y:word, @@attr:word
         jae     @@return
         mov     cx, [@@char]
         add     si, bx
-        add     si, bx  ; si: offset of TVRAM
-        mov     ax, TVRAM_SEG
+        add     si, bx  ; si: offset of TRAM
+        mov     ax, TRAM_SEG
         mov     es, ax
         mov     [es:si], cx
-        mov     ax, TVRAM_ATTR_SEG
+        mov     ax, TRAM_ATTR_SEG
         mov     es, ax
         mov     ax, [@@attr]
         mov     [es:si], ax
@@ -815,6 +851,15 @@ real_start:
         mov     si, 058Ah
         mov     [word ptr es:si], 500
         int     08h
+
+        ; Hook INT21h
+        mov     ax, 3521h
+        int     21h
+        mov     [word ptr old_int21], bx
+        mov     [word ptr old_int21 + 2], es
+        mov     dx, offset my_int21
+        mov     ax, 2521h
+        int     21h
 
         ; Terminate and stay resident
         mov     dx, offset end_of_resident
