@@ -47,9 +47,17 @@ int1c_using     db 0
 int1c_routine   dd ?
 original_int1c  dd ?
 
+old_int2f       dd ?
+mux_id          db 0
+INT2F_MAGIC_BX  EQU 0B6DDh  ; Shift-JIS of half-width katakana 'kawa'
+INT2F_MAGIC_CX  EQU 0BCDBh  ; Shift-JIS of half-width katakana 'shiro'
+
 old_int21       dd ?
 just_loaded     db 0
 WAIT_LOAD_TIME  EQU 5   ; unit: 10ms
+
+cur_psp         dw ?
+temp_proc       dd ?
 
 proc my_int8_wrapper far
         push    ax bx cx dx si di bp es ds
@@ -124,6 +132,47 @@ proc my_int21 far
         jmp     [dword ptr cs:old_int21]
 endp my_int21
 
+; AL=0: Check whether this MUX id has been installed
+;       Returns: AL=FFh, BX=B6DDh, CX=BCDBh
+; AL=1: Re-render the menu, and re-inject the code
+; AL=2: Re-render the menu only
+proc my_int2f far
+        assume  ds:nothing
+        cmp     ah, [cs:mux_id]
+        je      @@L1
+        pushf
+        call    [dword ptr cs:old_int2f]
+        jmp     @@return_without_pop
+@@L1:
+        cmp     al, 0
+        jne     @@L2
+        mov     al, 0FFh   ; convention in INT2Fh, indicating installed
+        mov     bx, INT2F_MAGIC_BX
+        mov     cx, INT2F_MAGIC_CX
+        jmp     @@return_without_pop
+@@L2:
+        push    ax bx cx dx si di bp es ds
+        mov     bx, cs
+        mov     ds, bx
+
+        cmp     al, 1
+        jne     @@L3
+        call    store_covered_tram
+        call    show_bs_menu
+        call    inject
+        jmp     @@return
+@@L3:
+        cmp     al, 2
+        jne     @@return
+        call    store_covered_tram
+        call    show_bs_menu
+
+@@return:
+        pop     ds es bp di si dx cx bx ax
+@@return_without_pop:
+        iret
+endp my_int2f
+
 ENABLE_HEARTBEAT        EQU 0
 
 proc my_int8 near
@@ -164,27 +213,50 @@ NOPs:
 3bytes: 8D xx 00 (lea r16, [r16 + 00h]). 5F (bx), 6E (bp), 74 (si), 7D (di)
 4bytes: 8D xx 00 00 (lea r16, [r16 + 0000h]). 9F (bx), AE (bp), B4 (si), BD (di)
 
-Note that these addresses are from Ghidra, having a 1000:0 offset.
-
 Check https://github.com/H-J-Granger/ReC98/commit/d159a9960ae4d52c4c2bb6d91fcd5046f6dad4e5
-for the discompiled version of these modifications.
-F1: Invincibile (
-  1B50:29A9 | 7E 2F -> 89 DB
-  1B50:29BA | C4 1E FC 47 26 FE 4F 15 -> C6 06 AF 00 00 E9 A2 FD
-)
-F2: Inf. Lives (
-  1B50:29BE | 26 FE 4F 15 FF 0E E0 00 -> 8D B4 00 00 8D BD 00 00
-  2967:198B | 9A 95 08 58 28 -> 90 8D B4 00 00
-                       ^^ ^^  Note that this is an absolute call, the segment
-                              address might differ.
-)
-F3: Inf. Bombs (
-  2967:08B3 | 40 -> 90
-  2967:08AB | FE 0E 92 00 -> 8D 9F 00 00
-)
+for the discompiled version of the Fx modifications.
+F1: Invincibile {
+  0B50:29A9 | 7E 2F -> 89 DB
+  0B50:29BA | C4 1E FC 47 26 FE 4F 15 -> C6 06 AF 00 00 E9 A2 FD
+}
+F2: Inf. Lives {
+  0B50:29BE | 26 FE 4F 15 FF 0E E0 00 -> 8D B4 00 00 8D BD 00 00
+  1967:198B | 9A 95 08 58 28 -> 90 8D B4 00 00
+            |          ^^ ^^ (*1)
+}
+F3: Inf. Bombs {
+  1967:08B3 | 40 -> 90
+  1967:08AB | FE 0E 92 00 -> 8D 9F 00 00
+}
 F4: Inf. Card Combo
 F5: Inf. Item Combo
 F6: Everlasting BGM
+
+stage_num_animate (restore the menu after "STAGE XX" animation): {
+  0B50:0775 | 1E 68 59 01 9A 7A 62 00 10 83 C4 0E ->
+            |                      ^^ ^^ (*1)
+            | 9A yy yy xx xx 8D 9F 00 00 83 C4 0A
+}, where "xxxx" is cseg, and "yyyy" is (offset my_0b50_0775).
+Original assembly:
+  0B50:0775 | 1E                push    DS
+  0B50:0776 | 68 59 01          push    159h    ; offset of the string "\x1B*"
+  0B50:0779 | 9A 7A 62 00 10    callf   printf
+  0B50:077E | 83 C4 0E          add     sp, 0Eh
+Modified assembly:
+  0B50:0775 | 9A yy yy xx xx    callf   my_0b50_0775
+  0B50:077A | 8D 9F 00 00       lea     bx, [bx + 0000h]  ; effectively nop
+  0B50:077E | 83 C4 0A          add     sp, 0Ah
+Check https://github.com/nmlgc/ReC98/blob/d892535e723b3691612363d1bbdbd2a54f43fb43/th01/main_01.cpp#L314
+for the C version of the original code.
+
+harry_up_anmiate (restore the menu after "HARRY UP" animation): {
+  1924:0364 | 9A 6A 0C 00 00 -> 9A yy yy xx xx
+            |          ^^ ^^
+}, where "xxxx" is cseg, and "yyyy" is (offset my_1924_0364).
+Original assembly: call text_clear (provided by master.lib)
+Modified assembly: call my_1924_0364
+
+(*1) This is an absolute call, the segment address might differ.
 $
 ideal
 
@@ -269,6 +341,33 @@ inf_bombs_part2         inject_code_t { \
         len = 4, \
         original_mem = offset inf_bombs_part2_org, \
         patched_mem = offset inf_bombs_part2_pat, \
+}
+
+stage_num_animate_org   db 01Eh, 068h, 059h, 001h, 09Ah, 07Ah, 062h, 000h, \
+                           010h, 083h, 0C4h, 00Eh
+stage_num_animate_pat   db 09Ah, 000h, 000h, 000h, 000h, 08Dh, 09Fh, 000h, \
+                           000h, 083h, 0C4h, 00Ah
+stage_num_animate_var   db 7 dup(0), 1, 1, 3 dup(0)
+stage_num_animate       inject_code_t { \
+        filename = offset reiiden_exe, \
+        seg = 0B50h, \
+        off = 0775h, \
+        len = 12, \
+        original_mem = offset stage_num_animate_org, \
+        patched_mem = offset stage_num_animate_pat, \
+        variable_mem = offset stage_num_animate_var, \
+}
+harry_up_animate_org    db 09Ah, 06Ah, 00Ch, 000h, 000h
+harry_up_animate_pat    db 09Ah, 000h, 000h, 000h, 000h
+harry_up_animate_var    db 0, 0, 0, 1, 1
+harry_up_animate        inject_code_t { \
+        filename = offset reiiden_exe, \
+        seg = 1924h, \
+        off = 0364h, \
+        len = 5, \
+        original_mem = offset harry_up_animate_org, \
+        patched_mem = offset harry_up_animate_pat, \
+        variable_mem = offset harry_up_animate_var, \
 }
 
 inject_failed   db 0
@@ -364,6 +463,18 @@ arg @@updated:word
         add     sp, 6
         pop     es
 
+        push    es
+        push    es 1 (offset stage_num_animate)
+        call    inject_one
+        add     sp, 6
+        pop     es
+        push    es
+        push    es 1 (offset harry_up_animate)
+        call    inject_one
+        add     sp, 6
+        pop     es
+
+        mov     [cs:cur_psp], es
 @@return:
         ret
 endp inject
@@ -442,6 +553,36 @@ local @@must_match:byte
         pop     di si
         ret
 endp inject_one
+
+proc my_0b50_0775 far
+        push    ax
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h
+        mov     [word ptr cs:temp_proc], 627Ah
+        mov     [word ptr cs:temp_proc + 2], ax
+        push    ds 159h
+        call    [dword ptr cs:temp_proc]
+        add     sp, 4
+        mov     ah, [cs:mux_id]
+        mov     al, 02h
+        int     2Fh
+        pop     ax
+        ret
+endp my_0b50_0775
+
+proc my_1924_0364 far
+        push    ax
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h
+        mov     [word ptr cs:temp_proc], 0C6Ah
+        mov     [word ptr cs:temp_proc + 2], ax
+        call    [dword ptr cs:temp_proc]
+        mov     ah, [cs:mux_id]
+        mov     al, 02h
+        int     2Fh
+        pop     ax
+        ret
+endp my_1924_0364
 
 ; Returns: Whether the FX status has been updated.
 proc maintain_bs_menu_ui near
@@ -779,7 +920,13 @@ dos_version_low_message         db 'The version of DOS is too low. DOS 3+ is ',\
                                    'required.$'
 cannot_get_critical_error_flag  db 'Failed to get the address of Critical ', \
                                    'Error Flag.$'
+cannot_get_mux_id               db 'Failed to register in INT 2Fh.$'
 
+; Return value:
+;       0: Successfully terminated and stayed resident
+;       1: DOS version <3
+;       2: Cannot get the Critical Error Flag
+;       3: Cannot register in INT 2Fh
 real_start:
         ; Check DOS version
         mov     ah, 30h
@@ -813,6 +960,12 @@ real_start:
 @@successfully_get_critical_error_flag_addr:
         mov     [word ptr critical_error_flag_addr], si
         mov     [word ptr critical_error_flag_addr + 2], es
+
+        ; Set up some injected code that can only be determined in the runtime
+        mov     [word ptr stage_num_animate_pat + 1], offset my_0b50_0775
+        mov     [word ptr stage_num_animate_pat + 3], cs
+        mov     [word ptr harry_up_animate_pat + 1], offset my_1924_0364
+        mov     [word ptr harry_up_animate_pat + 3], cs
 
         ; Initialize the keyboard BIOS
         mov     ah, 03h
@@ -859,6 +1012,36 @@ real_start:
         mov     [word ptr old_int21 + 2], es
         mov     dx, offset my_int21
         mov     ax, 2521h
+        int     21h
+
+        ; Hook INT2Fh
+        mov     bh, 0C0h  ; MUX id 00h~BFh is reserved
+@@L1:
+        mov     ah, bh
+        mov     al, 00h
+        push    bx
+        int     2Fh
+        pop     bx
+        cmp     al, 00h
+        jne     @@L2
+        mov     [mux_id], bh
+        jmp     @@L3
+@@L2:
+        inc     bh
+        cmp     bh, 0
+        jne     @@L1
+        mov     dx, offset cannot_get_mux_id
+        mov     ah, 09h
+        int     21h
+        mov     al, 3
+        jmp     @@return_with_error_code
+@@L3:
+        mov     ax, 352Fh
+        int     21h
+        mov     [word ptr old_int2f], bx
+        mov     [word ptr old_int2f + 2], es
+        mov     dx, offset my_int2f
+        mov     ax, 252Fh
         int     21h
 
         ; Terminate and stay resident
