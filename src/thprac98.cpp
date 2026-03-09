@@ -36,9 +36,11 @@ void print_links() {
 void print_version() {
   print_string("thprac98 ver." THPRAC98_VERSION
                "\n"
-               "Website: https://github.com/thprac-NG/thprac98\n"
+               "Website: https://github.com/thprac-NG/thprac98"
+               "\n"
                "Website (main project thprac): "
-               "https://github.com/touhouworldcup/thprac\n"
+               "https://github.com/touhouworldcup/thprac"
+               "\n"
                "Special Thanks: \n"
                "You!\n",
                pause);
