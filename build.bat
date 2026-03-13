@@ -26,7 +26,7 @@ if not %1.==. goto :end_build
   %ReC98_DOS% stub_hdr.exe thprac98.exe thp98tmp.exe || goto :error
   copy thp98tmp.exe thprac98.exe
   del thp98tmp.exe
-  echo [build.bat] Successfully built thprac.exe.
+  echo [build.bat] Successfully built thprac98.exe.
 :end_build
 
 @rem Building test suite using command `build.bat test`
@@ -70,6 +70,6 @@ if not %1.==codegen. goto :end_codegen
 
 goto :end_of_file
 :error
-echo Failed with error code %errorlevel%.
+echo [build.bat] Failed with error code %errorlevel%.
 exit /b %errorlevel%
 :end_of_file
