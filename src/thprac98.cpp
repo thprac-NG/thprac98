@@ -7,8 +7,6 @@
 #include "src/utils.hpp"
 #include "src/version.hpp"
 
-bool pause = true;
-
 void print_help_message() {
   print_string(
       "Usage: thprac98 [options] file...\n"
@@ -25,85 +23,214 @@ void print_help_message() {
       "  --import               Import the save data of a game\n"
       "  --license              Show license\n"
       "  --version              Show the version of thprac98\n"
-      "  --no-pause             No pause after printing several lines\n",
-      pause);
+      "  --no-pause             No pause after printing several lines\n");
   return;
 }
-void print_links() {
+void print_links(bool pause = true) {
   print_string("(There's currently no links)\n", pause);
   return;
 }
 void print_version() {
-  print_string("thprac98 ver." THPRAC98_VERSION
-               "\n"
-               "Website: https://github.com/thprac-NG/thprac98"
-               "\n"
-               "Website (main project thprac): "
-               "https://github.com/touhouworldcup/thprac"
-               "\n"
-               "Special Thanks: \n"
-               "You!\n",
-               pause);
+  print_string(
+      "thprac98 ver." THPRAC98_VERSION
+      "\n"
+      "Website: https://github.com/thprac-NG/thprac98"
+      "\n"
+      "Website (main project thprac): https://github.com/touhouworldcup/thprac"
+      "\n"
+      "Special Thanks: \n"
+      "* nmlgc, for their ReC98 project, which provides tremendous help;\n"
+      "* Ethy1ene, hicode002, and Mr_Alert, for their various help on PC-98 "
+      "hardware\n"
+      "  and software;\n"
+      "* ...and you!\n");
   return;
 }
-void print_license() {
+void print_one_license(const char* name, const char* license_str,
+                       bool pause = true) {
   print_delimiter();
-  puts("The license of thprac:");
-  wait_for_enter_key();
-  print_string(license_thprac98);
-  wait_for_enter_key();
-
-  print_delimiter();
-  puts("The license of Lohmann's JSON:");
-  wait_for_enter_key();
-  print_string(license_lohmann_json);
-  wait_for_enter_key();
-
-  print_delimiter();
-  puts("The license of master.lib:");
-  wait_for_enter_key();
-  print_string(license_master_lib);
-  wait_for_enter_key();
-
-  print_delimiter();
-  puts("The license of Takeda Toshiya's MS-DOS Player:");
-  wait_for_enter_key();
-  print_string(license_takeda_msdos);
-  wait_for_enter_key();
+  printf("The license of %s:\n", name);
+  if (pause) {
+    wait_for_enter_key();
+  }
+  print_string(license_str, pause);
+  if (pause) {
+    wait_for_enter_key();
+  }
+  return;
+}
+void print_license(bool pause = true) {
+  print_one_license("thprac98", license_thprac98, pause);
+  print_one_license("Lohmann's JSON", license_lohmann_json, pause);
+  print_one_license("master.lib", license_master_lib, pause);
+  print_one_license("Takeda Toshiya's MS-DOS Player", license_takeda_msdos,
+                    pause);
   return;
 }
 
-int main(int argc, char **argv) {
-  int i = 0;
-  for (i = 0; i < argc; ++i) {
-    if (strcmp(argv[i], "--no-pause")) {
-      pause = false;
+struct command_param_t {
+  enum type {
+    // Arguments that can be attached to any combination
+    NO_PAUSE,
+    FORCE,
+    // Standalone commands
+    HELP,
+    LINKS,
+    RESET,
+    ROLL,
+    LICENSE,
+    VERSION,
+    EXPORT,
+    IMPORT,
+    // Special commands
+    LAUNCH,
+    WITHOUT_THPRAC,
+    SCAN,
+    LAST_ENUM
+  };
+};
+const char* param_str[command_param_t::LAST_ENUM] = {
+    "--no-pause", "--force",          "--help",    "--links",  "--reset",
+    "--roll",     "--license",        "--version", "--export", "--import",
+    "--launch",   "--without-thprac", "--scan"};
+bool param_set[command_param_t::LAST_ENUM];
+
+void print_conflict_parameter_message(const char* str1, const char* str2) {
+  printf("Conflicting parameters found: '%s' and '%s'.\n", str1, str2);
+  return;
+}
+int main(int argc, char** argv) {
+  int i = 0, j = 0;
+  int last_argument = -1, file_argument_start = -1;
+  bool found_param = false, has_at_least_one_param = false;
+  bool pause = true;
+  // Check the command-line argument strings first
+  for (i = 1; i < argc; ++i) {
+    found_param = false;
+    last_argument = -1;
+    for (j = 0; j < command_param_t::LAST_ENUM; ++j) {
+      if (strcmp(argv[i], param_str[j]) == 0) {
+        if (j == command_param_t::NO_PAUSE) {
+          pause = false;
+        }
+        if (param_set[j]) {
+          printf("Multiple command: %s\n", param_str[j]);
+          print_help_message();
+          return 0;
+        }
+        param_set[j] = true;
+        last_argument = j;
+        found_param = has_at_least_one_param = true;
+        continue;
+      }
     }
-  }
-  if (argc == 1) {
-    print_help_message();
-    return 0;
-  }
-  // Parse the standalone arguments
-  if (argc == 2 || (argc == 3 && !pause)) {
-    for (i = 1; i <= 2; ++i) {
-      if (strcmp(argv[i], "--help") == 0) {
+    if (!found_param) {
+      if (strcmp(argv[i], "--") == 0) {
+        break;
+      }
+      if (strlen(argv[i]) >= 2u && argv[i][0] == '-' && argv[i][1] == '-') {
+        printf("Unknown parameter: '%s'\n", argv[i]);
         print_help_message();
         return 0;
       }
-      if (strcmp(argv[i], "--links") == 0) {
-        print_links();
-        return 0;
+      break;
+    }
+  }
+  if (!has_at_least_one_param) {
+    print_help_message();
+    return 0;
+  }
+
+  // Some additional arguments
+  // Note that 'thprac98 --scan 1 --force' isn't supported, so maybe the format
+  // --scan=1 should be preferred?
+  int scan_game_version = -1;
+  if (last_argument == command_param_t::SCAN) {
+    if (i == argc) {
+      puts("Missing game version after --scan.");
+      print_help_message();
+      return 0;
+    }
+    if (strlen(argv[i]) != 1 || argv[i][0] < '1' || argv[i][0] > '5') {
+      puts("The game version should be a number between 1 and 5.");
+      printf("However, `%s' is found.", argv[i]);
+      print_help_message();
+      return 0;
+    }
+    scan_game_version = argv[i][0] - '0';
+    i++;
+  }
+  file_argument_start = i;
+
+  // Standalone commands
+  // These arguments can be attached with only --force and/or --no-pause.
+  static const command_param_t::type standalone_commands[] = {
+      command_param_t::HELP,    command_param_t::LINKS,
+      command_param_t::RESET,   command_param_t::ROLL,
+      command_param_t::LICENSE, command_param_t::VERSION,
+      command_param_t::EXPORT,  command_param_t::IMPORT};
+  for (i = 0; i < sizeof(standalone_commands) / sizeof(standalone_commands[0]);
+       ++i) {
+    if (param_set[standalone_commands[i]]) {
+      for (j = 0; j < command_param_t::LAST_ENUM; ++j) {
+        if (param_set[j] && j != command_param_t::FORCE &&
+            j != command_param_t::NO_PAUSE && j != standalone_commands[i]) {
+          print_conflict_parameter_message(param_str[standalone_commands[i]],
+                                           param_str[j]);
+          print_help_message();
+          return 0;
+        }
       }
-      if (strcmp(argv[i], "--version") == 0) {
-        print_version();
-        return 0;
-      }
-      if (strcmp(argv[i], "--license") == 0) {
-        print_license();
-        return 0;
+      switch (standalone_commands[i]) {
+        case command_param_t::HELP:
+          print_help_message();
+          break;
+        case command_param_t::LINKS:
+          print_links(pause);
+          break;
+        case command_param_t::RESET:
+          puts("(The reset feature isn't ready yet)");
+          break;
+        case command_param_t::ROLL:
+          puts("(The roll feature isn't ready yet)");
+          break;
+        case command_param_t::LICENSE:
+          print_license(pause);
+          break;
+        case command_param_t::VERSION:
+          print_version();
+          break;
+        case command_param_t::EXPORT:
+          puts("(The export feature isn't ready yet)");
+          break;
+        case command_param_t::IMPORT:
+          puts("(The import feature isn't ready yet)");
+          break;
       }
     }
+  }
+
+  // Special arguments
+  if (param_set[command_param_t::SCAN]) {
+    if (param_set[command_param_t::LAUNCH]) {
+      print_conflict_parameter_message(param_str[command_param_t::SCAN],
+                                       param_str[command_param_t::LAUNCH]);
+      print_help_message();
+      return 0;
+    }
+    if (param_set[command_param_t::WITHOUT_THPRAC]) {
+      print_conflict_parameter_message(
+          param_str[command_param_t::SCAN],
+          param_str[command_param_t::WITHOUT_THPRAC]);
+      print_help_message();
+      return 0;
+    }
+    puts("(The scan feature isn't ready yet)");
+    scan_game_version;  // To disable the warning
+  }
+  if (param_set[command_param_t::LAUNCH]) {
+    puts("(The launch feature isn't ready yet)");
+    file_argument_start;  // To disable the warning
   }
   return 0;
 }
