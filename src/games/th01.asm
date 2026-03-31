@@ -32,6 +32,7 @@ bs_state        dw 0
 fx_state        dw FX_COUNT dup(0)
 
 old_int8        dd ?
+old_int7        dd ?
 heartbeat_value dw 30h
 
 ; These are byte ptrs, and need to check if is both cleared before any DOS call
@@ -45,7 +46,7 @@ update_counter  db (UPDATE_INTERVAL - 1)
 int1c_counter   dw 0
 int1c_using     db 0
 int1c_routine   dd ?
-original_int1c  dd ?
+old_int1c       dd ?
 
 old_int2f       dd ?
 mux_id          db 0
@@ -58,6 +59,7 @@ WAIT_LOAD_TIME  EQU 5   ; unit: 10ms
 
 cur_psp         dw ?
 temp_proc       dd ?
+stored_cseg     dw ?
 
 proc my_int8_wrapper far
         push    ax bx cx dx si di bp es ds
@@ -116,7 +118,7 @@ proc my_int1c far
 
 @@back_to_original_int1c:
         pushf
-        call    [dword ptr cs:original_int1c]
+        call    [dword ptr cs:old_int1c]
 
 @@return:
         pop     ds es bp di si dx cx bx ax
@@ -132,10 +134,12 @@ proc my_int21 far
         jmp     [dword ptr cs:old_int21]
 endp my_int21
 
-; AL=0: Check whether this MUX id has been installed
-;       Returns: AL=FFh, BX=B6DDh, CX=BCDBh
-; AL=1: Re-render the menu, and re-inject the code
-; AL=2: Re-render the menu only
+; AL=00h: Check whether this MUX id has been installed
+;         Returns: AL=FFh, BX=B6DDh, CX=BCDBh
+; AL=01h: Check the segment of thprac98
+;         Returns: AX=segment
+; AL=11h: Re-render the menu, and re-inject the code
+; AL=12h: Re-render the menu only
 proc my_int2f far
         assume  ds:nothing
         cmp     ah, [cs:mux_id]
@@ -151,18 +155,24 @@ proc my_int2f far
         mov     cx, INT2F_MAGIC_CX
         jmp     @@return_without_pop
 @@L2:
+        cmp     al, 1
+        jne     @@L4
+        mov     ax, [cs:stored_cseg]
+        jmp     @@return_without_pop
+@@L4:
+
         push    ax bx cx dx si di bp es ds
         mov     bx, cs
         mov     ds, bx
 
-        cmp     al, 1
+        cmp     al, 11h
         jne     @@L3
         call    store_covered_tram
         call    show_bs_menu
         call    inject
         jmp     @@return
 @@L3:
-        cmp     al, 2
+        cmp     al, 12h
         jne     @@return
         call    store_covered_tram
         call    show_bs_menu
@@ -564,7 +574,7 @@ proc my_0b50_0775 far
         call    [dword ptr cs:temp_proc]
         add     sp, 4
         mov     ah, [cs:mux_id]
-        mov     al, 02h
+        mov     al, 12h
         int     2Fh
         pop     ax
         ret
@@ -578,7 +588,7 @@ proc my_1924_0364 far
         mov     [word ptr cs:temp_proc + 2], ax
         call    [dword ptr cs:temp_proc]
         mov     ah, [cs:mux_id]
-        mov     al, 02h
+        mov     al, 12h
         int     2Fh
         pop     ax
         ret
@@ -914,31 +924,242 @@ arg @@str1_seg:word, @@str1_off:word, @@str2_seg:word, @@str2_off:word
         ret
 endp strcmp_ignore_case
 
+; Argument: The hex digit to be transformed.
+; Returns (in ax): The ASCII code of the transformed character (uppercase).
+proc to_hex_digit near
+arg @@num:word
+        mov     ax, [@@num]
+        cmp     ax, 10
+        jl      @@L1
+        add     ax, 'A' - 10
+        jmp     @@return
+@@L1:
+        add     ax, '0'
+@@return:
+        ret
+endp to_hex_digit
+
+; Print a 16-bit hex number to a string. All letters are uppercase.
+; Argument 1: The offset of the string.
+; Argument 2: The 16-bit hex number to be printed.
+proc print_hex near
+arg @@off:word, @@num:word
+        mov     cx, 0
+        mov     si, [@@off]
+        add     si, 3
+@@L1:
+        mov     ax, [@@num]
+        shr     ax, cl
+        and     ax, 0Fh
+        push    cx ax
+        call    to_hex_digit
+        add     sp, 2
+        pop     cx
+        mov     [byte ptr cs:si], al
+        add     cx, 4
+        dec     si
+        cmp     cx, 16
+        jne     @@L1
+        ret
+endp print_hex
+
+; Print a string to the console using INT 21h/09h.
+; Only accepts the string literals with a label at the DS segment.
+; Destroys ax, ds, dx.
+macro print_string @@str_off
+        mov     ax, cs
+        mov     ds, ax
+        mov     dx, offset @@str_off
+        mov     ah, 09h
+        int     21h
+endm print_string
+
 label end_of_resident byte
 
 dos_version_low_message         db 'The version of DOS is too low. DOS 3+ is ',\
                                    'required.$'
-cannot_get_critical_error_flag  db 'Failed to get the address of Critical ', \
+successfully_installed          db 'Successfully installed thprac98.$'
+failed_to_install               db 'Failed to install thprac98: $'
+cannot_get_critical_error_flag  db 'Cannot get the address of Critical ', \
                                    'Error Flag.$'
-cannot_get_mux_id               db 'Failed to register in INT 2Fh.$'
+cannot_get_mux_id               db 'Cannot register in INT 2Fh.$'
+already_installed               db 'Thprac98 has already been installed. $'
+failed_to_uninstall             db 'Failed to uninstall thprac98: $'
+successfully_uninstalled        db 'Successfully uninstalled thprac98.$'
+not_installed                   db 'Thprac98 hasn', 27h, 't been intsalled. $'
+int_vector_hooked               db 'IN'
+int_vector_hooked_num           db 'T ??h is hooked by someone else.$'
+unknown_parameter               db 'Unknown paramter.$'
+
+thprac98_installed      db 0
+print_temp              db '????$'
+uninstalling            db 0
+prev_cseg               dw ?
+int2f_mux_id            db ?
 
 ; Return value:
-;       0: Successfully terminated and stayed resident
-;       1: DOS version <3
-;       2: Cannot get the Critical Error Flag
-;       3: Cannot register in INT 2Fh
+;       00h: Success
+;       0Xh: Installation failure
+;       01h: DOS version <3
+;       02h: Cannot get the Critical Error Flag
+;       03h: Cannot register in INT 2Fh
+;       04h: Thprac98 has already been installed
+;       1Xh: Uninstallation failure
+;       11h: Some interrupt has been hooked by someone else, cannot uninstall
+;       12h: Thprac98 hasn't been installed
+;       FFh: Unknown paramter
 real_start:
         ; Check DOS version
         mov     ah, 30h
         int     21h
         cmp     al, 3
         jge     @@using_dos_3_plus
-        mov     dx, offset dos_version_low_message
-        mov     ah, 09h
-        int     21h
+        print_string dos_version_low_message
         mov     al, 1
         jmp     @@return_with_error_code
 @@using_dos_3_plus:
+
+        mov     al, [byte ptr cs:80h]
+        cmp     al, 0
+        je      @@end_of_parameter_checking
+        mov     [uninstalling], 1
+        cmp     al, 3
+        jne     @@unknown_parameter_label
+        cmp     [byte ptr cs:82h], '/'
+        jne     @@unknown_parameter_label
+        cmp     [byte ptr cs:83h], 'U'
+        je      @@end_of_parameter_checking
+        cmp     [byte ptr cs:83h], 'u'
+        je      @@end_of_parameter_checking
+@@unknown_parameter_label:
+        print_string unknown_parameter
+        mov     al, 0FFh
+        jmp     @@return_with_error_code
+@@end_of_parameter_checking:
+
+        ; Check if thprac98 has already been hooked into INT 2Fh
+        mov     dh, 0C0h
+@@L4:
+        mov     ah, dh
+        mov     al, 0
+        mov     bx, 0
+        mov     cx, 0
+        push    dx
+        int     2Fh
+        pop     dx
+        cmp     bx, INT2F_MAGIC_BX
+        jne     @@L5
+        cmp     cx, INT2F_MAGIC_CX
+        jne     @@L5
+        mov     [int2f_mux_id], ah
+        mov     [thprac98_installed], 1
+        jmp     @@L6
+@@L5:
+        inc     dh
+        cmp     dh, 0
+        jne     @@L4
+@@L6:
+
+        cmp     [uninstalling], 0
+        je      @@end_of_uninstalling
+        cmp     [thprac98_installed], 0
+        jne     @@L7
+        print_string failed_to_uninstall
+        print_string not_installed
+        mov     al, 12h
+        jmp     @@return_with_error_code
+@@L7:
+        mov     ah, [int2f_mux_id]
+        mov     al, 01h
+        int     2Fh
+        mov     [prev_cseg], ax
+
+        ; Check if the interrupt vectors are the same
+        mov     ax, 3508h
+        int     21h
+        mov     cx, es
+        cmp     cx, [prev_cseg]
+        jne     @@thprac98_hooked
+        cmp     bx, offset my_int8_wrapper
+        jne     @@thprac98_hooked
+        mov     ax, 351Ch
+        int     21h
+        mov     cx, es
+        cmp     cx, [prev_cseg]
+        jne     @@thprac98_hooked
+        cmp     bx, offset my_int1c
+        jne     @@thprac98_hooked
+        mov     ax, 3521h
+        int     21h
+        mov     cx, es
+        cmp     cx, [prev_cseg]
+        jne     @@thprac98_hooked
+        cmp     bx, offset my_int21
+        jne     @@thprac98_hooked
+        mov     ax, 352Fh
+        int     21h
+        mov     cx, es
+        cmp     cx, [prev_cseg]
+        jne     @@thprac98_hooked
+        cmp     bx, offset my_int2f
+        jne     @@thprac98_hooked
+
+        ; Restore interrupt vectors
+        mov     ax, [prev_cseg]
+        mov     es, ax
+        lds     dx, [dword ptr es:old_int7]
+        mov     ax, 2507h
+        int     21h
+        lds     dx, [dword ptr es:old_int8]
+        mov     ax, 2508h
+        int     21h
+        lds     dx, [dword ptr es:old_int1c]
+        mov     ax, 251Ch
+        int     21h
+        lds     dx, [dword ptr es:old_int21]
+        mov     ax, 2521h
+        int     21h
+        lds     dx, [dword ptr es:old_int2f]
+        mov     ax, 252Fh
+        int     21h
+
+        ; Free up the memory used by the previous session
+        ; es = [prev_cseg]
+        mov     ax, [es:2Ch]  ; Environment segment block
+        mov     es, ax
+        mov     ah, 49h
+        int     21h     ; free it up
+        mov     ax, [prev_cseg]
+        mov     es, ax
+        mov     ah, 49h
+        int     21h
+
+        print_string successfully_uninstalled
+        jmp     @@return_0
+
+@@thprac98_hooked:
+        mov     ah, 0
+        push    ax (offset int_vector_hooked_num)
+        call    print_hex
+        add     sp, 4
+        mov     [word ptr int_vector_hooked_num], ' T'
+        print_string failed_to_uninstall
+        print_string int_vector_hooked
+        mov     al, 11h
+        jmp     @@return_with_error_code
+
+@@end_of_uninstalling:
+
+        cmp     [thprac98_installed], 1
+        jne     @@L8
+        print_string failed_to_install
+        print_string already_installed
+        mov     al, 04h
+        jmp     @@return_with_error_code
+@@L8:
+
+        ; Save the current segment
+        mov     [stored_cseg], cs
 
         ; Get the address of two flags for DOS calls in TSR
         mov     ah, 34h
@@ -952,9 +1173,7 @@ real_start:
         mov     es, ax
         pop     ds
         jnc     @@successfully_get_critical_error_flag_addr
-        mov     dx, offset cannot_get_critical_error_flag
-        mov     ah, 09h
-        int     21h
+        print_string cannot_get_critical_error_flag
         mov     al, 2
         jmp     @@return_with_error_code
 @@successfully_get_critical_error_flag_addr:
@@ -989,13 +1208,17 @@ real_start:
         mov     dx, offset my_int8_wrapper
         mov     ax, 2508h
         int     21h
+        mov     ax, 3507h
+        int     21h
+        mov     [word ptr old_int7], bx
+        mov     [word ptr old_int7 + 2], es
         mov     dx, offset my_int8_wrapper
         mov     ax, 2507h
         int     21h
         mov     ax, 351Ch
         int     21h
-        mov     [word ptr original_int1c], bx
-        mov     [word ptr original_int1c + 2], es
+        mov     [word ptr old_int1c], bx
+        mov     [word ptr old_int1c + 2], es
         mov     dx, offset my_int1c
         mov     ax, 251Ch
         int     21h
@@ -1030,9 +1253,7 @@ real_start:
         inc     bh
         cmp     bh, 0
         jne     @@L1
-        mov     dx, offset cannot_get_mux_id
-        mov     ah, 09h
-        int     21h
+        print_string cannot_get_mux_id
         mov     al, 3
         jmp     @@return_with_error_code
 @@L3:
@@ -1044,14 +1265,17 @@ real_start:
         mov     ax, 252Fh
         int     21h
 
+        print_string successfully_installed
+
         ; Terminate and stay resident
         mov     dx, offset end_of_resident
         add     dx, 15
         shr     dx, 4
-        mov     al, 0
-        mov     ah, 31h
+        mov     ax, 3100h
         int     21h
 
+@@return_0:
+        mov     al, 0
 @@return_with_error_code:
         mov     ah, 4Ch
         int     21h
