@@ -7,3 +7,5 @@
 *.com
 
 ignore/*
+
+tmp/*

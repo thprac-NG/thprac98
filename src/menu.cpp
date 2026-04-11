@@ -1,11 +1,9 @@
 #include "src/menu.hpp"
 
-#include <stdio.h>
-#include <string.h>  // memset
-
+#include "src/mystdlib/stdio.hpp"
+#include "src/mystdlib/string.hpp"
 #include "src/texts.hpp"
 #include "src/utils.hpp"
-
 
 menu_t menu;
 

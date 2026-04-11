@@ -1,8 +1,6 @@
 #include "src/utils.hpp"
 
-#include <stdio.h>  // putchar
-
-#include "master.h"
+#include "src/mystdlib/stdio.hpp"
 
 bool is_pressed(key_t key) {
   int result = key_sense(keygroup_and_index_of[key][0]);
@@ -120,10 +118,11 @@ bool shiftjis_starting_byte(unsigned ch) {
 
 void wait_for_enter_key() {
   printf("--- Press enter key to continue ---");
-  int ch = getchar();
-  while (ch != '\n' && ch != EOF) {
-    ch = getchar();
+  int ch = dos_getch();
+  while (ch != '\r' && ch != '\n' && ch != EOF) {
+    ch = dos_getch();
   }
+  putchar('\n');
   return;
 }
 void print_delimiter(char ch) {

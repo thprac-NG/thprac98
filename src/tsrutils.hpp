@@ -3,12 +3,6 @@
 #ifndef THPRAC98_SRC_TSRUTILS_HPP_
 #define THPRAC98_SRC_TSRUTILS_HPP_
 
-#if (ANCIENT_CXX == 1)
-#define bool unsigned char
-#define false ((bool)(0))
-#define true ((bool)(1))
-#endif
-
 #if (ANCIENT_CXX == 1) || (__cplusplus < CPLUSPLUS20)
 #if (ANCIENT_CXX == 0)
 static_assert(sizeof(signed char) == 1 &&

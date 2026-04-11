@@ -1,3 +1,6 @@
+// This is a modified version of Macro Paland's printf.h.
+// clang-format off
+
 ///////////////////////////////////////////////////////////////////////////////
 // \author (c) Marco Paland (info@paland.com)
 //             2014-2019, PALANDesign Hannover, Germany
@@ -32,8 +35,10 @@
 #ifndef _PRINTF_H_
 #define _PRINTF_H_
 
-#include <stdarg.h>
-#include <stddef.h>
+#include "src/mystdlib/stdarg.hpp"
+#include "src/mystdlib/stddef.hpp"
+
+#define PRINTF_PTR far
 
 
 #ifdef __cplusplus
@@ -58,7 +63,7 @@ void _putchar(char character);
  * \return The number of characters that are written into the array, not counting the terminating null character
  */
 #define printf printf_
-int printf_(const char* format, ...);
+int printf_(const char PRINTF_PTR* format, ...);
 
 
 /**
@@ -69,7 +74,7 @@ int printf_(const char* format, ...);
  * \return The number of characters that are WRITTEN into the buffer, not counting the terminating null character
  */
 #define sprintf sprintf_
-int sprintf_(char* buffer, const char* format, ...);
+int sprintf_(char PRINTF_PTR* buffer, const char PRINTF_PTR* format, ...);
 
 
 /**
@@ -83,8 +88,8 @@ int sprintf_(char* buffer, const char* format, ...);
  */
 #define snprintf  snprintf_
 #define vsnprintf vsnprintf_
-int  snprintf_(char* buffer, size_t count, const char* format, ...);
-int vsnprintf_(char* buffer, size_t count, const char* format, va_list va);
+int  snprintf_(char PRINTF_PTR* buffer, size_t count, const char PRINTF_PTR* format, ...);
+int vsnprintf_(char PRINTF_PTR* buffer, size_t count, const char PRINTF_PTR* format, va_list va);
 
 
 /**
@@ -94,7 +99,7 @@ int vsnprintf_(char* buffer, size_t count, const char* format, va_list va);
  * \return The number of characters that are WRITTEN into the buffer, not counting the terminating null character
  */
 #define vprintf vprintf_
-int vprintf_(const char* format, va_list va);
+int vprintf_(const char PRINTF_PTR* format, va_list va);
 
 
 /**
@@ -105,7 +110,7 @@ int vprintf_(const char* format, va_list va);
  * \param format A string that specifies the format of the output
  * \return The number of characters that are sent to the output function, not counting the terminating null character
  */
-int fctprintf(void (*out)(char character, void* arg), void* arg, const char* format, ...);
+int fctprintf(void (*out)(char character, void PRINTF_PTR* arg), void PRINTF_PTR* arg, const char PRINTF_PTR* format, ...);
 
 
 #ifdef __cplusplus

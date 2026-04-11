@@ -261,7 +261,7 @@ for the C version of the original code.
 
 harry_up_anmiate (restore the menu after "HARRY UP" animation): {
   1924:0364 | 9A 6A 0C 00 00 -> 9A yy yy xx xx
-            |          ^^ ^^
+            |          ^^ ^^ (*1)
 }, where "xxxx" is cseg, and "yyyy" is (offset my_1924_0364).
 Original assembly: call text_clear (provided by master.lib)
 Modified assembly: call my_1924_0364

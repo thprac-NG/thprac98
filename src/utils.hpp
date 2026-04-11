@@ -32,7 +32,8 @@
 #include <cstdint>
 #include <type_traits>
 #endif
-#include "master.h"
+#include "src/master.hpp"
+#include "src/mystdlib/stdbool.hpp"
 #include "src/tsrutils.hpp"
 
 #pragma region Keyboard handling
@@ -262,6 +263,10 @@ bool shiftjis_starting_byte(unsigned ch);
 
 #pragma endregion  // #pragma region Character handling
 #pragma region Miscellaneous
+
+#ifndef EOF
+#define EOF (-1)
+#endif
 
 // Rotates first and second byte.
 unsigned rot(unsigned n);

@@ -1,0 +1,6 @@
+#ifndef THPRAC98_SRC_MYSTDLIB_MASTER_HPP_
+#define THPRAC98_SRC_MYSTDLIB_MASTER_HPP_
+
+#include "masters.h"
+
+#endif  // #ifndef THPRAC98_SRC_MYSTDLIB_MASTER_HPP_

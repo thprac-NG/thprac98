@@ -1,0 +1,6 @@
+#ifndef THPRAC98_SRC_MYSTDLIB_STDARG_HPP_
+#define THPRAC98_SRC_MYSTDLIB_STDARG_HPP_
+
+#include <stdarg.h>
+
+#endif  // #ifndef THPRAC98_SRC_MYSTDLIB_STDARG_HPP_

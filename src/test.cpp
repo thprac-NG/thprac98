@@ -1,9 +1,9 @@
 #include "src/test.hpp"
 
-#include <stdio.h>
-
+#include "src/mystdlib/stdio.hpp"
 #include "src/tui/chars.hpp"
 #include "src/utils.hpp"
+
 
 int test_stdint(void) {
 #define test_stdint_macro(bit_length)                                \

@@ -1,9 +1,10 @@
-#include <stdio.h>
-#include <string.h>  // memset, strcmp
-
-#include "master.h"
 #include "src/license.hpp"
+#include "src/master.hpp"
 #include "src/menu.hpp"
+#include "src/mystdlib/dos.hpp"
+#include "src/mystdlib/stdbool.hpp"
+#include "src/mystdlib/stdio.hpp"
+#include "src/mystdlib/string.hpp"
 #include "src/utils.hpp"
 #include "src/version.hpp"
 
@@ -49,7 +50,7 @@ void print_version() {
 void print_one_license(const char* name, const char* license_str,
                        bool pause = true) {
   print_delimiter();
-  printf("The license of %s:\n", name);
+  printf("The license of %s:\n", (const char far*)name);
   if (pause) {
     wait_for_enter_key();
   }
@@ -96,25 +97,32 @@ const char* param_str[command_param_t::LAST_ENUM] = {
 bool param_set[command_param_t::LAST_ENUM];
 
 void print_conflict_parameter_message(const char* str1, const char* str2) {
-  printf("Conflicting parameters found: '%s' and '%s'.\n", str1, str2);
+  printf("Conflicting parameters found: '%s' and '%s'.\n",
+         (const char far*)str1, (const char far*)str2);
   return;
 }
-int main(int argc, char** argv) {
+
+void print_int(unsigned);
+
+int wrapped_main(int argc, char far** argv) {
   int i = 0, j = 0;
   int last_argument = -1, file_argument_start = -1;
   bool found_param = false, has_at_least_one_param = false;
   bool pause = true;
+
+  memset(param_set, 0x00, sizeof(param_set));
+
   // Check the command-line argument strings first
   for (i = 1; i < argc; ++i) {
     found_param = false;
     last_argument = -1;
     for (j = 0; j < command_param_t::LAST_ENUM; ++j) {
-      if (strcmp(argv[i], param_str[j]) == 0) {
+      if (_fstrcmp(argv[i], param_str[j]) == 0) {
         if (j == command_param_t::NO_PAUSE) {
           pause = false;
         }
         if (param_set[j]) {
-          printf("Multiple command: %s\n", param_str[j]);
+          printf("Multiple command: %s\n", (const char far*)param_str[j]);
           print_help_message();
           return 0;
         }
@@ -125,11 +133,11 @@ int main(int argc, char** argv) {
       }
     }
     if (!found_param) {
-      if (strcmp(argv[i], "--") == 0) {
+      if (_fstrcmp(argv[i], "--") == 0) {
         break;
       }
-      if (strlen(argv[i]) >= 2u && argv[i][0] == '-' && argv[i][1] == '-') {
-        printf("Unknown parameter: '%s'\n", argv[i]);
+      if (_fstrlen(argv[i]) >= 2u && argv[i][0] == '-' && argv[i][1] == '-') {
+        printf("Unknown parameter: '%s'\n", (const char far*)argv[i]);
         print_help_message();
         return 0;
       }
@@ -151,9 +159,9 @@ int main(int argc, char** argv) {
       print_help_message();
       return 0;
     }
-    if (strlen(argv[i]) != 1 || argv[i][0] < '1' || argv[i][0] > '5') {
+    if (_fstrlen(argv[i]) != 1 || argv[i][0] < '1' || argv[i][0] > '5') {
       puts("The game version should be a number between 1 and 5.");
-      printf("However, `%s' is found.", argv[i]);
+      printf("However, `%s' is found.", (const char far*)argv[i]);
       print_help_message();
       return 0;
     }
@@ -233,6 +241,37 @@ int main(int argc, char** argv) {
     file_argument_start;  // To disable the warning
   }
   return 0;
+}
+
+extern "C" int main_wrapper(char const far* program_name, int argument_size,
+                            char const far* raw_argument);
+
+int main_wrapper(char const far* program_name, int argument_size,
+                 char const far* raw_argument) {
+  static const char far* argv[20];
+  static char argument_str[130];
+  int i = 0, current_argc = 1, argument_str_len = 0;
+
+  argv[0] = program_name;
+  while (raw_argument[i] <= ' ' && i < argument_size) {
+    i++;
+  }
+  if (i < argument_size) {
+    argv[current_argc++] = argument_str;
+    do {
+      if (raw_argument[i] <= ' ') {
+        argument_str[argument_str_len++] = '\0';
+        argv[current_argc++] = argument_str + argument_str_len;
+        do {
+          ++i;
+        } while (raw_argument[i] <= ' ');
+      }
+      argument_str[argument_str_len++] = raw_argument[i];
+      i++;
+    } while (i < argument_size);
+  }
+  argument_str[argument_str_len++] = '\0';
+  return wrapped_main(current_argc, (char far**)(argv));
 }
 
 /*

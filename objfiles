@@ -1,0 +1,14 @@
+main.obj +
+utils.obj +
+texts.obj +
+menu.obj +
+textsdef.obj +
+version.obj +
+license.obj +
+chars.obj +
+tui.obj +
+printf.obj +
+string.obj +
+stdio.obj +
+str_impl.obj +
+dos_impl.obj

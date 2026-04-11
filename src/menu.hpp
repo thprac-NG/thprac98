@@ -1,7 +1,7 @@
 #ifndef THPRAC98_SRC_MENU_HPP_
 #define THPRAC98_SRC_MENU_HPP_
 
-#include "master.h"
+#include "src/master.hpp"
 #include "src/texts.hpp"
 #include "src/utils.hpp"
 
