@@ -9,11 +9,12 @@
   "// To modify this file, edit files under codegen/licenses and use" ENDL \
   "// codegen/licengen.cpp to regenerate this file." ENDL ENDL
 
-const int LICENSE_COUNT = 4;
-const char* license_name[LICENSE_COUNT] = {"thprac98", "lohmann_json",
-                                           "master_lib", "takeda_msdos"};
+const int LICENSE_COUNT = 5;
+const char* license_name[LICENSE_COUNT] = {
+    "thprac98", "lohmann_json", "master_lib", "takeda_msdos", "mpaland_printf"};
 const char* license_filename[LICENSE_COUNT] = {"thprac.txt", "lohmjson.txt",
-                                               "masterlb.txt", "tkdmsdos.txt"};
+                                               "masterlb.txt", "tkdmsdos.txt",
+                                               "mpprintf.txt"};
 FILE* handler[LICENSE_COUNT];
 char buffer[100];
 
@@ -27,7 +28,7 @@ void close_all_handler() {
   return;
 }
 
-int main() {
+int wrapped_main() {
   int i = 0;
   for (i = 0; i < LICENSE_COUNT; ++i) {
     sprintf(buffer, "codegen/licenses/%s", license_filename[i]);
@@ -62,7 +63,8 @@ int main() {
     close_all_handler();
     return 1;
   }
-  fprintf(fout, "#include \"src/license.hpp\"" ENDL ENDL);
+  fprintf(fout, THPRAC98_LICENSE_WARNING_TEXT
+          "#include \"src/license.hpp\"" ENDL ENDL);
   for (i = 0; i < LICENSE_COUNT; ++i) {
     fprintf(fout, "const char* const license_%s =\n", license_name[i]);
     fprintf(fout, INDENT INDENT "\"");
@@ -118,4 +120,12 @@ int main() {
     fclose(handler[i]);
   }
   return 0;
+}
+
+extern "C" int main_wrapper(char const far* program_name, int argument_size,
+                            char const far* raw_argument);
+
+int main_wrapper(char const far* program_name, int argument_size,
+                 char const far* raw_argument) {
+  return wrapped_main();
 }

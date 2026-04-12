@@ -13,7 +13,7 @@ if not %1.==. goto :end_build
   echo [build.bat] Building thprac98.exe...
   echo %include_path_arg% %other_arg% > tmp\args
   if exist thprac98.exe del thprac98.exe
-  %ReC98_DOS% tasm src\thprac98.asm || goto :error
+  %ReC98_DOS% tasm src\entrance.asm || goto :error
   %ReC98_DOS% tasm src\mystdlib\str_impl.asm || goto :error
   %ReC98_DOS% tasm src\mystdlib\dos_impl.asm || goto :error
   %ReC98_DOS% tcc -c @tmp\args src\main.cpp || goto :error
@@ -24,8 +24,10 @@ if not %1.==. goto :end_build
     %ReC98_DOS% tcc -c @tmp\args %%a || goto :error
   )
   %ReC98_DOS% tcc -c -P @tmp\args 3rdparty\printf\printf.c || goto :error
-  %ReC98_DOS% tlink thprac98.obj + @objfiles ,,, ^
+  %ReC98_DOS% tlink entrance.obj + main.obj + @objfiles ,,, ^
     3rdparty\master.lib\include\masters.lib || goto :error
+  copy entrance.exe thprac98.exe
+  del entrance.exe
 
   @rem Modify the header of thprac98.exe
   echo [build.bat] Building stub_hdr.exe...
@@ -64,14 +66,29 @@ if not %1.==clean. goto :end_clean
 
 @rem Doing code-generation using command `build.bat codegen`
 if not %1.==codegen. goto :end_codegen
-  echo [build.bat] Building text_gen.exe...
-  c++ codegen/text_gen.cpp -o text_gen.exe -I. -I3rdparty/json/include ^
-    -std=c++11 || goto :error
-  echo [build.bat] Generating textsdef.hpp and textsdef.cpp...
-  text_gen.exe || goto :error
+  @REM echo [build.bat] Building text_gen.exe...
+  @REM c++ codegen/text_gen.cpp -o text_gen.exe -I. -I3rdparty/json/include ^
+  @REM   -std=c++11 || goto :error
+  @REM echo [build.bat] Generating textsdef.hpp and textsdef.cpp...
+  @REM text_gen.exe || goto :error
   echo [build.bat] Building licengen.exe from licengen.cpp...
-  %ReC98_DOS% tcc %include_path_arg% %other_arg% codegen\licengen.cpp ^
-    @srcfiles || goto :error
+
+  echo %include_path_arg% %other_arg% > tmp\args
+  %ReC98_DOS% tasm src\entrance.asm || goto :error
+  %ReC98_DOS% tasm src\mystdlib\str_impl.asm || goto :error
+  %ReC98_DOS% tasm src\mystdlib\dos_impl.asm || goto :error
+  %ReC98_DOS% tcc -c @tmp\args codegen\licengen.cpp || goto :error
+  @rem Not adding noexcept.cpp for now, since it requires the standard library
+  for %%a in (src\menu.cpp src\utils.cpp src\texts.cpp src\textsdef.cpp
+      src\version.cpp src\license.cpp src\tui\chars.cpp src\tui\tui.cpp
+      src\mystdlib\stdio.cpp src\mystdlib\string.cpp) do (
+    %ReC98_DOS% tcc -c @tmp\args %%a || goto :error
+  )
+  %ReC98_DOS% tcc -c -P @tmp\args 3rdparty\printf\printf.c || goto :error
+  %ReC98_DOS% tlink entrance.obj + @objfiles ,,, ^
+    3rdparty\master.lib\include\masters.lib || goto :error
+  copy entrance.exe licengen.exe
+  del entrance.exe tmp\args
   echo [build.bat] Generating license.hpp and license.cpp...
   %ReC98_DOS% licengen.exe || goto :error
   echo [build.bat] Successfully generated all the code.

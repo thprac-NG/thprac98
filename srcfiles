@@ -6,7 +6,10 @@ src\version.cpp
 src\license.cpp
 src\tui\chars.cpp
 src\tui\tui.cpp
+src\noexcept.cpp
 src\mystdlib\stdio.cpp
 src\mystdlib\string.cpp
+src\mystdlib\dos_impl.asm
+src\mystdlib\str_impl.asm
+3rdparty\printf\printf.c
 3rdparty\master.lib\include\masters.lib
-3rdparty\ReC98\platform\x86real\noexcept.cpp
