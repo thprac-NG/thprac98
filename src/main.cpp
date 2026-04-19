@@ -1,3 +1,5 @@
+#include "src/entrance.hpp"
+#include "src/launcher.hpp"
 #include "src/license.hpp"
 #include "src/master.hpp"
 #include "src/menu.hpp"
@@ -238,8 +240,7 @@ int wrapped_main(int argc, char far** argv) {
     scan_game_version;  // To disable the warning
   }
   if (param_set[command_param_t::LAUNCH]) {
-    puts("(The launch feature isn't ready yet)");
-    file_argument_start;  // To disable the warning
+    launch_th01(argv[file_argument_start]);
   }
   return 0;
 }

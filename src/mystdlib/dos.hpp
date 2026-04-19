@@ -59,9 +59,9 @@ struct REGPACK_ {
 
 #define int86 int86_
 #define int86x int86x_
-extern "C" int int86_(int int_no, REGS far* in_regs, REGS far* out_regs);
-extern "C" int int86x_(int int_no, REGS far* in_regs, REGS far* out_regs,
-                       SREGS far* seg_regs);
+extern "C" int near int86_(int int_no, REGS far* in_regs, REGS far* out_regs);
+extern "C" int near int86x_(int int_no, REGS far* in_regs, REGS far* out_regs,
+                            SREGS far* seg_regs);
 
 #define intdos intdos_
 #define intdosx intdosx_

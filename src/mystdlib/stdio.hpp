@@ -27,5 +27,7 @@ inline void puts_(char const* str) {
                     // extra CR/LF.
   return;
 }
+#define _fputs _fputs_
+void _fputs_(char const far* str);
 
 #endif  // #ifndef THPRAC98_SRC_MYSTDLIB_STDIO_HPP_

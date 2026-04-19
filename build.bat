@@ -8,8 +8,11 @@ set include_path_arg=-I3rdparty\master.lib\include -I3rdparty\ReC98 ^
   -I3rdparty\printf
 set other_arg=-ms -wall -DANCIENT_CXX=1 -DPRINTF_INCLUDE_CONFIG_H=1 -v -3 -x-RT
 
+if %1.==fast. goto :fast_build
+
 @rem Building thprac98.exe using command `build.bat` (without args)
 if not %1.==. goto :end_build
+:fast_build
   echo [build.bat] Building thprac98.exe...
   echo %include_path_arg% %other_arg% > tmp\args
   if exist thprac98.exe del thprac98.exe
@@ -19,7 +22,8 @@ if not %1.==. goto :end_build
   %ReC98_DOS% tcc -c @tmp\args src\main.cpp || goto :error
   @rem Not adding noexcept.cpp for now, since it requires the standard library
   for %%a in (src\menu.cpp src\utils.cpp src\texts.cpp src\textsdef.cpp
-      src\version.cpp src\license.cpp src\tui\chars.cpp src\tui\tui.cpp
+      src\version.cpp src\license.cpp src\launcher.cpp
+      src\tui\chars.cpp src\tui\tui.cpp
       src\mystdlib\stdio.cpp src\mystdlib\string.cpp) do (
     %ReC98_DOS% tcc -c @tmp\args %%a || goto :error
   )
@@ -29,14 +33,18 @@ if not %1.==. goto :end_build
   copy entrance.exe thprac98.exe
   del entrance.exe
 
-  @rem Modify the header of thprac98.exe
-  echo [build.bat] Building stub_hdr.exe...
-  if not exist stub_hdr.exe %ReC98_DOS% tcc @tmp\args codegen\stub_hdr.cpp ^
-    @srcfiles || goto :error
-  echo [build.bat] Modifying thprac98.exe...
-  %ReC98_DOS% stub_hdr.exe thprac98.exe tmp\thp98tmp.exe || goto :error
-  copy tmp\thp98tmp.exe thprac98.exe
-  del tmp\thp98tmp.exe tmp\args
+  if %1.==fast. goto :skip_modify_header
+    @rem Modify the header of thprac98.exe
+    echo [build.bat] Building stub_hdr.exe...
+    if not exist stub_hdr.exe %ReC98_DOS% tcc @tmp\args codegen\stub_hdr.cpp ^
+      @srcfiles @asmfiles || goto :error
+    echo [build.bat] Modifying thprac98.exe...
+    %ReC98_DOS% stub_hdr.exe thprac98.exe tmp\thp98tmp.exe || goto :error
+    copy tmp\thp98tmp.exe thprac98.exe
+    del tmp\thp98tmp.exe
+  :skip_modify_header
+
+  del tmp\args
   echo [build.bat] Successfully built thprac98.exe.
 :end_build
 

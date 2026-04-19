@@ -4,6 +4,7 @@ menu.obj +
 textsdef.obj +
 version.obj +
 license.obj +
+launcher.obj +
 chars.obj +
 tui.obj +
 printf.obj +

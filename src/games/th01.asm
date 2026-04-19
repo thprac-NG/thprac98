@@ -1268,8 +1268,7 @@ real_start:
         print_string successfully_installed
 
         ; Terminate and stay resident
-        mov     dx, offset end_of_resident
-        add     dx, 15
+        mov     dx, offset end_of_resident + 10Fh
         shr     dx, 4
         mov     ax, 3100h
         int     21h

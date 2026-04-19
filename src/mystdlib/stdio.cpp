@@ -24,3 +24,13 @@ void print_int(unsigned x) {
   dos_putch(' ');
   return;
 }
+
+void _fputs_(const char far* str) {
+  char ch = *str;
+  while (ch) {
+    putchar(ch);
+    ch = *++str;
+  }
+  putchar('\n');
+  return;
+}

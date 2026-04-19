@@ -54,9 +54,9 @@ extern "C" void memset_helper(uint16_t stosd_seg, uint16_t stosd_off,
 THPRAC98_MEMSET_IMPLEMENTATION(memset_, , _DS, ((uint16_t)(dest)))
 THPRAC98_MEMSET_IMPLEMENTATION(_fmemset_, far, FP_SEG(dest), FP_OFF(dest))
 
-extern "C" void memcpy_helper(uint16_t dest_seg, uint16_t dest_off,
-                              uint16_t src_seg, uint16_t src_off,
-                              uint16_t movsb_count);
+extern "C" void near memcpy_helper(uint16_t dest_seg, uint16_t dest_off,
+                                   uint16_t src_seg, uint16_t src_off,
+                                   uint16_t movsb_count);
 
 #define THPRAC98_MEMCPY_IMPLEMENTATION(func_name, ptr_type, dest_seg,       \
                                        dest_off, src_seg, src_off)          \
