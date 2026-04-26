@@ -1,13 +1,25 @@
 #ifndef THPRAC98_SRC_VERSION_HPP_
 #define THPRAC98_SRC_VERSION_HPP_
 
-#define THPRAC98_VERSION_NUMBER "0.1.0"
-extern const int version_number_int[3];
+#include "src/utils.hpp"
+
+#define THPRAC98_VERSION_MAJOR 0
+#define THPRAC98_VERSION_MINOR 1
+#define THPRAC98_VERSION_PATCH 0
+#define THPRAC98_VERSION_ALPHA 1
+
+#define THPRAC98_VERSION_STR                                             \
+  THPRAC98_TO_STRING(THPRAC98_VERSION_MAJOR)                             \
+  "." THPRAC98_TO_STRING(THPRAC98_VERSION_MINOR) "." THPRAC98_TO_STRING( \
+      THPRAC98_VERSION_PATCH)
+
+extern const int version_number_int[4];
 
 #ifdef THPRAC98_RELEASE
-#define THPRAC98_VERSION THPRAC98_VERSION_NUMBER
+#define THPRAC98_VERSION THPRAC98_VERSION_STR
 #else
-#define THPRAC98_VERSION THPRAC98_VERSION_NUMBER "-beta"
+#define THPRAC98_VERSION \
+  THPRAC98_VERSION_STR "-alpha." THPRAC98_TO_STRING(THPRAC98_VERSION_ALPHA)
 #endif
 
 #endif  // #ifndef THPRAC98_SRC_VERSION_HPP_

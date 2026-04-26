@@ -332,6 +332,9 @@ inline void print_errno(void) {
   return;
 }
 
+#define THPRAC98_TO_STRING_HELPER(arg) #arg
+#define THPRAC98_TO_STRING(arg) THPRAC98_TO_STRING_HELPER(arg)
+
 #pragma endregion  // #pragma region Miscellaneous
 
 #endif  // #ifndef THPRAC98_SRC_UTILS_HPP_
