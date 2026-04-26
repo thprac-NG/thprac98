@@ -35,9 +35,6 @@ if not %1.==. goto :end_build
   copy entrance.map thprac98.map
   del entrance.exe
 
-  echo [build.bat] Embedding .COM files...
-  %ReC98_DOS% comembed.exe 2 || goto :error
-
   if %1.==fast. goto :skip_modify_header
     @rem Modify the header of thprac98.exe
     if not exist stub_hdr.exe (
@@ -50,6 +47,9 @@ if not %1.==. goto :end_build
     copy tmp\thp98tmp.exe thprac98.exe
     del tmp\thp98tmp.exe
   :skip_modify_header
+
+  echo [build.bat] Embedding .COM files...
+  %ReC98_DOS% comembed.exe 2 || goto :error
 
   del tmp\args
   echo [build.bat] Successfully built thprac98.exe.

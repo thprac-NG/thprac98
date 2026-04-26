@@ -136,7 +136,7 @@ unsigned int get_hex(char *const str) {
 int backpatch_com_offset(void) {
   int i = 0, j = 0, k = 0, ret = 0, ch = 0;
   long j2 = 0;
-  unsigned int com_info_seg = 0, com_info_off = 0;
+  unsigned int com_info_seg = 0, com_info_off = 0, header_size = 0;
   bool found_label = false;
   FILE *fin = NULL, *fin2 = NULL, *fin3 = NULL;
   unsigned long magic_check = 0, com_data_pos = -1;
@@ -275,7 +275,10 @@ int backpatch_com_offset(void) {
       print_errno();
       return 1;
     }
-    com_info_off += 0x200;
+    fseek(fin, 0x08, SEEK_SET);
+    header_size = fgetc(fin);
+    header_size |= fgetc(fin) << 16;
+    com_info_off += header_size << 4;
     fseek(fin, com_info_off, SEEK_SET);
     magic_check = 0;
     for (j = 0; j < 4; ++j) {
