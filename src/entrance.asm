@@ -263,6 +263,9 @@ arg @@path_off:word, @@path_seg:word
         mov     ah, 09h
         int     21h
 
+        call    call_dos_exec c, (offset th01_com_name), \
+                                 (offset th01_com_unload_param)
+
 @@delete_th01_com:
         ; Delete TH01.COM
         mov     ax, cs
