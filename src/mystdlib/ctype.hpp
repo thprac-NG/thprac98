@@ -19,6 +19,9 @@ inline int isxdigit_(int ch) {
 #define isalnum isalnum_
 inline int isalnum_(int ch) { return isalpha(ch) || isdigit(ch); }
 
+#define isspace isspace_
+inline int isspace_(int ch) { return ch == ' ' || (0x09 <= ch && ch <= 0x0D); }
+
 #define toupper toupper_
 inline int toupper_(int ch) { return islower(ch) ? ch & 0xDF : ch; }
 #define tolower tolower_

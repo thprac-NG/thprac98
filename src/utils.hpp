@@ -33,7 +33,9 @@
 #include <type_traits>
 #endif
 #include "src/master.hpp"
+#include "src/mystdlib/errno.hpp"
 #include "src/mystdlib/stdbool.hpp"
+#include "src/mystdlib/stdio.hpp"
 #include "src/tsrutils.hpp"
 
 #pragma region Keyboard handling
@@ -324,6 +326,11 @@ void print_delimiter(char ch = '=');
  */
 int print_string(const char *str, bool pause = true, bool kanji = true,
                  int rows = 23);
+
+inline void print_errno(void) {
+  printf("Errno: 0x%04X\n", errno_);
+  return;
+}
 
 #pragma endregion  // #pragma region Miscellaneous
 

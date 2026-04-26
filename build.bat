@@ -13,31 +13,38 @@ if %1.==fast. goto :fast_build
 @rem Building thprac98.exe using command `build.bat` (without args)
 if not %1.==. goto :end_build
 :fast_build
-  echo [build.bat] Building thprac98.exe...
+  echo [build.bat] Building th01.com...
   echo %include_path_arg% %other_arg% > tmp\args
-  if exist thprac98.exe del thprac98.exe
-  %ReC98_DOS% tasm src\entrance.asm || goto :error
-  %ReC98_DOS% tasm src\mystdlib\str_impl.asm || goto :error
-  %ReC98_DOS% tasm src\mystdlib\dos_impl.asm || goto :error
-  %ReC98_DOS% tcc -c @tmp\args src\main.cpp || goto :error
-  @rem Not adding noexcept.cpp for now, since it requires the standard library
-  for %%a in (src\menu.cpp src\utils.cpp src\texts.cpp src\textsdef.cpp
-      src\version.cpp src\license.cpp src\launcher.cpp
-      src\tui\chars.cpp src\tui\tui.cpp
-      src\mystdlib\stdio.cpp src\mystdlib\string.cpp) do (
-    %ReC98_DOS% tcc -c @tmp\args %%a || goto :error
+  %ReC98_DOS% tasm /m5 src\games\th01.asm || goto :error
+  %ReC98_DOS% tlink /t th01.obj || goto :error
+
+  if not exist comembed.exe (
+    echo [build.bat] Building comembed.exe...
+    call :build_executable codegen\comembed.cpp comembed || goto :error
+    copy entrance.exe comembed.exe
+    copy entrance.map comembed.map
+    del entrance.exe
   )
-  %ReC98_DOS% tcc -c -P @tmp\args 3rdparty\printf\printf.c || goto :error
-  %ReC98_DOS% tlink entrance.obj + main.obj + @objfiles ,,, ^
-    3rdparty\master.lib\include\masters.lib || goto :error
+  echo [build.bat] Generating tsrdata.hpp and tsrdata.cpp...
+  %ReC98_DOS% comembed.exe 1 || goto :error
+
+  echo [build.bat] Building thprac98.exe...
+  if exist thprac98.exe del thprac98.exe
+  call :build_executable src\main.cpp main || goto :error
   copy entrance.exe thprac98.exe
+  copy entrance.map thprac98.map
   del entrance.exe
+
+  echo [build.bat] Embedding .COM files...
+  %ReC98_DOS% comembed.exe 2 || goto :error
 
   if %1.==fast. goto :skip_modify_header
     @rem Modify the header of thprac98.exe
-    echo [build.bat] Building stub_hdr.exe...
-    if not exist stub_hdr.exe %ReC98_DOS% tcc @tmp\args codegen\stub_hdr.cpp ^
-      @srcfiles @asmfiles || goto :error
+    if not exist stub_hdr.exe (
+      echo [build.bat] Building stub_hdr.exe...
+      %ReC98_DOS% tcc @tmp\args codegen\stub_hdr.cpp @srcfiles @asmfiles ^
+        || goto :error
+    )
     echo [build.bat] Modifying thprac98.exe...
     %ReC98_DOS% stub_hdr.exe thprac98.exe tmp\thp98tmp.exe || goto :error
     copy tmp\thp98tmp.exe thprac98.exe
@@ -103,7 +110,31 @@ if not %1.==codegen. goto :end_codegen
 :end_codegen
 
 goto :end_of_file
+
 :error
 echo [build.bat] Failed with error code %errorlevel%.
 exit /b %errorlevel%
+
+@rem Argument 1: the .CPP source file containing main_wrapper.
+@rem Argument 2: its filename, without the extension.
+:build_executable
+%ReC98_DOS% tasm src\entrance.asm || goto :build_executable_error
+%ReC98_DOS% tasm src\mystdlib\str_impl.asm || goto :build_executable_error
+%ReC98_DOS% tasm src\mystdlib\dos_impl.asm || goto :build_executable_error
+%ReC98_DOS% tcc -c @tmp\args %~1 || goto :build_executable_error
+@rem Not adding noexcept.cpp for now, since it requires the standard library
+for %%a in (src\menu.cpp src\utils.cpp src\texts.cpp src\textsdef.cpp
+    src\version.cpp src\license.cpp src\launcher.cpp src\tsrdata.cpp
+    src\mainwrpr.cpp src\tui\chars.cpp src\tui\tui.cpp
+    src\mystdlib\stdio.cpp src\mystdlib\string.cpp src\mystdlib\errno.cpp) do (
+  %ReC98_DOS% tcc -c @tmp\args %%a || goto :build_executable_error
+)
+%ReC98_DOS% tcc -c -P @tmp\args 3rdparty\printf\printf.c ^
+  || goto :build_executable_error
+%ReC98_DOS% tlink /m entrance.obj + %~2.obj + @objfiles ,,, ^
+  3rdparty\master.lib\include\masters.lib || goto :build_executable_error
+goto :eof
+:build_executable_error
+exit /b %errorlevel%
+
 :end_of_file

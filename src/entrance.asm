@@ -5,13 +5,27 @@ locals  ; Enables block-scoped symbols
 stack 100h
 p386
 
+group DGROUP _DATA, _BSS, STACK
+
+segment _BSS word public 'BSS'
+ends _BSS
+segment STACK stack 'STACK'
+                db 100h dup(?)
+exe_initial_sp  dw ?
+ends STACK
+
 codeseg
         jmp     real_main
+
         ; extern "C" int main_wrapper(char const far* program_name,
         ;                             int argument_size,
         ;                             char const far* raw_argument);
         extrn   _main_wrapper:proc
+        ; extern "C" void stdio_init(void);
+        extrn   _stdio_init:proc
+
         public  _load_th01
+        public  th01_com_info
 
 ; Parameter structure of INT 21h/4B00h.
 struc execblock_00
@@ -29,16 +43,29 @@ PSP_FCB2_OFFSET EQU 6Ch
 params  execblock_00 <0, , , PSP_FCB1_OFFSET, , PSP_FCB2_OFFSET, >
 
 mdrv98_load_param       db 4, ' -M7', 0Dh, 0
-mdrv98_unload_param     db 2, ' -R', 0Dh, 0
+mdrv98_unload_param     db 3, ' -R', 0Dh, 0
 op_param                db 4, '    ', 0Dh, 0
+th01_com_unload_param   db 3, ' /U', 0Dh, 0
 empty_command_param     db 0, 0Dh, 0
 mdrv98_exe_name         db 'MDRV98.COM', 0
 zunsoft_exe_name        db 'ZUNSOFT.COM', 0
 op_exe_name             db 'OP.EXE', 0
+th01_com_name           db 'TH01.COM', 0
 
 psp_seg dw ?
 
 saved_ss_sp     dd ?
+
+struc embedded_com
+        starting_pos    dd 99618848h
+        size            dw 0000h
+ends embedded_com
+
+th01_com_info   embedded_com <>
+
+th01_com_file_handle    dw ?
+self_file_handle        dw ?
+self_filename_ptr       dd ?
 
 proc _load_th01 near
 arg @@path_off:word, @@path_seg:word
@@ -61,26 +88,122 @@ arg @@path_off:word, @@path_seg:word
         mov     ax, cs
         mov     [cs:params.command_line_seg], cs
         mov     ah, 62h
-        int     21h             ; bx = [cs:psp_seg] {
+        int     21h
         mov     [cs:psp_seg], bx
         mov     [cs:params.fcb1_seg], bx
         mov     [cs:params.fcb2_seg], bx
 
         ; Switch to a stack that won't be released by the shrink
-        mov     ax, cs          ; ax = cs {
+        mov     ax, cs
         cli
         mov     ss, ax
         mov     sp, offset initial_sp
         sti
 
+        ; Create a temporary TH01.COM file.
+        ; We first grow the file from (potentially) zero byte to 1 byte, then
+        ; grow it to the desire size since, in some versions of DOS, using
+        ; LSEEK to directly grow a zero-byte file to a large size can corrupt
+        ; the FAT.
+        mov     cx, 0
+        mov     dx, offset th01_com_name
+        mov     ax, cs
+        mov     ds, ax
+        mov     ah, 3Ch
+        int     21h             ; Create/Truncate TH01.COM
+        jc      @@create_th01_com_failed
+        mov     [cs:th01_com_file_handle], ax
+        mov     bx, ax
+        mov     cx, 0
+        mov     dx, 1
+        mov     ax, 4200h
+        int     21h             ; LSEEK TH01.COM to extend its size to 1
+        jc      @@create_th01_com_failed
+        mov     bx, [cs:th01_com_file_handle]
+        mov     cx, 0
+        mov     dx, [cs:th01_com_info.size]
+        mov     ax, 4200h
+        int     21h             ; LSEEK TH01.COM to extend its size
+        jc      @@create_th01_com_failed
+        mov     bx, [cs:th01_com_file_handle]
+        mov     cx, 0
+        mov     dx, 0
+        mov     ax, 4200h
+        int     21h             ; Seek TH01.COM back to origin
+        jc      @@create_th01_com_failed
+
+        ; Copy the file from the THPRAC98.EXE itself, using th01_com_info.
+        ; NOTE: Must be called *before* shrinking the memory, since this section
+        ; of code uses a buffer that will be shrinked during the shrink.
+        lds     dx, [cs:self_filename_ptr]
+        mov     ax, 3D00h
+        int     21h             ; Open THPRAC98.EXE
+        jnc     @@open_self_success
+        mov     ax, cs
+        mov     ds, ax
+        mov     dx, offset failed_to_open_self
+        mov     ah, 09h
+        int     21h
+@@open_self_success:
+        mov     [cs:self_file_handle], ax
+        mov     bx, ax
+        mov     si, offset th01_com_info.starting_pos
+        mov     dx, [word ptr cs:si]
+        mov     cx, [word ptr cs:si + 2]
+        mov     ax, 4200h
+        int     21h             ; Seek in THPRAC98.EXE
+        jc      @@create_th01_com_failed
+        mov     ax, cs
+        mov     ds, ax
+        mov     dx, offset th01_com_buffer
+        xor     di, di          ; di: Bytes read
+@@copy_th01_com_loop:
+        mov     cx, TH01_COM_BUFFER_SIZE
+        mov     bx, [cs:self_file_handle]
+        mov     ah, 3Fh
+        int     21h             ; Read from THPRAC98.EXE
+        mov     cx, [cs:th01_com_info.size]
+        sub     cx, di
+        cmp     cx, TH01_COM_BUFFER_SIZE
+        jle     @@L1
+        mov     cx, TH01_COM_BUFFER_SIZE
+@@L1:
+        add     di, TH01_COM_BUFFER_SIZE
+        mov     bx, [cs:th01_com_file_handle]
+        mov     ah, 40h
+        int     21h             ; Write into TH01.COM
+        cmp     di, [cs:th01_com_info.size]
+        jl      @@copy_th01_com_loop
+        mov     bx, [cs:th01_com_file_handle]
+        mov     ah, 3Eh
+        int     21h             ; Close TH01.COM
+        mov     bx, [cs:self_file_handle]
+        mov     ah, 3Eh
+        int     21h             ; Close THPRAC98.EXE
+
+        ; Call INT 21h/4Ah to shrink the allocated memory of the current process
+        mov     es, [cs:psp_seg]
+        mov     bx, (offset terminate_and_stay_resident) + 10Fh
+        shr     bx, 4
+        mov     ah, 4Ah
+        int     21h
+
+        ; Load TH01.COM
+        call    call_dos_exec c, (offset th01_com_name), \
+                                 (offset empty_command_param)
+        test    ah, 80h
+        jnz     @@delete_th01_com
+
         ; Save current drive & directory
-        mov     ds, ax          ; ax = cs }
+        mov     ax, cs
+        mov     ds, ax
         mov     ah, 19h
         int     21h
         mov     dl, al
         add     al, 'A'
         mov     [byte ptr cs:saved_current_directory], al
-        mov     si, (offset saved_current_directory)
+        inc     dl
+        mov     si, (offset saved_current_directory + 3)
         mov     ah, 47h
         int     21h
         jnc     @@get_current_directory_success
@@ -109,13 +232,6 @@ arg @@path_off:word, @@path_seg:word
         jmp     @@return
 @@set_current_directory_success:
 
-        ; Call INT 21h/4Ah to shrink the allocated memory of the current process
-        mov     es, bx          ; bx = [cs:psp_seg] }
-        mov     bx, (offset terminate_and_stay_resident) + 10Fh
-        shr     bx, 4
-        mov     ah, 4Ah
-        int     21h
-
         call    call_dos_exec c, (offset mdrv98_exe_name), \
                                  (offset mdrv98_load_param)
         test    ah, 80h
@@ -123,19 +239,13 @@ arg @@path_off:word, @@path_seg:word
         call    call_dos_exec c, (offset zunsoft_exe_name), \
                                  (offset empty_command_param)
         test    ah, 80h
-        jnz     @@unload_mdrv98_after_error
+        jnz     @@unload_mdrv98
         call    call_dos_exec c, (offset op_exe_name), (offset op_param)
         test    ah, 80h
-        jz      @@unload_mdrv98
-@@unload_mdrv98_after_error:
-        mov     ax, cs
-        mov     ds, ax
-        mov     dx, offset trying_to_unload_mdrv98
-        mov     ah, 09h
-        int     21h
 @@unload_mdrv98:
         call    call_dos_exec c, (offset mdrv98_exe_name), \
                                  (offset mdrv98_unload_param)
+
 @@end_of_loading:
 
         ; Restore the current directory
@@ -152,7 +262,23 @@ arg @@path_off:word, @@path_seg:word
         mov     dx, offset failed_to_restore_cd
         mov     ah, 09h
         int     21h
+
+@@delete_th01_com:
+        ; Delete TH01.COM
+        mov     ax, cs
+        mov     ds, ax
+        mov     dx, offset th01_com_name
+        mov     ah, 41h
+        int     21h
         jmp     @@return
+
+@@create_th01_com_failed:
+        mov     ax, cs
+        mov     ds, ax
+        mov     dx, offset failed_to_create_th01
+        mov     ah, 09h
+        int     21h
+
 @@restore_current_directory_success:
 
 @@return:
@@ -263,11 +389,12 @@ endp print_error_code
 failed_to_execute_1     db 'Failed to execute `$'
 failed_to_execute_2     db "' with parameter `$"
 failed_to_execute_3     db "'.", 0Ah, '$'
-trying_to_unload_mdrv98 db 'Now trying to unload MDRV98.COM...', 0Ah, '$'
 failed_to_get_cd        db 'Running in invalid drive.', 0Ah, '$'
 failed_to_set_cd        db 'Game path not found.', 0Ah, '$'
 failed_to_restore_cd    db "Can't return to previous working directory: ", \
                            'Path not found.', 0Ah, '$'
+failed_to_create_th01   db 'Failed to create TH01.COM.', 0Ah, '$'
+failed_to_open_self     db 'Failed to open THPRAC98.EXE.', 0Ah, '$'
 error_code_str          db 'Error code: '
 error_code_num          db '??h.', 0Ah, '$'
 
@@ -281,10 +408,16 @@ initial_sp      dw 0
 
 label terminate_and_stay_resident byte
 
+TH01_COM_BUFFER_SIZE    EQU 100h
+th01_com_buffer         db TH01_COM_BUFFER_SIZE dup (0)
+
 real_main:
         mov     ax, @data
         mov     ds, ax
         mov     ss, ax
+        mov     sp, offset exe_initial_sp
+
+        call    _stdio_init
 
         ; Calculate arguments to pass to the `main_wrapper` function
         mov     ah, 62h
@@ -306,6 +439,8 @@ real_main:
 @@found_program_name:
         add     si, 4           ; skip the environment variables' '\0\0' tail
                                 ; and the following word
+        mov     [word ptr cs:self_filename_ptr], si
+        mov     [word ptr cs:self_filename_ptr + 2], ax
         push    ax si           ; push `program_name` argument of main_wrapper
         call    _main_wrapper
         add     sp, 10
@@ -313,9 +448,5 @@ real_main:
         mov     ah, 4Ch
         int     21h
 ; end of real_main
-
-segment dseg para public 'DATA'
-
-ends dseg
 
 end

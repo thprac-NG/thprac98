@@ -8,8 +8,11 @@ src\launcher.cpp
 src\tui\chars.cpp
 src\tui\tui.cpp
 src\noexcept.cpp
+src\mainwrpr.cpp
+src\tsrdata.cpp
 src\mystdlib\stdio.cpp
 src\mystdlib\string.cpp
+src\mystdlib\errno.cpp
+3rdparty\master.lib\include\masters.lib
 src\mystdlib\dos_impl.asm
 src\mystdlib\str_impl.asm
-3rdparty\master.lib\include\masters.lib

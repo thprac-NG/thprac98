@@ -11,8 +11,6 @@ codeseg
 
 proc _MEMSET_HELPER near
 arg @@stosd_seg:word, @@stosd_off:word, @@stosd_count:word, @@val:word
-        push    bp
-        mov     bp, sp
         push    di
 
         mov     ax, [@@stosd_seg]
@@ -51,7 +49,6 @@ arg @@dest_seg:word, @@dest_off:word, @@src_seg:word, @@src_off:word, \
         rep movsb
 
         pop     di si ds
-        pop     bp
         ret
 endp _MEMCPY_HELPER
 end

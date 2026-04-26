@@ -1,0 +1,6 @@
+#ifndef THPRAC98_SRC_MYSTDLIB_LIMITS_HPP_
+#define THPRAC98_SRC_MYSTDLIB_LIMITS_HPP_
+
+#include <limits.h>
+
+#endif  // #ifndef THPRAC98_SRC_MYSTDLIB_LIMITS_HPP_

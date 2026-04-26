@@ -31,16 +31,13 @@ ends sregs_t
 proc _INT86_ near
 arg @@int_no:word, @@in_regs_off:word, @@in_regs_seg:word, \
 @@out_regs_off:word, @@out_regs_seg:word
-        push    bp
-        mov     bp, sp
         push    di si
 
         ; Set up the interrupt call
         mov     ax, [@@int_no]
         mov     [byte ptr cs:@@int_num_text], al
 
-        ; Load all the registers (the `cflag` field is ignored, since it will be
-        ; covered by `flags`)
+        ; Load all the registers (fields `cflag` and `flags` are ignored)
         mov     ax, [@@in_regs_seg]
         mov     es, ax
         mov     si, [@@in_regs_off]
@@ -49,8 +46,6 @@ arg @@int_no:word, @@in_regs_off:word, @@in_regs_seg:word, \
         mov     cx, [word ptr es:si + wordregs_t.cx_]
         mov     dx, [word ptr es:si + wordregs_t.dx_]
         mov     di, [word ptr es:si + wordregs_t.di_]
-        push    [word ptr es:si + wordregs_t.flags_]
-        popf
         mov     si, [word ptr es:si + wordregs_t.si_]
 
         ; Call the interrupt
@@ -77,29 +72,26 @@ arg @@int_no:word, @@in_regs_off:word, @@in_regs_seg:word, \
         pop     [word ptr es:si + wordregs_t.si_]
 
         pop     si di
-        pop     bp
+        ret
 endp _INT86_
 
 proc _INT86X_ near
 arg @@int_no:word, @@in_regs_off:word, @@in_regs_seg:word, \
 @@out_regs_off:word, @@out_regs_seg:word, \
 @@seg_regs_off:word, @@seg_regs_seg:word
-        push    bp
-        mov     bp, sp
         push    ds di si
 
         ; Set up the interrupt call
         mov     ax, [@@int_no]
         mov     [byte ptr cs:@@int_num_text], al
 
-        ; Load all the registers (the `cflag` field is ignored, since it will be
-        ; covered by `flags`)
+        ; Load all the registers (field `cflag` and `flags` are ignored)
         mov     ax, [@@seg_regs_seg]
         mov     es, ax
         mov     si, [@@seg_regs_off]
         mov     ax, [word ptr es:si + sregs_t.ds_]
         mov     ds, ax
-        push    [word ptr es:si + sregs_t.es_]
+        push    [word ptr es:si + sregs_t.es_]          ; push sregs_t.es_
         mov     ax, [@@in_regs_seg]
         mov     es, ax
         mov     si, [@@in_regs_off]
@@ -108,10 +100,8 @@ arg @@int_no:word, @@in_regs_off:word, @@in_regs_seg:word, \
         mov     cx, [word ptr es:si + wordregs_t.cx_]
         mov     dx, [word ptr es:si + wordregs_t.dx_]
         mov     di, [word ptr es:si + wordregs_t.di_]
-        push    [word ptr es:si + wordregs_t.flags_]
-        popf
         mov     si, [word ptr es:si + wordregs_t.si_]
-        pop     es
+        pop     es                                      ; pop sregs_t.es_
 
         ; Call the interrupt
         db      0CDh
@@ -119,7 +109,8 @@ arg @@int_no:word, @@in_regs_off:word, @@in_regs_seg:word, \
         db      00h
 
         ; Store the registers and the return value (i.e., ax after interrupt)
-        push    si ax
+        push    si                                      ; push (si after INT)
+        push    ax                                      ; push (ax after INT)
         mov     ax, [@@out_regs_seg]
         mov     es, ax
         mov     si, [@@out_regs_off]
@@ -132,12 +123,12 @@ arg @@int_no:word, @@in_regs_off:word, @@in_regs_seg:word, \
         mov     [word ptr es:si + wordregs_t.flags_], ax
         and     ax, 1
         mov     [word ptr es:si + wordregs_t.cflag_], ax
-        push    ax
+        pop     ax                                      ; pop (ax after INT)
         mov     [word ptr es:si + wordregs_t.ax_], ax
-        pop     [word ptr es:di + wordregs_t.si_]
+        pop     [word ptr es:si + wordregs_t.si_]       ; pop (si after INT)
 
         pop     si di ds
-        pop     bp
+        ret
 endp _INT86X_
 
 end
