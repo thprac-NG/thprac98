@@ -18,8 +18,15 @@ extern const int version_number_int[4];
 #ifdef THPRAC98_RELEASE
 #define THPRAC98_VERSION THPRAC98_VERSION_STR
 #else
+#ifdef THPRAC98_ALPHA
 #define THPRAC98_VERSION \
   THPRAC98_VERSION_STR "-alpha." THPRAC98_TO_STRING(THPRAC98_VERSION_ALPHA)
+#else
+#ifndef THPRAC98_DEV
+#define THPRAC98_DEV 1
+#endif
+#define THPRAC98_VERSION THPRAC98_VERSION_STR "-dev"
+#endif
 #endif
 
 #endif  // #ifndef THPRAC98_SRC_VERSION_HPP_

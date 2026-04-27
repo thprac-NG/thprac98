@@ -35,8 +35,13 @@ void print_links(bool pause = true) {
 }
 void print_version() {
   print_string(
+#ifndef THPRAC98_DEV
       "thprac98 ver." THPRAC98_VERSION
       "\n"
+#else
+      "thprac98 ver." THPRAC98_VERSION " (Build: " __DATE__ " " __TIME__
+      ")\n"
+#endif
       "Website: https://github.com/thprac-NG/thprac98"
       "\n"
       "Website (main project thprac): https://github.com/touhouworldcup/thprac"
