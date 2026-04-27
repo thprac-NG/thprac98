@@ -734,6 +734,9 @@ proc store_covered_tram near
 endp store_covered_tram
 
 proc show_bs_menu near
+        cmp     [byte ptr cs:bs_state + 1], 0
+        je      @@return
+
         push    TEXT_WHITE 0 0 offset bs_frame1 ds
         call    print_str
         add     sp, 10
@@ -773,6 +776,7 @@ proc show_bs_menu near
         inc     dx
         cmp     dx, FX_COUNT + 1
         jne     @@L7
+@@return:
         ret
 endp show_bs_menu
 
