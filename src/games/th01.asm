@@ -12,7 +12,7 @@ start:
         jmp     real_start
 
 BS_MENU_WIDTH   EQU 16
-BS_MENU_HEIGHT  EQU 5
+BS_MENU_HEIGHT  EQU 6
 FX_COUNT        EQU (BS_MENU_HEIGHT - 2)  ; Should be no greater than 6,
                                           ; otherwise INT18h/04h won't work
                                           ; properly.
@@ -22,7 +22,9 @@ bs_frame2       db '|              |', 0
 f1_text         db  'F1: Invincible', 0
 f2_text         db  'F2: Inf. Lives', 0
 f3_text         db  'F3: Inf. Bombs', 0
-fx_text         dw offset f1_text, offset f2_text, offset f3_text
+f4_text         db  'F4: Time Lock ', 0
+fx_text         dw offset f1_text, offset f2_text, offset f3_text, \
+                   offset f4_text
 
 bs_covered_tram         dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
 bs_covered_tram_attr    dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
@@ -221,8 +223,10 @@ endp my_int8
 ; 4bytes: 8D xx 00 00 (lea r16, [r16 + 0000h]). 9F (bx), AE (bp),
 ;                                               B4 (si), BD (di)
 ;
-; Check https://github.com/H-J-Granger/ReC98/commit/d159a9960ae4d52c4c2bb6d91fcd5046f6dad4e5
-; for the discompiled version of the Fx modifications.
+; For the discompiled version of the Fx modifications, check:
+; F1-F3: https://github.com/H-J-Granger/ReC98/commit/d159a9960ae4d52c4c2bb6d91fcd5046f6dad4e5
+; F4: https://github.com/H-J-Granger/ReC98/commit/c2e20cc6a5d7b27e71ac219433e2eb4285b69adc
+;
 ; F1: Invincibile {
 ;   0B50:29A9 | 7E 2F -> 89 DB
 ;   0B50:29BA | C4 1E FC 47 26 FE 4F 15 -> C6 06 AF 00 00 E9 A2 FD
@@ -236,9 +240,12 @@ endp my_int8
 ;   1967:08B3 | 40 -> 90
 ;   1967:08AB | FE 0E 92 00 -> 8D 9F 00 00
 ; }
-; F4: Inf. Card Combo
-; F5: Inf. Item Combo
-; F6: Everlasting BGM
+; F4: Lock Time {
+;   1924:0154 | 83 2E 0C 54 02 -> 8D 9F 00 00 90
+; }
+; F5: Inf. Card Combo
+; F6: Inf. Item Combo
+; F7: Everlasting BGM
 ;
 ; stage_num_animate (restore the menu after "STAGE XX" animation): {
 ;   0B50:0775 | 1E 68 59 01 9A 7A 62 00 10 83 C4 0E ->
@@ -347,6 +354,16 @@ inf_bombs_part2         inject_code_t { \
         len = 4, \
         original_mem = offset inf_bombs_part2_org, \
         patched_mem = offset inf_bombs_part2_pat, \
+}
+time_lock_org           db 083h, 02Eh, 00Ch, 054h, 002h
+time_lock_pat           db 08Dh, 09Fh, 000h, 000h, 090h
+time_lock               inject_code_t { \
+        filename = offset reiiden_exe, \
+        seg = 1924h, \
+        off = 0154h, \
+        len = 5, \
+        original_mem = offset time_lock_org, \
+        patched_mem = offset time_lock_pat, \
 }
 
 stage_num_animate_org   db 01Eh, 068h, 059h, 001h, 09Ah, 07Ah, 062h, 000h, \
@@ -465,6 +482,13 @@ arg @@updated:word
         mov     al, [byte ptr fx_state + 5]
         push    es
         push    es ax (offset inf_bombs_part2)
+        call    inject_one
+        add     sp, 6
+        pop     es
+
+        mov     al, [byte ptr fx_state + 7]
+        push    es
+        push    es ax (offset time_lock)
         call    inject_one
         add     sp, 6
         pop     es
