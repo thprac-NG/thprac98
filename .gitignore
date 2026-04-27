@@ -9,3 +9,5 @@
 ignore/*
 
 tmp/*
+
+src/tsrdata.*
