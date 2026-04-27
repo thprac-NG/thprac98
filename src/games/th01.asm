@@ -11,20 +11,22 @@ org 100h
 start:
         jmp     real_start
 
-BS_MENU_WIDTH   EQU 16
-BS_MENU_HEIGHT  EQU 6
+BS_MENU_WIDTH   EQU 21
+BS_MENU_HEIGHT  EQU 8
 FX_COUNT        EQU (BS_MENU_HEIGHT - 2)  ; Should be no greater than 6,
                                           ; otherwise INT18h/04h won't work
                                           ; properly.
 
-bs_frame1       db '+--------------+', 0
-bs_frame2       db '|              |', 0
-f1_text         db  'F1: Invincible', 0
-f2_text         db  'F2: Inf. Lives', 0
-f3_text         db  'F3: Inf. Bombs', 0
-f4_text         db  'F4: Time Lock ', 0
+bs_frame1       db '+-------------------+', 0
+bs_frame2       db '|                   |', 0
+f1_text         db  'F1: Invincible     ', 0
+f2_text         db  'F2: Inf. Lives     ', 0
+f3_text         db  'F3: Inf. Bombs     ', 0
+f4_text         db  'F4: Time Lock      ', 0
+f5_text         db  'F5: Inf. Card Combo', 0
+f6_text         db  'F6: Inf. Item Combo', 0
 fx_text         dw offset f1_text, offset f2_text, offset f3_text, \
-                   offset f4_text
+                   offset f4_text, offset f5_text, offset f6_text
 
 bs_covered_tram         dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
 bs_covered_tram_attr    dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
@@ -226,6 +228,7 @@ endp my_int8
 ; For the discompiled version of the Fx modifications, check:
 ; F1-F3: https://github.com/H-J-Granger/ReC98/commit/d159a9960ae4d52c4c2bb6d91fcd5046f6dad4e5
 ; F4: https://github.com/H-J-Granger/ReC98/commit/c2e20cc6a5d7b27e71ac219433e2eb4285b69adc
+; F5-F6: https://github.com/H-J-Granger/ReC98/commit/d420132646f2fc895b7be87642c7489760dbfd8b
 ;
 ; F1: Invincibile {
 ;   0B50:29A9 | 7E 2F -> 89 DB
@@ -243,8 +246,12 @@ endp my_int8
 ; F4: Lock Time {
 ;   1924:0154 | 83 2E 0C 54 02 -> 8D 9F 00 00 90
 ; }
-; F5: Inf. Card Combo
-; F6: Inf. Item Combo
+; F5: Inf. Card Combo {
+;   0B50:12EE | C7 06 E4 00 00 00 -> 89 D2 8D 9F 00 00
+; }
+; F6: Inf. Item Combo {
+;   17CA:07BD | 26 C7 47 49 00 00 -> 8D 74 00 8D 7D 00
+; }
 ; F7: Everlasting BGM
 ;
 ; stage_num_animate (restore the menu after "STAGE XX" animation): {
@@ -364,6 +371,26 @@ time_lock               inject_code_t { \
         len = 5, \
         original_mem = offset time_lock_org, \
         patched_mem = offset time_lock_pat, \
+}
+inf_card_combo_org      db 0C7h, 006h, 0E4h, 000h, 000h, 000h
+inf_card_combo_pat      db 089h, 0D2h, 08Dh, 09Fh, 000h, 000h
+inf_card_combo          inject_code_t { \
+        filename = offset reiiden_exe, \
+        seg = 0B50h, \
+        off = 12EEh, \
+        len = 6, \
+        original_mem = offset inf_card_combo_org, \
+        patched_mem = offset inf_card_combo_pat, \
+}
+inf_item_combo_org      db 026h, 0C7h, 047h, 049h, 000h, 000h
+inf_item_combo_pat      db 08Dh, 074h, 000h, 08Dh, 07Dh, 000h
+inf_item_combo          inject_code_t { \
+        filename = offset reiiden_exe, \
+        seg = 17CAh, \
+        off = 07BDh, \
+        len = 6, \
+        original_mem = offset inf_item_combo_org, \
+        patched_mem = offset inf_item_combo_pat, \
 }
 
 stage_num_animate_org   db 01Eh, 068h, 059h, 001h, 09Ah, 07Ah, 062h, 000h, \
@@ -489,6 +516,20 @@ arg @@updated:word
         mov     al, [byte ptr fx_state + 7]
         push    es
         push    es ax (offset time_lock)
+        call    inject_one
+        add     sp, 6
+        pop     es
+
+        mov     al, [byte ptr fx_state + 9]
+        push    es
+        push    es ax (offset inf_card_combo)
+        call    inject_one
+        add     sp, 6
+        pop     es
+
+        mov     al, [byte ptr fx_state + 11]
+        push    es
+        push    es ax (offset inf_item_combo)
         call    inject_one
         add     sp, 6
         pop     es
