@@ -39,8 +39,10 @@ if not %1.==. goto :end_build
     @rem Modify the header of thprac98.exe
     if not exist stub_hdr.exe (
       echo [build.bat] Building stub_hdr.exe...
-      %ReC98_DOS% tcc @tmp\args codegen\stub_hdr.cpp @srcfiles @asmfiles ^
-        || goto :error
+      call :build_executable codegen\stub_hdr.cpp stub_hdr || goto :error
+      copy entrance.exe stub_hdr.exe
+      copy entrance.map stub_hdr.map
+      del entrance.exe
     )
     echo [build.bat] Modifying thprac98.exe...
     %ReC98_DOS% stub_hdr.exe thprac98.exe tmp\thp98tmp.exe || goto :error

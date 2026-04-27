@@ -1,6 +1,5 @@
 // make STUB HeaDeR .cpp
-#include <stdio.h>
-
+#include "src/mystdlib/stdio.hpp"
 #include "src/utils.hpp"
 
 const int MAX_RELOCATION_TABLE_SIZE = 16;  // must be a multiple of 8
@@ -30,7 +29,7 @@ struct exe_header_t {
                         // https://cosmodoc.org/topics/exe-file-format/
   uint16 oem_identifier;
   uint16 oem_information;
-  uint16 reserved2[10];  // we use this field to store the relocation table
+  uint16 reserved2[10];
   uint32 new_exe_header_offset;
   uint16 relocation_table[MAX_RELOCATION_TABLE_SIZE * 2];
 };
