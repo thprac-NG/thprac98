@@ -6,7 +6,7 @@
 #define THPRAC98_VERSION_MAJOR 0
 #define THPRAC98_VERSION_MINOR 1
 #define THPRAC98_VERSION_PATCH 0
-#define THPRAC98_VERSION_ALPHA 1
+#define THPRAC98_VERSION_ALPHA 2
 
 #define THPRAC98_VERSION_STR                                             \
   THPRAC98_TO_STRING(THPRAC98_VERSION_MAJOR)                             \
