@@ -262,6 +262,7 @@ arg @@path_off:word, @@path_seg:word
         mov     dx, offset failed_to_restore_cd
         mov     ah, 09h
         int     21h
+@@restore_current_directory_success:
 
         call    call_dos_exec c, (offset th01_com_name), \
                                  (offset th01_com_unload_param)
@@ -281,8 +282,6 @@ arg @@path_off:word, @@path_seg:word
         mov     dx, offset failed_to_create_th01
         mov     ah, 09h
         int     21h
-
-@@restore_current_directory_success:
 
 @@return:
         mov     ax, 4C00h
