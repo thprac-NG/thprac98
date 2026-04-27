@@ -213,62 +213,58 @@ proc my_int8 near
         ret
 endp my_int8
 
-; Multiline comment is only available in MASM mode.
-masm
-comment $
-NOPs:
-1byte: 90 (nop)
-2bytes: 89 xx (mov r16, r16). C0 (ax), DB (bx), C9 (cx), D2 (dx),
-                              E4 (sp), ED (bp), F6 (si), FF (di)
-3bytes: 8D xx 00 (lea r16, [r16 + 00h]). 5F (bx), 6E (bp), 74 (si), 7D (di)
-4bytes: 8D xx 00 00 (lea r16, [r16 + 0000h]). 9F (bx), AE (bp), B4 (si), BD (di)
-
-Check https://github.com/H-J-Granger/ReC98/commit/d159a9960ae4d52c4c2bb6d91fcd5046f6dad4e5
-for the discompiled version of the Fx modifications.
-F1: Invincibile {
-  0B50:29A9 | 7E 2F -> 89 DB
-  0B50:29BA | C4 1E FC 47 26 FE 4F 15 -> C6 06 AF 00 00 E9 A2 FD
-}
-F2: Inf. Lives {
-  0B50:29BE | 26 FE 4F 15 FF 0E E0 00 -> 8D B4 00 00 8D BD 00 00
-  1967:198B | 9A 95 08 58 28 -> 90 8D B4 00 00
-            |          ^^ ^^ (*1)
-}
-F3: Inf. Bombs {
-  1967:08B3 | 40 -> 90
-  1967:08AB | FE 0E 92 00 -> 8D 9F 00 00
-}
-F4: Inf. Card Combo
-F5: Inf. Item Combo
-F6: Everlasting BGM
-
-stage_num_animate (restore the menu after "STAGE XX" animation): {
-  0B50:0775 | 1E 68 59 01 9A 7A 62 00 10 83 C4 0E ->
-            |                      ^^ ^^ (*1)
-            | 9A yy yy xx xx 8D 9F 00 00 83 C4 0A
-}, where "xxxx" is cseg, and "yyyy" is (offset my_0b50_0775).
-Original assembly:
-  0B50:0775 | 1E                push    DS
-  0B50:0776 | 68 59 01          push    159h    ; offset of the string "\x1B*"
-  0B50:0779 | 9A 7A 62 00 10    callf   printf
-  0B50:077E | 83 C4 0E          add     sp, 0Eh
-Modified assembly:
-  0B50:0775 | 9A yy yy xx xx    callf   my_0b50_0775
-  0B50:077A | 8D 9F 00 00       lea     bx, [bx + 0000h]  ; effectively nop
-  0B50:077E | 83 C4 0A          add     sp, 0Ah
-Check https://github.com/nmlgc/ReC98/blob/d892535e723b3691612363d1bbdbd2a54f43fb43/th01/main_01.cpp#L314
-for the C version of the original code.
-
-harry_up_anmiate (restore the menu after "HARRY UP" animation): {
-  1924:0364 | 9A 6A 0C 00 00 -> 9A yy yy xx xx
-            |          ^^ ^^ (*1)
-}, where "xxxx" is cseg, and "yyyy" is (offset my_1924_0364).
-Original assembly: call text_clear (provided by master.lib)
-Modified assembly: call my_1924_0364
-
-(*1) This is an absolute call, the segment address might differ.
-$
-ideal
+; NOPs:
+; 1byte: 90 (nop)
+; 2bytes: 89 xx (mov r16, r16). C0 (ax), DB (bx), C9 (cx), D2 (dx),
+;                               E4 (sp), ED (bp), F6 (si), FF (di)
+; 3bytes: 8D xx 00 (lea r16, [r16 + 00h]). 5F (bx), 6E (bp), 74 (si), 7D (di)
+; 4bytes: 8D xx 00 00 (lea r16, [r16 + 0000h]). 9F (bx), AE (bp),
+;                                               B4 (si), BD (di)
+;
+; Check https://github.com/H-J-Granger/ReC98/commit/d159a9960ae4d52c4c2bb6d91fcd5046f6dad4e5
+; for the discompiled version of the Fx modifications.
+; F1: Invincibile {
+;   0B50:29A9 | 7E 2F -> 89 DB
+;   0B50:29BA | C4 1E FC 47 26 FE 4F 15 -> C6 06 AF 00 00 E9 A2 FD
+; }
+; F2: Inf. Lives {
+;   0B50:29BE | 26 FE 4F 15 FF 0E E0 00 -> 8D B4 00 00 8D BD 00 00
+;   1967:198B | 9A 95 08 58 28 -> 90 8D B4 00 00
+;             |          ^^ ^^ (*1)
+; }
+; F3: Inf. Bombs {
+;   1967:08B3 | 40 -> 90
+;   1967:08AB | FE 0E 92 00 -> 8D 9F 00 00
+; }
+; F4: Inf. Card Combo
+; F5: Inf. Item Combo
+; F6: Everlasting BGM
+;
+; stage_num_animate (restore the menu after "STAGE XX" animation): {
+;   0B50:0775 | 1E 68 59 01 9A 7A 62 00 10 83 C4 0E ->
+;             |                      ^^ ^^ (*1)
+;             | 9A yy yy xx xx 8D 9F 00 00 83 C4 0A
+; }, where "xxxx" is cseg, and "yyyy" is (offset my_0b50_0775).
+; Original assembly:
+;   0B50:0775 | 1E                push    DS
+;   0B50:0776 | 68 59 01          push    159h    ; offset of the string "\x1B*"
+;   0B50:0779 | 9A 7A 62 00 10    callf   printf
+;   0B50:077E | 83 C4 0E          add     sp, 0Eh
+; Modified assembly:
+;   0B50:0775 | 9A yy yy xx xx    callf   my_0b50_0775
+;   0B50:077A | 8D 9F 00 00       lea     bx, [bx + 0000h]  ; effectively nop
+;   0B50:077E | 83 C4 0A          add     sp, 0Ah
+; Check https://github.com/nmlgc/ReC98/blob/d892535e723b3691612363d1bbdbd2a54f43fb43/th01/main_01.cpp#L314
+; for the C version of the original code.
+;
+; harry_up_anmiate (restore the menu after "HARRY UP" animation): {
+;   1924:0364 | 9A 6A 0C 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; }, where "xxxx" is cseg, and "yyyy" is (offset my_1924_0364).
+; Original assembly: call text_clear (provided by master.lib)
+; Modified assembly: call my_1924_0364
+;
+; (*1) This is an absolute call, the segment address might differ.
 
 ; Due to the language restriction, the array members are represented as offsets
 ; of an array stored elsewhere.
