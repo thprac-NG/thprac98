@@ -229,7 +229,7 @@ arg @@path_off:word, @@path_seg:word
         sub     dl, 'A'
         mov     ah, 0Eh
         int     21h
-        jmp     @@return
+        jmp     @@unload_th01_com
 @@set_current_directory_success:
 
         call    call_dos_exec c, (offset mdrv98_exe_name), \
@@ -264,6 +264,7 @@ arg @@path_off:word, @@path_seg:word
         int     21h
 @@restore_current_directory_success:
 
+@@unload_th01_com:
         call    call_dos_exec c, (offset th01_com_name), \
                                  (offset th01_com_unload_param)
 

@@ -3,4 +3,4 @@
 // use codegen/comembed.cpp to regenerate this file.
 // clang-format off
 
-extern unsigned char th01_com_data[3392];
+extern unsigned char th01_com_data[3400];

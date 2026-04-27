@@ -754,7 +754,7 @@ proc show_bs_menu near
         mov     bx, offset fx_state - 1
         add     bx, dx
         add     bx, dx
-        test    [byte ptr es:bx], 1
+        test    [byte ptr cs:bx], 1
         jz      @@L9
         mov     cx, TEXT_GREEN
         jmp     @@L10
