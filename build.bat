@@ -9,14 +9,17 @@ set include_path_arg=-I3rdparty\master.lib\include -I3rdparty\ReC98 ^
 set other_arg=-ms -wall -DANCIENT_CXX=1 -DPRINTF_INCLUDE_CONFIG_H=1 -v -3 -x-RT
 
 if %1.==fast. goto :fast_build
+if %1.==com. goto :com_build
 
 @rem Building thprac98.exe using command `build.bat` (without args)
 if not %1.==. goto :end_build
 :fast_build
+:com_build
   echo [build.bat] Building th01.com...
   echo %include_path_arg% %other_arg% > tmp\args
   %ReC98_DOS% tasm /m5 src\games\th01.asm || goto :error
   %ReC98_DOS% tlink /t th01.obj || goto :error
+  if %1.==com. goto :end_of_file
 
   if not exist comembed.exe (
     echo [build.bat] Building comembed.exe...
