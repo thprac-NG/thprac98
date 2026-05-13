@@ -156,11 +156,13 @@ int print_string(const char *str, bool pause, bool kanji, int rows) {
       continue;
     }
     if (ch == '\n') {
+      putchar('\r');
       putchar('\n');
       col = 0;
       row++;
     }
     if (col == 80) {
+      putchar('\r');
       putchar('\n');
       col = 0;
       row++;
