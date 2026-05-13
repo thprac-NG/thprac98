@@ -11,6 +11,14 @@ size_t _fstrlen_(const char far* str);
 #define _fstrcmp _fstrcmp_
 int strcmp_(const char* lhs, const char* rhs);
 int _fstrcmp_(const char far* lhs, const char far* rhs);
+#define strcpy strcpy_
+#define _fstrcpy _fstrcpy_
+char* strcpy_(char* dest, const char* src);
+char far* _fstrcpy_(char far* dest, const char far* src);
+#define strncpy strncpy_
+#define _fstrncpy _fstrncpy_
+char* strncpy_(char* dest, const char* src, size_t count);
+char far* _fstrncpy_(char far* dest, const char far* src, size_t count);
 
 #define THPRAC98_MEMCPY_TRIVIAL_COPY_THRESHOLD 32
 #define memset memset_

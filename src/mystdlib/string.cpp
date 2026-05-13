@@ -28,6 +28,35 @@ THPRAC98_STRLEN_IMPLEMENTATION(_fstrlen_, far)
 THPRAC98_STRCMP_IMPLEMENTATION(strcmp_, )
 THPRAC98_STRCMP_IMPLEMENTATION(_fstrcmp_, far)
 
+#define THPRAC98_STRCPY_IMPLEMENTATION(func_name, ptr_type)                 \
+  char ptr_type* func_name(char ptr_type* dest, const char ptr_type* src) { \
+    int i = 0;                                                              \
+    while (src[i] != '\0') {                                                \
+      dest[i] = src[i];                                                     \
+      ++i;                                                                  \
+    }                                                                       \
+    return dest;                                                            \
+  }
+THPRAC98_STRCPY_IMPLEMENTATION(strcpy_, )
+THPRAC98_STRCPY_IMPLEMENTATION(_fstrcpy_, far)
+
+#define THPRAC98_STRNCPY_IMPLEMENTATION(func_name, ptr_type)              \
+  char ptr_type* func_name(char ptr_type* dest, const char ptr_type* src, \
+                           size_t count) {                                \
+    int i = 0;                                                            \
+    while (src[i] != '\0' && i < count) {                                 \
+      dest[i] = src[i];                                                   \
+      ++i;                                                                \
+    }                                                                     \
+    while (i < count) {                                                   \
+      dest[i] = '\0';                                                     \
+      ++i;                                                                \
+    }                                                                     \
+    return dest;                                                          \
+  }
+THPRAC98_STRNCPY_IMPLEMENTATION(strncpy_, )
+THPRAC98_STRNCPY_IMPLEMENTATION(_fstrncpy_, far)
+
 extern "C" void memset_helper(uint16_t stosd_seg, uint16_t stosd_off,
                               uint16_t stosd_count, uint16_t val);
 
