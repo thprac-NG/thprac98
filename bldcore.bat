@@ -75,7 +75,7 @@ if not %2.==. goto :endNoArg
   :mainRet
   copy main.exe thprac98.exe
 
-  if %2.==fast. goto :skpStbHdr
+  if %2.==fast. goto :skpStHdr
     :: Modify the header of thprac98.exe
     if exist stub_hdr.exe goto :skpBldSH
       echo [INFO] Building stub_hdr.exe...
@@ -90,7 +90,7 @@ if not %2.==. goto :endNoArg
     if errorlevel 1 goto :errRet
     copy thp98tmp.exe thprac98.exe
     del thp98tmp.exe
-  :skpStbHdr
+  :skpStHdr
 
   echo [INFO] Embedding .COM files...
   %shell% comembed.exe 2
