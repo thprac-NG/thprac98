@@ -23,7 +23,7 @@ extern const FILE_ *const stdout_;
 extern const FILE_ *const stderr_;
 
 #define fopen fopen_
-FILE_ *fopen_(const char *filename, const char *mode);
+FILE_ *fopen_(const char far *filename, const char far *mode);
 #define fclose fclose_
 int fclose_(FILE_ *stream);
 #define fflush fflush_

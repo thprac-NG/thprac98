@@ -40,7 +40,7 @@ void stdio_init(void) {
   return;
 }
 
-FILE_* fopen_(const char* filename, const char* mode) {
+FILE_* fopen_(const char far* filename, const char far* mode) {
   int i = 0;
   unsigned char access_mode = 0;
   REGS in_reg, out_reg;
@@ -78,11 +78,15 @@ FILE_* fopen_(const char* filename, const char* mode) {
     in_reg.x.ax = 0x4300;  // Get file attribute
     intdosx(&in_reg, &out_reg, &in_sreg);
     if (out_reg.x.cflag) {
-      errno_ = out_reg.x.ax;
-      return NULL;
+      if (out_reg.x.ax == E_DOS_FILE_NOT_FOUND) {
+        out_reg.x.ax = 0;  // If file doesn't exist, set attribute to default
+      } else {
+        errno_ = out_reg.x.ax;
+        return NULL;
+      }
     }
-    in_reg.h.ah = 0x3C;  // Create/Truncate file
-    in_reg.x.cx = out_reg.x.ax;
+    in_reg.h.ah = 0x3C;          // Create/Truncate file
+    in_reg.x.cx = out_reg.x.ax;  // Inherit the attribute
     intdosx(&in_reg, &out_reg, &in_sreg);
     if (out_reg.x.cflag) {
       errno_ = out_reg.x.ax;
