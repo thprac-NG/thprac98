@@ -122,15 +122,18 @@ void wait_for_enter_key() {
   while (ch != '\r' && ch != '\n' && ch != EOF) {
     ch = dos_getch();
   }
+  putchar('\r');
   putchar('\n');
   return;
 }
 void print_delimiter(char ch) {
   int i = 0;
+  putchar('\r');
   putchar('\n');
   for (i = 0; i < 80; ++i) {
     putchar(ch);
   }
+  putchar('\r');
   putchar('\n');
   return;
 }
@@ -168,6 +171,7 @@ int print_string(const char *str, bool pause, bool kanji, int rows) {
       row++;
     } else if (col == 79) {
       if (ch > 0xFF && valid_shiftjis(ch) && char_width(ch) == 2) {
+        putchar('\r');
         putchar('\n');
         col = 0;
         row++;
