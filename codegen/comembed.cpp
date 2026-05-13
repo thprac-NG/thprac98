@@ -17,20 +17,15 @@ int com_file_size[COM_FILE_COUNT + 1];
 
 char tmp_str[60];
 
-int init_com_file_size(const char far *path) {
+int init_com_file_size(void) {
   int i = 0;
   FILE *fin = NULL;
   long tmp = 0;
   for (i = 1; i <= COM_FILE_COUNT; ++i) {
-    if (snprintf(tmp_str, sizeof(tmp_str), "%s/th0%d.com", path, i) ==
-        sizeof(tmp_str)) {
-      printf("Argument too long: length of `%s/th0%d.com' should be <%d.\n",
-             path, i, sizeof(tmp_str));
-      return 1;
-    }
+    snprintf(tmp_str, sizeof(tmp_str), "th0%d.com", i);
     fin = fopen(tmp_str, "r");
     if (fin == NULL) {
-      printf("Cannot open file %s.\n", tmp_str);
+      printf("1Cannot open file %s.\n", (const char far *)(tmp_str));
       print_errno();
       return 1;
     }
@@ -52,21 +47,21 @@ int generate_tsrdata(char far *path) {
   int i = 0, ch = 0, col = 0, j = 0, ret = 0;
   FILE *fin = NULL, *fout = NULL;
 
-  ret = init_com_file_size(path);
+  ret = init_com_file_size();
   if (ret) {
     return ret;
   }
 
   // Generate tsrdata.hpp
-  if (snprintf(tmp_str, sizeof(tmp_str), "%s/tsrdata.hpp", path, i) ==
-      sizeof(tmp_str)) {
+  if (snprintf(tmp_str, sizeof(tmp_str), "%s/tsrdata.hpp",
+               (const char far *)(path), i) == sizeof(tmp_str)) {
     printf("Argument too long: length of `%s/tsrdata.hpp' should be <%d.\n",
-           path, i, sizeof(tmp_str));
+           (const char far *)(path), i, sizeof(tmp_str));
     return 1;
   }
   fout = fopen(tmp_str, "w");
   if (fout == NULL) {
-    printf("Cannot open file %s.\n", tmp_str);
+    printf("2Cannot open file %s.\n", (const char far *)(tmp_str));
     print_errno();
     return 1;
   }
@@ -78,15 +73,15 @@ int generate_tsrdata(char far *path) {
   fclose(fout);
 
   // Generate tsrdata.cpp
-  if (snprintf(tmp_str, sizeof(tmp_str), "%s/tsrdata.cpp", path, i) ==
-      sizeof(tmp_str)) {
+  if (snprintf(tmp_str, sizeof(tmp_str), "%s/tsrdata.cpp",
+               (const char far *)(path), i) == sizeof(tmp_str)) {
     printf("Argument too long: length of `%s/tsrdata.cpp' should be <%d.\n",
-           path, i, sizeof(tmp_str));
+           (const char far *)(path), i, sizeof(tmp_str));
     return 1;
   }
   fout = fopen(tmp_str, "w");
   if (fout == NULL) {
-    printf("Cannot open file %s.\n", tmp_str);
+    printf("3Cannot open file %s.\n", (const char far *)(tmp_str));
     print_errno();
     return 1;
   }
@@ -95,15 +90,10 @@ int generate_tsrdata(char far *path) {
   for (i = 1; i <= COM_FILE_COUNT; ++i) {
     fprintf(fout, "unsigned char th0%d_com_data[%d] = {\n", i,
             com_file_size[i]);
-    if (snprintf(tmp_str, sizeof(tmp_str), "%s/th0%d.com", path, i) ==
-        sizeof(tmp_str)) {
-      printf("Argument too long: length of `%s/th0%d.com' should be <%d.\n",
-             path, i, sizeof(tmp_str));
-      return 1;
-    }
+    snprintf(tmp_str, sizeof(tmp_str), "th0%d.com", i);
     fin = fopen(tmp_str, "r");
     if (fin == NULL) {
-      printf("Cannot open file %s.\n", tmp_str);
+      printf("4Cannot open file %s.\n", (const char far *)(tmp_str));
       print_errno();
       fclose(fout);
       return 1;
@@ -155,7 +145,7 @@ unsigned int get_hex(char *const str) {
   return ret;
 }
 
-int backpatch_com_offset(const char far *path) {
+int backpatch_com_offset(void) {
   int i = 0, j = 0, k = 0, ret = 0, ch = 0;
   long j2 = 0;
   unsigned int com_info_seg = 0, com_info_off = 0, header_size = 0;
@@ -165,7 +155,7 @@ int backpatch_com_offset(const char far *path) {
   static const unsigned long HASH_MOD = 5675237l;  // prime
   unsigned long com_hash = 0, cur_hash = 0, discard_hash_multiplicator = 0;
 
-  ret = init_com_file_size(path);
+  ret = init_com_file_size();
   if (ret) {
     return ret;
   }
@@ -178,15 +168,10 @@ int backpatch_com_offset(const char far *path) {
     // Calculate the hash of the .COM file
     // The hash function is: hash([a_n, ..., a1, a0]) = (a0*256^0 + a1*256^1 +
     // ... + an*256^n) % HASH_MOD.
-    if (snprintf(tmp_str, sizeof(tmp_str), "%s/th0%d.com", path, i) ==
-        sizeof(tmp_str)) {
-      printf("Argument too long: length of `%s/th0%d.com' should be <%d.\n",
-             path, i, sizeof(tmp_str));
-      return 1;
-    }
+    snprintf(tmp_str, sizeof(tmp_str), "th0%d.com", i);
     fin = fopen(tmp_str, "r");
     if (fin == NULL) {
-      printf("Cannot open file %s.\n", tmp_str);
+      printf("5Cannot open file %s.\n", (const char far *)(tmp_str));
       print_errno();
       return 1;
     }
@@ -198,28 +183,16 @@ int backpatch_com_offset(const char far *path) {
     }
 
     // Find the first occurence of the .COM file using the pre-calculated hash
-    if (snprintf(tmp_str, sizeof(tmp_str), "%s/thprac98.exe", path, i) ==
-        sizeof(tmp_str)) {
-      printf("Argument too long: length of `%s/thprac98.exe' should be <%d.\n",
-             path, i, sizeof(tmp_str));
-      return 1;
-    }
-    fin2 = fopen(tmp_str, "r");
+    fin2 = fopen("thprac98.exe", "r");
     if (fin2 == NULL) {
-      printf("Cannot open file %s.\n", tmp_str);
+      puts("6Cannot open file thprac98.exe.");
       print_errno();
       fclose(fin);
       return 1;
     }
-    if (snprintf(tmp_str, sizeof(tmp_str), "%s/thprac98.exe", path, i) ==
-        sizeof(tmp_str)) {
-      printf("Argument too long: length of `%s/thprac98.exe' should be <%d.\n",
-             path, i, sizeof(tmp_str));
-      return 1;
-    }
-    fin3 = fopen(tmp_str, "r");
+    fin3 = fopen("thprac98.exe", "r");
     if (fin3 == NULL) {
-      printf("Cannot open file %s.\n", tmp_str);
+      puts("7Cannot open file thprac98.exe.");
       print_errno();
       fclose(fin);
       fclose(fin2);
@@ -263,15 +236,9 @@ int backpatch_com_offset(const char far *path) {
     }
 
     // Find where to backpatch the size & offset of th0x.com in the file
-    if (snprintf(tmp_str, sizeof(tmp_str), "%s/entrance.map", path, i) ==
-        sizeof(tmp_str)) {
-      printf("Argument too long: length of `%s/entrance.map' should be <%d.\n",
-             path, i, sizeof(tmp_str));
-      return 1;
-    }
-    fin = fopen(tmp_str, "r");
+    fin = fopen("entrance.map", "r");
     if (fin == NULL) {
-      printf("Cannot open file %s.\n", tmp_str);
+      puts("Cannot open file entrance.map.");
       print_errno();
       return 1;
     }
@@ -306,23 +273,18 @@ int backpatch_com_offset(const char far *path) {
     }
     fclose(fin);
     if (!found_label) {
-      printf("Cannot find label %s in entrance.map.\n", tmp_str);
+      printf("Cannot find label %s in entrance.map.\n",
+             (const char far *)(tmp_str));
       return 1;
     }
     if (com_info_seg != 0) {
       printf("Incorrect segment of label %s: Expecting 0000h, found %04Xh.\n",
-             tmp_str, com_info_seg);
+             (const char far *)(tmp_str), com_info_seg);
       return 1;
     }
-    if (snprintf(tmp_str, sizeof(tmp_str), "%s/thprac98.exe", path, i) ==
-        sizeof(tmp_str)) {
-      printf("Argument too long: length of `%s/thprac98.exe' should be <%d.\n",
-             path, i, sizeof(tmp_str));
-      return 1;
-    }
-    fin = fopen(tmp_str, "r+");
+    fin = fopen("thprac98.exe", "r+");
     if (fin == NULL) {
-      printf("Cannot open file %s.\n", tmp_str);
+      puts("Cannot open file thprac98.exe.");
       print_errno();
       return 1;
     }
@@ -373,13 +335,13 @@ char test_str[100];
 int wrapped_main(int argc, char far **argv) {
   int mode = -1, i = 0;
 
-  if (argc != 3) {
-    printf("Incorrect argument count: Expecting 3, found %d.\n", argc);
+  if (argc != 2 && argc != 3) {
+    printf("Incorrect argument count: Expecting 2 or 3, found %d.\n", argc);
     return 1;
   }
   if (argv[1][1] != '\0' || (argv[1][0] != '1' && argv[1][0] != '2')) {
-    printf("Invalid mode: Expecting 1 or 2, found %s at %04X:%04X.\n", argv[1],
-           FP_SEG(argv[1]), FP_OFF(argv[1]));
+    printf("Invalid mode: Expecting 1 or 2, found %s at %04X:%04X.\n",
+           (const char far *)(argv[1]), FP_SEG(argv[1]), FP_OFF(argv[1]));
     printf("String content: ");
     for (i = 0; argv[1][i] != '\0'; ++i) {
       printf("%02Xh ", (unsigned)(argv[1][i]));
@@ -387,11 +349,21 @@ int wrapped_main(int argc, char far **argv) {
     printf("\n");
     return -1;
   }
+  if (argv[1][0] == '1' && argc != 3) {
+    printf("Incorrect argument count: Expecting 3 for mode 1, found %d.\n",
+           argc);
+    return 1;
+  }
+  if (argv[1][0] == '2' && argc != 2) {
+    printf("Incorrect argument count: Expecting 2 for mode 2, found %d.\n",
+           argc);
+    return 1;
+  }
   mode = argv[1][0] - '0';
 
   if (mode == 1) {
     return generate_tsrdata(argv[2]);
   } else {
-    return backpatch_com_offset(argv[2]);
+    return backpatch_com_offset();
   }
 }
