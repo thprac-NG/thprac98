@@ -25,7 +25,7 @@ int init_com_file_size(void) {
     snprintf(tmp_str, sizeof(tmp_str), "th0%d.com", i);
     fin = fopen(tmp_str, "r");
     if (fin == NULL) {
-      printf("1Cannot open file %s.\r\n", (const char far *)(tmp_str));
+      printf("Cannot open file %s.\r\n", (const char far *)(tmp_str));
       print_errno();
       return 1;
     }
@@ -62,7 +62,7 @@ int generate_tsrdata(char far *path) {
   }
   fout = fopen(tmp_str, "w");
   if (fout == NULL) {
-    printf("2Cannot open file %s.\r\n", (const char far *)(tmp_str));
+    printf("Cannot open file %s.\r\n", (const char far *)(tmp_str));
     print_errno();
     return 1;
   }
@@ -82,7 +82,7 @@ int generate_tsrdata(char far *path) {
   }
   fout = fopen(tmp_str, "w");
   if (fout == NULL) {
-    printf("3Cannot open file %s.\r\n", (const char far *)(tmp_str));
+    printf("Cannot open file %s.\r\n", (const char far *)(tmp_str));
     print_errno();
     return 1;
   }
@@ -94,7 +94,7 @@ int generate_tsrdata(char far *path) {
     snprintf(tmp_str, sizeof(tmp_str), "th0%d.com", i);
     fin = fopen(tmp_str, "r");
     if (fin == NULL) {
-      printf("4Cannot open file %s.\r\n", (const char far *)(tmp_str));
+      printf("Cannot open file %s.\r\n", (const char far *)(tmp_str));
       print_errno();
       fclose(fout);
       return 1;
@@ -172,7 +172,7 @@ int backpatch_com_offset(void) {
     snprintf(tmp_str, sizeof(tmp_str), "th0%d.com", i);
     fin = fopen(tmp_str, "r");
     if (fin == NULL) {
-      printf("5Cannot open file %s.\r\n", (const char far *)(tmp_str));
+      printf("Cannot open file %s.\r\n", (const char far *)(tmp_str));
       print_errno();
       return 1;
     }
@@ -186,14 +186,14 @@ int backpatch_com_offset(void) {
     // Find the first occurence of the .COM file using the pre-calculated hash
     fin2 = fopen("thprac98.exe", "r");
     if (fin2 == NULL) {
-      puts("6Cannot open file thprac98.exe.");
+      puts("Cannot open file thprac98.exe.");
       print_errno();
       fclose(fin);
       return 1;
     }
     fin3 = fopen("thprac98.exe", "r");
     if (fin3 == NULL) {
-      puts("7Cannot open file thprac98.exe.");
+      puts("Cannot open file thprac98.exe.");
       print_errno();
       fclose(fin);
       fclose(fin2);
