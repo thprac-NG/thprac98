@@ -39,7 +39,8 @@ uint8 header[0x10 * 100];
 struct checksum_t {
   uint16 checksum, current_word;
   bool at_odd_byte;
-  checksum_t() {
+  void init() {  // A initalizer will cause TCC to generate a call to
+                 // new(unsigned int), which won't be implemented.
     checksum = current_word = 0;
     at_odd_byte = false;
   }
@@ -55,7 +56,7 @@ struct checksum_t {
   }
 };
 
-int main(int argc, char **argv) {
+int wrapped_main(int argc, char far **argv) {
   // TODO: use only one input argument and modify it using another temp file
   if (argc != 3) {
     printf(
@@ -63,7 +64,7 @@ int main(int argc, char **argv) {
         "Expecting stub_hdr [input_exe] [output_exe].\n");
     return 1;
   }
-  FILE *fin = fopen(argv[1], "rb");
+  FILE *fin = fopen(argv[1], "r");
   if (fin == NULL) {
     printf("stub_hdr: Cannot open input file %s.\n", argv[1]);
     return 6;
@@ -134,6 +135,7 @@ int main(int argc, char **argv) {
   exe_header->new_exe_header_offset = 0;
   exe_header->checksum = 0;
   checksum_t checksum;
+  checksum.init();
   for (i = 0; i < exe_header->header_paragraphs * 0x10; ++i) {
     checksum.pushback(header[i]);
   }
@@ -148,14 +150,14 @@ int main(int argc, char **argv) {
   exe_header->checksum = ~checksum.checksum;
   fclose(fin);
 
-  fin = fopen(argv[1], "rb");
+  fin = fopen(argv[1], "r");
   if (fin == NULL) {
     printf("stub_hdr: Cannot open input file %s.\n", argv[1]);
     return 6;
   }
-  FILE *fout = fopen(argv[2], "wb");
+  FILE *fout = fopen(argv[2], "w");
   if (fout == NULL) {
-    printf("stub_hdr: Cannot open output file %s.\n", argv[1]);
+    printf("stub_hdr: Cannot open output file %s.\n", argv[2]);
     return 7;
   }
   for (i = 0; i < old_header_paragraphs * 0x10; ++i) {
