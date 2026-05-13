@@ -61,6 +61,7 @@ inline void putchar_(char character) {
 #define puts puts_
 inline void puts_(char const *str) {
   dos_puts(str);
+  dos_putch('\r');
   dos_putch('\n');  // The dos_puts function of master.lib doesn't print an
                     // extra CR/LF.
   return;

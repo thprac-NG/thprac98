@@ -186,6 +186,9 @@ int fputs_(const char* str, FILE_* stream) {
       return EOF;
     }
   }
+  if (fputc_('\r', stream) == EOF) {
+    return EOF;
+  }
   if (fputc_('\n', stream) == EOF) {
     return EOF;
   }
@@ -312,6 +315,7 @@ void _fputs_(const char far* str) {
     putchar(ch);
     ch = *++str;
   }
+  putchar('\r');
   putchar('\n');
   return;
 }
