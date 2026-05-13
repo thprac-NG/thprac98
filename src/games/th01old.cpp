@@ -75,7 +75,7 @@ int main() {
   // text_putc(19, 19, 'o');
   my_int8();  // One must call my_int8 once in main, and I don't know why
 
-  printf("%lx\n", (long)global->prev_int8);
+  printf("%lx\r\n", (long)global->prev_int8);
   _dos_setvect(0x08, my_int8);
   keep(0, 0x800);
   return 0;

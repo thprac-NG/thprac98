@@ -1,7 +1,7 @@
 #ifndef THPRAC98_CODEGEN_COMMON_WARNING_HPP_
 #define THPRAC98_CODEGEN_COMMON_WARNING_HPP_
 
-#define ENDL "\n"
+#define ENDL "\r\n"
 #define INDENT "  "
 
 #endif  // #ifndef THPRAC98_CODEGEN_COMMON_WARNING_HPP_

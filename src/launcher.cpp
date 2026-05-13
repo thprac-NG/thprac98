@@ -12,7 +12,7 @@ void launch_th01(const char far* path) {
   tmp_str[0] = '\0';
   if (!isalpha(path[0]) || path[1] != ':') {
     printf(
-        "Error: the path specified (%s) doesn't begin with a drive letter.\n",
+        "Error: the path specified (%s) doesn't begin with a drive letter.\r\n",
         path);
     return;
   }
@@ -23,7 +23,7 @@ void launch_th01(const char far* path) {
   if (i == 64) {
     printf(
         "Error: the path specified (%s) is too long. The maximum length "
-        "accepted is 64.",
+        "accepted is 64.\r\n",
         path);
     return;
   }

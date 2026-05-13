@@ -20,7 +20,6 @@
 #include "codegen/common.hpp"
 #include "nlohmann/json.hpp"
 
-
 #define THPRAC98_TEXT_GEN_WARNING_TEXT                           \
   "// WARNING: THIS FILE IS AUTO-GENERATED" ENDL                 \
   "// To modify this file, edit codegen/texts.json and use" ENDL \
@@ -40,8 +39,8 @@ std::string escape(char ch) {
     case '\"':
     case '\\':
       return std::string("\\") + ch;
-    case '\n':
-      return std::string("\\n");
+    case '\r\n':
+      return std::string("\\r\n");
     case '\t':
       return std::string("\\t");
     case '\0':
@@ -300,7 +299,7 @@ int main() {
 
   int line_no = 1, last_lf_pos = 0;
   for (std::size_t i = 0; i < input_wstr.size(); ++i) {
-    if (input_wstr[i] == '\n') {
+    if (input_wstr[i] == '\r\n') {
       line_no++;
       last_lf_pos = i;
     }
@@ -342,7 +341,7 @@ int main() {
 
   std::string encoded_str = "";
   for (std::uint16_t ch : input_wstr) {
-    if ((0x0020 <= ch && ch <= 0x7E) || ch == '\n' || ch == '\r' ||
+    if ((0x0020 <= ch && ch <= 0x7E) || ch == '\r\n' || ch == '\r' ||
         ch == '\t') {
       encoded_str.push_back(static_cast<char>(ch));
     } else {

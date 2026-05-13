@@ -34,7 +34,7 @@ int wrapped_main() {
     sprintf(buffer, "codegen/licenses/%s", license_filename[i]);
     handler[i] = fopen(buffer, "rb");
     if (handler[i] == NULL) {
-      printf("Cannot open file codegen/licenses/%s.\n", license_filename[i]);
+      printf("Cannot open file codegen/licenses/%s.\r\n", license_filename[i]);
       close_all_handler();
       return 1;
     }
@@ -42,7 +42,7 @@ int wrapped_main() {
 
   FILE* fout = fopen("src/license.hpp", "w");
   if (fout == NULL) {
-    printf("Cannot open file src/license.hpp.\n");
+    printf("Cannot open file src/license.hpp.\r\n");
     close_all_handler();
     return 1;
   }
@@ -59,14 +59,14 @@ int wrapped_main() {
   unsigned ch = 0;
   fout = fopen("src/license.cpp", "w");
   if (fout == NULL) {
-    printf("Cannot open file src/license.cpp.\n");
+    printf("Cannot open file src/license.cpp.\r\n");
     close_all_handler();
     return 1;
   }
   fprintf(fout, THPRAC98_LICENSE_WARNING_TEXT
           "#include \"src/license.hpp\"" ENDL ENDL);
   for (i = 0; i < LICENSE_COUNT; ++i) {
-    fprintf(fout, "const char* const license_%s =\n", license_name[i]);
+    fprintf(fout, "const char* const license_%s =\r\n", license_name[i]);
     fprintf(fout, INDENT INDENT "\"");
     input = fgetc(handler[i]);
     col = 5;
@@ -78,8 +78,8 @@ int wrapped_main() {
         input = fgetc(handler[i]);
         continue;
       }
-      if (ch == '\n') {
-        fprintf(fout, "\\n");
+      if (ch == '\r\n') {
+        fprintf(fout, "\\r\n");
         col += 2;
       } else if (ch == '\t') {
         fprintf(fout, "        ");
@@ -114,7 +114,7 @@ int wrapped_main() {
       input = fgetc(handler[i]);
       ch = 0;
     }
-    fprintf(fout, "\\n\";" ENDL ENDL);
+    fprintf(fout, "\\r\n\";" ENDL ENDL);
   }
   for (i = 0; i < LICENSE_COUNT; ++i) {
     fclose(handler[i]);

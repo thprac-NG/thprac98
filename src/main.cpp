@@ -12,52 +12,52 @@
 
 void print_help_message() {
   print_string(
-      "Usage: thprac98 [options] file...\n"
-      "Options:\n"
-      "  --help                 Show this help message\n"
-      "  --launch               Launch the game\n"
-      "  --force                Ignore any warning\n"
-      "  --without-thprac       Launch the game without thprac injected\n"
-      "  --links                Show \"Links\"\n"
-      "  --reset                Reset configuration file\n"
-      "  --roll                 Use the rolling feature\n"
-      "  --scan <game version>  Scan the file location of a game\n"
-      "  --export               Export the save data of a game\n"
-      "  --import               Import the save data of a game\n"
-      "  --license              Show license\n"
-      "  --version              Show the version of thprac98\n"
-      "  --no-pause             No pause after printing several lines\n");
+      "Usage: thprac98 [options] file...\r\n"
+      "Options:\r\n"
+      "  --help                 Show this help message\r\n"
+      "  --launch               Launch the game\r\n"
+      "  --force                Ignore any warning\r\n"
+      "  --without-thprac       Launch the game without thprac injected\r\n"
+      "  --links                Show \"Links\"\r\n"
+      "  --reset                Reset configuration file\r\n"
+      "  --roll                 Use the rolling feature\r\n"
+      "  --scan <game version>  Scan the file location of a game\r\n"
+      "  --export               Export the save data of a game\r\n"
+      "  --import               Import the save data of a game\r\n"
+      "  --license              Show license\r\n"
+      "  --version              Show the version of thprac98\r\n"
+      "  --no-pause             No pause after printing several lines\r\n");
   return;
 }
 void print_links(bool pause = true) {
-  print_string("(There's currently no links)\n", pause);
+  print_string("(There's currently no links)\r\n", pause);
   return;
 }
 void print_version() {
   print_string(
 #ifndef THPRAC98_DEV
       "thprac98 ver." THPRAC98_VERSION
-      "\n"
+      "\r\n"
 #else
       "thprac98 ver." THPRAC98_VERSION " (Build: " __DATE__ " " __TIME__
-      ")\n"
+      ")\r\n"
 #endif
       "Website: https://github.com/thprac-NG/thprac98"
-      "\n"
+      "\r\n"
       "Website (main project thprac): https://github.com/touhouworldcup/thprac"
-      "\n"
-      "Special Thanks: \n"
-      "* nmlgc, for their ReC98 project, which provides tremendous help;\n"
+      "\r\n"
+      "Special Thanks: \r\n"
+      "* nmlgc, for their ReC98 project, which provides tremendous help;\r\n"
       "* Ethy1ene, hicode002, and Mr_Alert, for their various help on PC-98 "
-      "hardware\n"
-      "  and software;\n"
-      "* ...and you!\n");
+      "hardware\r\n"
+      "  and software;\r\n"
+      "* ...and you!\r\n");
   return;
 }
 void print_one_license(const char* name, const char* license_str,
                        bool pause = true) {
   print_delimiter();
-  printf("The license of %s:\n", (const char far*)name);
+  printf("The license of %s:\r\n", (const char far*)name);
   if (pause) {
     wait_for_enter_key();
   }
@@ -105,7 +105,7 @@ const char* param_str[command_param_t::LAST_ENUM] = {
 bool param_set[command_param_t::LAST_ENUM];
 
 void print_conflict_parameter_message(const char* str1, const char* str2) {
-  printf("Conflicting parameters found: '%s' and '%s'.\n",
+  printf("Conflicting parameters found: '%s' and '%s'.\r\n",
          (const char far*)str1, (const char far*)str2);
   return;
 }
@@ -130,7 +130,7 @@ int wrapped_main(int argc, char far** argv) {
           pause = false;
         }
         if (param_set[j]) {
-          printf("Multiple command: %s\n", (const char far*)param_str[j]);
+          printf("Multiple command: %s\r\n", (const char far*)param_str[j]);
           print_help_message();
           return 0;
         }
@@ -145,7 +145,7 @@ int wrapped_main(int argc, char far** argv) {
         break;
       }
       if (_fstrlen(argv[i]) >= 2u && argv[i][0] == '-' && argv[i][1] == '-') {
-        printf("Unknown parameter: '%s'\n", (const char far*)argv[i]);
+        printf("Unknown parameter: '%s'\r\n", (const char far*)argv[i]);
         print_help_message();
         return 0;
       }

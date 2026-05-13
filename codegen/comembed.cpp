@@ -25,15 +25,16 @@ int init_com_file_size(void) {
     snprintf(tmp_str, sizeof(tmp_str), "th0%d.com", i);
     fin = fopen(tmp_str, "r");
     if (fin == NULL) {
-      printf("1Cannot open file %s.\n", (const char far *)(tmp_str));
+      printf("1Cannot open file %s.\r\n", (const char far *)(tmp_str));
       print_errno();
       return 1;
     }
     fseek(fin, 0, SEEK_END);
     tmp = ftell(fin);
     if (tmp > INT_MAX) {
-      printf("th0%d.com is too large: Expecting a size <= %d, but found %ld.\n",
-             i, INT_MAX, tmp);
+      printf(
+          "th0%d.com is too large: Expecting a size <= %d, but found %ld.\r\n",
+          i, INT_MAX, tmp);
       return 1;
     }
     com_file_size[i] = tmp;
@@ -55,19 +56,19 @@ int generate_tsrdata(char far *path) {
   // Generate tsrdata.hpp
   if (snprintf(tmp_str, sizeof(tmp_str), "%s/tsrdata.hpp",
                (const char far *)(path), i) == sizeof(tmp_str)) {
-    printf("Argument too long: length of `%s/tsrdata.hpp' should be <%d.\n",
+    printf("Argument too long: length of `%s/tsrdata.hpp' should be <%d.\r\n",
            (const char far *)(path), i, sizeof(tmp_str));
     return 1;
   }
   fout = fopen(tmp_str, "w");
   if (fout == NULL) {
-    printf("2Cannot open file %s.\n", (const char far *)(tmp_str));
+    printf("2Cannot open file %s.\r\n", (const char far *)(tmp_str));
     print_errno();
     return 1;
   }
   fprintf(fout, THPRAC98_AUTOGEN_WARNING_TEXT);
   for (i = 1; i <= COM_FILE_COUNT; ++i) {
-    fprintf(fout, "extern unsigned char th0%d_com_data[%d];\n", i,
+    fprintf(fout, "extern unsigned char th0%d_com_data[%d];\r\n", i,
             com_file_size[i]);
   }
   fclose(fout);
@@ -75,25 +76,25 @@ int generate_tsrdata(char far *path) {
   // Generate tsrdata.cpp
   if (snprintf(tmp_str, sizeof(tmp_str), "%s/tsrdata.cpp",
                (const char far *)(path), i) == sizeof(tmp_str)) {
-    printf("Argument too long: length of `%s/tsrdata.cpp' should be <%d.\n",
+    printf("Argument too long: length of `%s/tsrdata.cpp' should be <%d.\r\n",
            (const char far *)(path), i, sizeof(tmp_str));
     return 1;
   }
   fout = fopen(tmp_str, "w");
   if (fout == NULL) {
-    printf("3Cannot open file %s.\n", (const char far *)(tmp_str));
+    printf("3Cannot open file %s.\r\n", (const char far *)(tmp_str));
     print_errno();
     return 1;
   }
   fprintf(fout, THPRAC98_AUTOGEN_WARNING_TEXT);
-  fputs("#include \"src/tsrdata.hpp\"\n", fout);
+  fputs("#include \"src/tsrdata.hpp\"\r\n", fout);
   for (i = 1; i <= COM_FILE_COUNT; ++i) {
-    fprintf(fout, "unsigned char th0%d_com_data[%d] = {\n", i,
+    fprintf(fout, "unsigned char th0%d_com_data[%d] = {\r\n", i,
             com_file_size[i]);
     snprintf(tmp_str, sizeof(tmp_str), "th0%d.com", i);
     fin = fopen(tmp_str, "r");
     if (fin == NULL) {
-      printf("4Cannot open file %s.\n", (const char far *)(tmp_str));
+      printf("4Cannot open file %s.\r\n", (const char far *)(tmp_str));
       print_errno();
       fclose(fout);
       return 1;
@@ -171,7 +172,7 @@ int backpatch_com_offset(void) {
     snprintf(tmp_str, sizeof(tmp_str), "th0%d.com", i);
     fin = fopen(tmp_str, "r");
     if (fin == NULL) {
-      printf("5Cannot open file %s.\n", (const char far *)(tmp_str));
+      printf("5Cannot open file %s.\r\n", (const char far *)(tmp_str));
       print_errno();
       return 1;
     }
@@ -230,7 +231,7 @@ int backpatch_com_offset(void) {
     fclose(fin2);
     fclose(fin3);
     if (com_data_pos == (unsigned long)(-1)) {
-      printf("Cannot find occurence of th0%d.com in thprac98.exe.\n", i);
+      printf("Cannot find occurence of th0%d.com in thprac98.exe.\r\n", i);
       print_errno();
       return 1;
     }
@@ -273,12 +274,12 @@ int backpatch_com_offset(void) {
     }
     fclose(fin);
     if (!found_label) {
-      printf("Cannot find label %s in entrance.map.\n",
+      printf("Cannot find label %s in entrance.map.\r\n",
              (const char far *)(tmp_str));
       return 1;
     }
     if (com_info_seg != 0) {
-      printf("Incorrect segment of label %s: Expecting 0000h, found %04Xh.\n",
+      printf("Incorrect segment of label %s: Expecting 0000h, found %04Xh.\r\n",
              (const char far *)(tmp_str), com_info_seg);
       return 1;
     }
@@ -306,7 +307,7 @@ int backpatch_com_offset(void) {
     if (magic_check != 0x99618848l) {
       printf(
           "Magic number doesn't match at offset %08lX of thprac98.exe: "
-          "Expected %08lX, but found %08lX.\n",
+          "Expected %08lX, but found %08lX.\r\n",
           (unsigned long)(com_info_off), 0x99618848l, magic_check);
       fclose(fin);
       return 1;
@@ -322,7 +323,7 @@ int backpatch_com_offset(void) {
     fclose(fin);
     printf(
         "Patched dword %08lX and word %04X into offset %08lX in "
-        "THPRAC98.EXE.\n",
+        "THPRAC98.EXE.\r\n",
         com_data_pos, com_file_size[i], com_info_off);
   }
   return 0;
@@ -336,26 +337,26 @@ int wrapped_main(int argc, char far **argv) {
   int mode = -1, i = 0;
 
   if (argc != 2 && argc != 3) {
-    printf("Incorrect argument count: Expecting 2 or 3, found %d.\n", argc);
+    printf("Incorrect argument count: Expecting 2 or 3, found %d.\r\n", argc);
     return 1;
   }
   if (argv[1][1] != '\0' || (argv[1][0] != '1' && argv[1][0] != '2')) {
-    printf("Invalid mode: Expecting 1 or 2, found %s at %04X:%04X.\n",
+    printf("Invalid mode: Expecting 1 or 2, found %s at %04X:%04X.\r\n",
            (const char far *)(argv[1]), FP_SEG(argv[1]), FP_OFF(argv[1]));
     printf("String content: ");
     for (i = 0; argv[1][i] != '\0'; ++i) {
       printf("%02Xh ", (unsigned)(argv[1][i]));
     }
-    printf("\n");
+    printf("\r\n");
     return -1;
   }
   if (argv[1][0] == '1' && argc != 3) {
-    printf("Incorrect argument count: Expecting 3 for mode 1, found %d.\n",
+    printf("Incorrect argument count: Expecting 3 for mode 1, found %d.\r\n",
            argc);
     return 1;
   }
   if (argv[1][0] == '2' && argc != 2) {
-    printf("Incorrect argument count: Expecting 2 for mode 2, found %d.\n",
+    printf("Incorrect argument count: Expecting 2 for mode 2, found %d.\r\n",
            argc);
     return 1;
   }

@@ -328,7 +328,7 @@ int print_string(const char *str, bool pause = true, bool kanji = true,
                  int rows = 23);
 
 inline void print_errno(void) {
-  printf("Errno: 0x%04X\n", errno_);
+  printf("Errno: 0x%04X\r\n", errno_);
   return;
 }
 

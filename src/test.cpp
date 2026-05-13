@@ -4,7 +4,6 @@
 #include "src/tui/chars.hpp"
 #include "src/utils.hpp"
 
-
 int test_stdint(void) {
 #define test_stdint_macro(bit_length)                                \
   bit_length * !((sizeof(uint##bit_length) * 8 == bit_length) &&     \
@@ -188,9 +187,9 @@ void test_function(const char *name, int test_func(void)) {
   fflush(stdout);
   int ret = test_func();
   if (ret == 0) {
-    printf("OK.\n");
+    printf("OK.\r\n");
   } else {
-    printf("failed (code: %d).\n", ret);
+    printf("failed (code: %d).\r\n", ret);
   }
   return;
 }

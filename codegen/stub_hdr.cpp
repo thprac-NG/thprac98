@@ -2,7 +2,9 @@
 #include "src/mystdlib/stdio.hpp"
 #include "src/utils.hpp"
 
-const int MAX_RELOCATION_TABLE_SIZE = 16;  // must be a multiple of 8
+// This number is to make sure that the new header paragraph is always 32,
+// matching what tlink will generate.
+const int MAX_RELOCATION_TABLE_SIZE = 112;  // must be a multiple of 8
 uint16 relocation_table[MAX_RELOCATION_TABLE_SIZE + 1][2];
 
 // Reference:
@@ -61,12 +63,12 @@ int wrapped_main(int argc, char far **argv) {
   if (argc != 3) {
     printf(
         "stub_hdr: Incorrect argument. "
-        "Expecting stub_hdr [input_exe] [output_exe].\n");
+        "Expecting stub_hdr [input_exe] [output_exe].\r\n");
     return 1;
   }
   FILE *fin = fopen(argv[1], "r");
   if (fin == NULL) {
-    printf("stub_hdr: Cannot open input file %s.\n", argv[1]);
+    printf("stub_hdr: Cannot open input file %s.\r\n", argv[1]);
     return 6;
   }
 
@@ -82,7 +84,7 @@ int wrapped_main(int argc, char far **argv) {
   }
   exe_header_t *exe_header = (exe_header_t *)(header);
   if (exe_header->header_paragraphs >= 100) {
-    printf("stub_hdr: Too many (%d) header paragraphs, should be < 100.\n",
+    printf("stub_hdr: Too many (%d) header paragraphs, should be < 100.\r\n",
            exe_header->header_paragraphs);
     fclose(fin);
     return 5;
@@ -96,12 +98,12 @@ int wrapped_main(int argc, char far **argv) {
     i++;
   }
   if (ch == EOF) {
-    printf("stub_hdr: %s has an incomplete header.\n", argv[1]);
+    printf("stub_hdr: %s has an incomplete header.\r\n", argv[1]);
     fclose(fin);
     return 2;
   }
   if (exe_header->relocation_items > MAX_RELOCATION_TABLE_SIZE) {
-    printf("stub_hdr: Too many (%d) relocation items, should be <= %d.\n",
+    printf("stub_hdr: Too many (%d) relocation items, should be <= %d.\r\n",
            exe_header->relocation_items, MAX_RELOCATION_TABLE_SIZE);
     fclose(fin);
     return 3;
@@ -109,7 +111,8 @@ int wrapped_main(int argc, char far **argv) {
   if (exe_header->relocation_items > 0 &&
       (exe_header->relocation_table_offset + exe_header->relocation_items * 4 >
        exe_header->header_paragraphs * 0x20)) {
-    printf("stub_hdr: Relocation table is not completely inside the header.\n");
+    printf(
+        "stub_hdr: Relocation table is not completely inside the header.\r\n");
     return 4;
   }
 
@@ -152,12 +155,12 @@ int wrapped_main(int argc, char far **argv) {
 
   fin = fopen(argv[1], "r");
   if (fin == NULL) {
-    printf("stub_hdr: Cannot open input file %s.\n", argv[1]);
+    printf("stub_hdr: Cannot open input file %s.\r\n", argv[1]);
     return 6;
   }
   FILE *fout = fopen(argv[2], "w");
   if (fout == NULL) {
-    printf("stub_hdr: Cannot open output file %s.\n", argv[2]);
+    printf("stub_hdr: Cannot open output file %s.\r\n", argv[2]);
     return 7;
   }
   for (i = 0; i < old_header_paragraphs * 0x10; ++i) {
