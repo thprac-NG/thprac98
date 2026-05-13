@@ -148,9 +148,7 @@ proc my_int2f far
         assume  ds:nothing
         cmp     ah, [cs:mux_id]
         je      @@L1
-        pushf
-        call    [dword ptr cs:old_int2f]
-        jmp     @@return_without_pop
+        jmp     [dword ptr cs:old_int2f]
 @@L1:
         cmp     al, 0
         jne     @@L2
