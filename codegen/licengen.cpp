@@ -78,9 +78,10 @@ int wrapped_main() {
         input = fgetc(handler[i]);
         continue;
       }
-      if (ch == '\r\n') {
-        fprintf(fout, "\\r\n");
+      if (ch == '\n') {
+        fprintf(fout, "\\r\\n");
         col += 2;
+      } else if (ch == '\r') {
       } else if (ch == '\t') {
         fprintf(fout, "        ");
         col += 8;
