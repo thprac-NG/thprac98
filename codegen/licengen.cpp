@@ -1,7 +1,6 @@
 // LICENse .(hpp/cpp) GENerator .cpp
-#include <stdio.h>
-
 #include "codegen/common.hpp"
+#include "src/mystdlib/stdio.hpp"
 #include "src/utils.hpp"
 
 #define THPRAC98_LICENSE_WARNING_TEXT                                      \
@@ -28,21 +27,39 @@ void close_all_handler() {
   return;
 }
 
-int wrapped_main() {
+int wrapped_main(int argc, char far** argv) {
   int i = 0;
+  if (argc != 2) {
+    printf("Incorrect argument count: Expecting 2, found %d.\r\n", argc);
+    return 1;
+  }
   for (i = 0; i < LICENSE_COUNT; ++i) {
-    sprintf(buffer, "codegen/licenses/%s", license_filename[i]);
+    if (snprintf(buffer, sizeof(buffer), "%s/codegen/licenses/%s", argv[1],
+                 (const char far*)(license_filename[i])) == sizeof(buffer)) {
+      printf(
+          "Argument too long: length of `%s/codegen/licenses/%s' should be "
+          "<%d.\r\n",
+          argv[1], (const char far*)(license_filename[i]));
+      return 1;
+    }
     handler[i] = fopen(buffer, "rb");
     if (handler[i] == NULL) {
-      printf("Cannot open file codegen/licenses/%s.\r\n", license_filename[i]);
+      printf("Cannot open file %s.\r\n", (const char far*)(buffer));
       close_all_handler();
       return 1;
     }
   }
 
-  FILE* fout = fopen("src/license.hpp", "w");
+  if (snprintf(buffer, sizeof(buffer), "%s/src/license.hpp", argv[1]) ==
+      sizeof(buffer)) {
+    printf(
+        "Argument too long: length of `%s/src/license.hpp' should be <%d.\r\n",
+        argv[1]);
+    return 1;
+  }
+  FILE* fout = fopen(buffer, "w");
   if (fout == NULL) {
-    printf("Cannot open file src/license.hpp.\r\n");
+    printf("Cannot open file %s.\r\n", (const char far*)(buffer));
     close_all_handler();
     return 1;
   }
@@ -50,23 +67,33 @@ int wrapped_main() {
           "#ifndef THPRAC98_SRC_LICENSE_HPP_" ENDL
           "#define THPRAC98_SRC_LICENSE_HPP_" ENDL "" ENDL);
   for (i = 0; i < LICENSE_COUNT; ++i) {
-    fprintf(fout, "extern const char* const license_%s;" ENDL, license_name[i]);
+    fprintf(fout, "extern const char* const license_%s;" ENDL,
+            (const char far*)(license_name[i]));
   }
   fprintf(fout, ENDL "#endif  // #ifndef THPRAC98_SRC_LICENSE_HPP_");
   fclose(fout);
 
   int input = 0, col = 0;
   unsigned ch = 0;
-  fout = fopen("src/license.cpp", "w");
+
+  if (snprintf(buffer, sizeof(buffer), "%s/src/license.cpp", argv[1]) ==
+      sizeof(buffer)) {
+    printf(
+        "Argument too long: length of `%s/src/license.cpp' should be <%d.\r\n",
+        argv[1]);
+    return 1;
+  }
+  fout = fopen(buffer, "w");
   if (fout == NULL) {
-    printf("Cannot open file src/license.cpp.\r\n");
+    printf("Cannot open file %s.\r\n", (const char far*)(buffer));
     close_all_handler();
     return 1;
   }
   fprintf(fout, THPRAC98_LICENSE_WARNING_TEXT
           "#include \"src/license.hpp\"" ENDL ENDL);
   for (i = 0; i < LICENSE_COUNT; ++i) {
-    fprintf(fout, "const char* const license_%s =\r\n", license_name[i]);
+    fprintf(fout, "const char* const license_%s =\r\n",
+            (const char far*)(license_name[i]));
     fprintf(fout, INDENT INDENT "\"");
     input = fgetc(handler[i]);
     col = 5;
@@ -115,18 +142,10 @@ int wrapped_main() {
       input = fgetc(handler[i]);
       ch = 0;
     }
-    fprintf(fout, "\\r\n\";" ENDL ENDL);
+    fprintf(fout, "\\r\\n\";" ENDL ENDL);
   }
   for (i = 0; i < LICENSE_COUNT; ++i) {
     fclose(handler[i]);
   }
   return 0;
-}
-
-extern "C" int main_wrapper(char const far* program_name, int argument_size,
-                            char const far* raw_argument);
-
-int main_wrapper(char const far* program_name, int argument_size,
-                 char const far* raw_argument) {
-  return wrapped_main();
 }

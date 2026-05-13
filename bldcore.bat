@@ -109,7 +109,7 @@ if not %2.==codegen. goto :endCdGen
   goto :bldExe
   :lcnGnRet
   echo [INFO] Generating license.hpp and license.cpp...
-  %shell% licengen.exe
+  %shell% licengen.exe ..
   if errorlevel 1 goto :errRet
   echo [INFO] Successfully generated all the code.
   goto :cleanExt
