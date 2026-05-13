@@ -29,7 +29,7 @@ if not %1.==. goto :end_build
     del entrance.exe
   )
   echo [build.bat] Generating tsrdata.hpp and tsrdata.cpp...
-  %ReC98_DOS% comembed.exe 1 || goto :error
+  %ReC98_DOS% comembed.exe 1 ..\src || goto :error
 
   echo [build.bat] Building thprac98.exe...
   if exist thprac98.exe del thprac98.exe
@@ -54,7 +54,7 @@ if not %1.==. goto :end_build
   :skip_modify_header
 
   echo [build.bat] Embedding .COM files...
-  %ReC98_DOS% comembed.exe 2 || goto :error
+  %ReC98_DOS% comembed.exe 2 . || goto :error
 
   del tmp\args
   echo [build.bat] Successfully built thprac98.exe.
