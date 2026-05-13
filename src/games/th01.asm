@@ -4,7 +4,7 @@ radix 10  ; The immediates will be recognized as decimal by default
 locals  ; Enables block-scoped symbols
 p386
 
-segment cseg para public 'CODE'
+segment cseg para public 'CODE' USE16
 org 100h
         assume  cs:cseg, ds:cseg
 
