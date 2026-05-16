@@ -4,7 +4,7 @@ radix 10  ; The immediates will be recognized as decimal by default
 locals  ; Enables block-scoped symbols
 p386
 
-segment cseg para public 'CODE' USE16
+segment cseg para private 'CODE' USE16
 org 100h
         assume  cs:cseg, ds:cseg
 
@@ -17,14 +17,12 @@ FX_COUNT        EQU (BS_MENU_HEIGHT - 2)  ; Should be no greater than 6,
                                           ; otherwise INT18h/04h won't work
                                           ; properly.
 
-bs_frame1       db '+-------------------+', 0
-bs_frame2       db '|                   |', 0
-f1_text         db  'F1: Invincible     ', 0
-f2_text         db  'F2: Inf. Lives     ', 0
-f3_text         db  'F3: Inf. Bombs     ', 0
-f4_text         db  'F4: Time Lock      ', 0
-f5_text         db  'F5: Inf. Card Combo', 0
-f6_text         db  'F6: Inf. Item Combo', 0
+f1_text         db 'F1: Invincible', 0
+f2_text         db 'F2: Inf. Lives', 0
+f3_text         db 'F3: Inf. Bombs', 0
+f4_text         db 'F4: Time Lock', 0
+f5_text         db 'F5: Inf. Card Combo', 0
+f6_text         db 'F6: Inf. Item Combo', 0
 fx_text         dw offset f1_text, offset f2_text, offset f3_text, \
                    offset f4_text, offset f5_text, offset f6_text
 
@@ -34,6 +32,7 @@ bs_covered_tram_attr    dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
 ; The high byte represents "down", and the low byte alternates each time pressed
 bs_state        dw 0
 fx_state        dw FX_COUNT dup(0)
+prac_menu_state dw 0
 
 old_int8        dd ?
 old_int7        dd ?
@@ -418,6 +417,36 @@ harry_up_animate        inject_code_t { \
         variable_mem = offset harry_up_animate_var, \
 }
 
+proc my_0b50_0775 far
+        push    ax
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h
+        mov     [word ptr cs:temp_proc], 627Ah
+        mov     [word ptr cs:temp_proc + 2], ax
+        push    ds 159h
+        call    [dword ptr cs:temp_proc]
+        add     sp, 4
+        mov     ah, [cs:mux_id]
+        mov     al, 12h
+        int     2Fh
+        pop     ax
+        ret
+endp my_0b50_0775
+
+proc my_1924_0364 far
+        push    ax
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h
+        mov     [word ptr cs:temp_proc], 0C6Ah
+        mov     [word ptr cs:temp_proc + 2], ax
+        call    [dword ptr cs:temp_proc]
+        mov     ah, [cs:mux_id]
+        mov     al, 12h
+        int     2Fh
+        pop     ax
+        ret
+endp my_1924_0364
+
 inject_failed   db 0
 
 proc inject near
@@ -623,36 +652,6 @@ local @@must_match:byte
         ret
 endp inject_one
 
-proc my_0b50_0775 far
-        push    ax
-        mov     ax, [cs:cur_psp]
-        add     ax, 10h
-        mov     [word ptr cs:temp_proc], 627Ah
-        mov     [word ptr cs:temp_proc + 2], ax
-        push    ds 159h
-        call    [dword ptr cs:temp_proc]
-        add     sp, 4
-        mov     ah, [cs:mux_id]
-        mov     al, 12h
-        int     2Fh
-        pop     ax
-        ret
-endp my_0b50_0775
-
-proc my_1924_0364 far
-        push    ax
-        mov     ax, [cs:cur_psp]
-        add     ax, 10h
-        mov     [word ptr cs:temp_proc], 0C6Ah
-        mov     [word ptr cs:temp_proc + 2], ax
-        call    [dword ptr cs:temp_proc]
-        mov     ah, [cs:mux_id]
-        mov     al, 12h
-        int     2Fh
-        pop     ax
-        ret
-endp my_1924_0364
-
 ; Returns: Whether the FX status has been updated.
 proc maintain_bs_menu_ui near
 local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
@@ -796,22 +795,10 @@ proc show_bs_menu near
         cmp     [byte ptr cs:bs_state + 1], 0
         je      @@return
 
-        push    TEXT_WHITE 0 0 offset bs_frame1 ds
-        call    print_str
+        push    TEXT_WHITE BS_MENU_HEIGHT BS_MENU_WIDTH 0 0
+        call    print_frame
         add     sp, 10
-        push    TEXT_WHITE (BS_MENU_HEIGHT - 1) 0 offset bs_frame1 ds
-        call    print_str
-        add     sp, 10
-        mov     dx, 1
-@@L6:
-        push    dx
-        push    TEXT_WHITE dx 0 offset bs_frame2 ds
-        call    print_str
-        add     sp, 10
-        pop     dx
-        inc     dx
-        cmp     dx, (BS_MENU_HEIGHT - 1)
-        jne     @@L6
+
         mov     dx, 1
 @@L7:
         mov     bx, offset fx_state - 1
@@ -839,13 +826,710 @@ proc show_bs_menu near
         ret
 endp show_bs_menu
 
+; Show the practise menu. Might be called by the game process.
+proc show_practise_menu far
+        push    ax ds
+        mov     ax, cs
+        mov     ds, ax
+
+        mov     [prac_menu_state], 1
+        push    (offset playing_mode_slider) 0FFFFh
+        push    (offset practise_menu_window)
+        call    window_insert_component
+        push    (offset route_slider) (offset playing_mode_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component
+        push    (offset stage_slider) (offset route_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component
+        push    (offset life_slider) (offset stage_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component
+        push    (offset bomb_slider) (offset life_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component
+        add     sp, 24
+
+        push    offset practise_menu_window
+        call    draw_window
+        add     sp, 2
+
+        pop     ds ax
+        ret
+endp show_practise_menu
+
+; ------------------------------ Practise Menu UI ----------------------------
+
+struc ui_window
+        top_left_x              db 0
+        top_left_y              db 0
+        width                   db 2
+        height                  db 2
+        first_component_off     dw 0FFFFh
+        tail_component_off      dw 0FFFFh
+        cur_component_off       dw 0FFFFh
+        default_slider_width    db 0
+        cur_drawing_x           db 1
+        cur_drawing_y           db 1
+ends ui_window
+
+practise_menu_window    ui_window {     \
+        top_left_x              = 20,   \
+        top_left_y              = 10,   \
+        width                   = 34,   \
+        height                  = 10,   \
+        default_slider_width    = 22    \
+}
+
+UI_SLIDER_ENUM  EQU 0
+
+struc ui_slider
+        window_off              dw 0FFFFh
+        prev_component_off      dw 0FFFFh
+        next_component_off      dw 0FFFFh
+        ui_type                 db UI_SLIDER_ENUM
+        value                   dd 0
+        min_value               dd 0
+        max_value               dd 0
+        step                    dw 1            ; must be a divisor of
+                                                ; (max_value - min_value) and
+                                                ; (value - min_value)
+        bottom_indicator        db 1
+        width                   db 0FFh         ; 0FFh: use window's default
+                                                ; must be odd
+        text_func_off           dw ?            ; A near procedure, of type
+                                                ; (const char near*)(*)(dword).
+                                                ; For some reason, you can't
+                                                ; correctly set a default value
+                                                ; here.
+        label_off               dw 0FFFFh
+ends ui_slider
+
+; A dword value can have at most 10 figures, plus the terminating null.
+dword_to_dec_str        db 11 dup (0)
+; Argument 1: The high word of the dword to be converted
+; Argument 2: The lower word of the dword to be converted
+; Return: The offset of a ASCIZ string containing the decimal representation of
+;         the dword
+proc dword_to_dec near
+arg @@in_lo:word, @@in_hi:word
+        push    ds di
+
+        shr     eax, 16
+        push    ax              ; push high word of eax
+        push    bx
+        shr     ebx, 16
+        push    bx              ; push ebx
+        push    dx
+        shr     edx, 16
+        push    dx              ; push edx
+
+        mov     ax, cs
+        mov     ds, ax
+        xor     edx, edx        ; edx = 0
+        mov     ax, 10
+        cwd
+        xchg    eax, ebx        ; ebx = 10
+        mov     ax, [@@in_hi]
+        shl     eax, 16
+        mov     ax, [@@in_lo]   ; eax = in
+        mov     di, (offset dword_to_dec_str + 9)
+@@L1:
+        xor     edx, edx
+        div     ebx             ; eax = eax / 10, edx = eax % 10
+        add     dx, '0'
+        mov     [byte ptr ds:di], dl
+        dec     di
+        test    eax, eax
+        jnz     @@L1
+        inc     di
+
+        pop     dx
+        shl     edx, 16
+        pop     dx              ; pop edx
+        pop     bx
+        shl     ebx, 16
+        pop     bx              ; pop ebx
+        pop     ax
+        shl     eax, 16         ; pop high word of eax
+        mov     ax, di
+        pop     di ds
+        ret
+endp dword_to_dec
+
+playing_mode_original_str       db 'Original', 0
+playing_mode_custom_str         db 'Custom', 0
+proc playing_mode_text_func near
+arg @@in_lo:word, @@in_hi:word
+        mov     ax, offset playing_mode_custom_str
+        cmp     [@@in_lo], 0
+        jne     @@L1
+        mov     ax, offset playing_mode_original_str
+@@L1:
+        ret
+endp playing_mode_text_func
+playing_mode_label      db 'Mode', 0
+playing_mode_slider     ui_slider {                             \
+        value           = 0,                                    \
+        min_value       = 0,                                    \
+        max_value       = 1,                                    \
+        label_off       = offset playing_mode_label,            \
+        text_func_off   = offset cseg:playing_mode_text_func    \
+}
+route_makai_str         db 'Makai', 0
+route_jigoku_str        db 'Jigoku', 0
+proc route_text_func near
+arg @@in_lo:word, @@in_hi:word
+        mov     ax, offset route_jigoku_str
+        cmp     [@@in_lo], 0
+        jne     @@L1
+        mov     ax, offset route_makai_str
+@@L1:
+        ret
+endp route_text_func
+route_label      db 'Route', 0
+route_slider    ui_slider {                                     \
+        value           = 0,                             \
+        min_value       = 0,                             \
+        max_value       = 1,                             \
+        label_off       = offset route_label,            \
+        text_func_off   = offset cseg:route_text_func    \
+}
+stage_slider_label      db 'Stage', 0
+stage_slider    ui_slider {                             \
+        value           = 1,                            \
+        min_value       = 1,                            \
+        max_value       = 35,                           \
+        label_off       = offset stage_slider_label,    \
+        text_func_off   = offset cseg:dword_to_dec      \
+}
+life_slider_label       db 'Life', 0
+life_slider     ui_slider {                             \
+        value           = 6,                            \
+        min_value       = 0,                            \
+        max_value       = 6,                            \
+        label_off       = offset life_slider_label,     \
+        text_func_off   = offset cseg:dword_to_dec      \
+}
+bomb_slider_label       db 'Bomb', 0
+bomb_slider     ui_slider {                             \
+        value           = 5,                            \
+        min_value       = 0,                            \
+        max_value       = 5,                            \
+        label_off       = offset bomb_slider_label,     \
+        text_func_off   = offset cseg:dword_to_dec      \
+}
+
+; Initialize the component linked list of a window object, then print it onto
+; the screen. Unused.
+; Argument 1: The offset of the window object
+proc init_window near
+arg @@window_off:word
+        push    ax ds bx
+        mov     ax, cs
+        mov     ds, ax
+
+        ; Initialize the component linked list
+        mov     bx, [@@window_off]
+        xor     ax, ax
+        dec     ax
+        mov     [bx + ui_window.first_component_off], ax
+        mov     [bx + ui_window.tail_component_off], ax
+        mov     [bx + ui_window.cur_component_off], ax
+
+        ; Print the frame onto the screen
+        mov     ah, 0
+        push    TEXT_WHITE
+        mov     al, [bx + ui_window.height]
+        push    ax
+        mov     al, [bx + ui_window.width]
+        push    ax
+        mov     al, [bx + ui_window.top_left_y]
+        push    ax
+        mov     al, [bx + ui_window.top_left_x]
+        push    ax
+        call    print_frame
+        add     sp, 10
+
+        pop     bx ds ax
+        ret
+endp init_window
+
+; Insert a UI component to the window.
+; Argument 1: The offset of the window object
+; Argument 2: The offset of the UI component object in the linked list to be
+;             injected after. 0FFFFh means insert to the begin of the list.
+; Argument 3: The offset of the UI component object to be injected
+proc window_insert_component near
+arg @@window_off:word, @@pos_off:word, @@component_off:word
+        push    bx di si ax ds
+        mov     ax, cs
+        mov     ds, ax
+
+        ; Insert the component to the component linked list of the window
+        mov     bx, [@@window_off]
+        mov     di, [@@component_off]
+        mov     [di + ui_slider.window_off], bx
+        cmp     [@@pos_off], 0FFFFh
+        jne     @@insert_after_an_object
+        ;   Insert to the begin of the list
+        mov     [di + ui_slider.prev_component_off], 0FFFFh
+        mov     si, [bx + ui_window.first_component_off]
+        mov     [di + ui_slider.next_component_off], si
+        mov     [bx + ui_window.first_component_off], di
+        cmp     si, 0FFFFh
+        je      @@L1
+        mov     [si + ui_slider.prev_component_off], di
+        jmp     @@L3
+@@L1:
+        mov     [bx + ui_window.cur_component_off], di
+@@L3:
+        jmp     @@end_of_inserting
+@@insert_after_an_object:
+        mov     si, [@@pos_off]
+        mov     si, [si + ui_slider.next_component_off]
+        mov     [di + ui_slider.next_component_off], si
+        cmp     si, 0FFFFh
+        je      @@L2
+        mov     [si + ui_slider.prev_component_off], di
+@@L2:
+        mov     si, [@@pos_off]
+        mov     [si + ui_slider.next_component_off], di
+        mov     [di + ui_slider.prev_component_off], si
+@@end_of_inserting:
+
+        pop     ds ax si di bx
+        ret
+endp window_insert_component
+
+; Draw a window to the screen.
+; Argument 1: The offset of the window object
+proc draw_window near
+arg @@window_off:word
+        push    ax bx di
+        mov     bx, [@@window_off]
+
+        ; Print the outer frame
+        push    TEXT_WHITE
+        mov     al, [bx + ui_window.height]
+        cbw
+        push    ax
+        mov     al, [bx + ui_window.width]
+        cbw
+        push    ax
+        mov     al, [bx + ui_window.top_left_y]
+        cbw
+        push    ax
+        mov     al, [bx + ui_window.top_left_x]
+        cbw
+        push    ax
+        call    print_frame
+        add     sp, 10
+
+        ; Draw the components according to their type
+        mov     di, [bx + ui_window.first_component_off]
+@@draw_components_loop:
+        cmp     di, 0FFFFh
+        je      @@draw_components_loop_break
+        cmp     [di + ui_slider.ui_type], UI_SLIDER_ENUM
+        je      @@draw_slider
+        jmp     @@draw_nothing
+@@draw_slider:
+        ; The bytes cur_drawing_x and cur_drawing_y are placed next to each
+        ; other, so the offset cur_drawing_x can also be treated as a packed
+        ; word containing X and Y coordinate.
+        mov     ax, [word ptr bx + ui_window.cur_drawing_x]
+        add     ax, [word ptr bx + ui_window.top_left_x]
+        push    ax
+        xor     ax, ax
+        cmp     di, [word ptr bx + ui_window.cur_component_off]
+        jne     @@L1
+        inc     ax
+@@L1:
+        push    ax di
+        call    draw_slider
+        add     sp, 6
+        inc     [bx + ui_window.cur_drawing_y]
+        jmp     @@draw_end
+@@draw_nothing:
+@@draw_end:
+        mov     di, [di + ui_slider.next_component_off]
+        jmp     @@draw_components_loop
+@@draw_components_loop_break:
+
+        pop     di bx ax
+        ret
+endp draw_window
+
+; Draw a slider onto the screen.
+; Component:
+;                        <-    value    ->    Label
+;               width:  | 2 |  width  | 2 | 1 + strlen(label)
+; The characters <- and -> are actually JIS 0x222B and 0x222A, respectively.
+; There is a halfwidth space between the character '->' and the content of the
+; label. The character '<-' ('->') will not be displayed if the value can't go
+; lower (greater). These characters, if displayed, will have a color of aqua
+; when not highlighted, and yellow when highlighted.
+;
+; The bottom indicator (of width 2) is implemented by giving the underline
+; attribute to an interval of the characters in the 'value' part. The underline
+; below a character always has a 1/4-width offset to the right (see the figure
+; below), so the characters must align to the fullwidth boundary, if the value
+; string can have half-width characters.
+;                         AA              AAaa
+;                          --              ----
+;       Figure. Illustration of the underline attribute given to the
+;       halfwidth and fullwidth characters. 'AA' represents halfwidth
+;       character 'A', and 'AAaa' represents a hypothetical fullwidth
+;                               character Aa.
+;
+; Argument 1: The offset of the slider object
+; Argument 2: whether it is highlighted
+; Argument 3: The lower byte is the X coordinate of the top-left corner, and
+;             the upper byte is its Y coordinate.
+; Returns: The lower byte is the X coordinate of the bottom-right corner, and
+;          the upper byte is its Y coordinate.
+proc draw_slider near
+arg @@slider_off:word, @@highlighted:word, @@top_left_x_y:word
+local @@value_str_off:word, @@return_value:word, @@width:word
+        push    ds es di bx si
+        shr     eax, 16
+        push    ax      ; push high word of eax
+        push    cx
+        shr     ecx, 16
+        push    cx      ; push ecx
+        push    dx
+        shr     edx, 16
+        push    dx      ; push edx
+        mov     ax, cs
+        mov     ds, ax
+        mov     bx, [@@slider_off]
+
+        mov     al, [bx + ui_slider.width]
+        cmp     al, 0FFh
+        jne     @@L10
+        mov     di, [bx + ui_slider.window_off]
+        mov     al, [di + ui_window.default_slider_width]
+@@L10:
+        mov     [byte ptr @@width], al
+
+        ; Print '<-'
+        mov     al, [byte ptr @@top_left_x_y + 1]
+        cbw
+        imul    dx, ax, 80
+        add     dl, [byte ptr @@top_left_x_y]
+        shl     dx, 1
+        mov     di, dx
+        mov     ax, TRAM_SEG
+        mov     es, ax
+        mov     ax, [word ptr bx + ui_slider.value]
+        cmp     ax, [word ptr bx + ui_slider.min_value]
+        je      @@L1
+        mov     [word ptr es:di], 2B02h
+        mov     [word ptr es:di + 2], 2B62h
+        jmp     @@L2
+@@L1:
+        mov     [word ptr es:di], 0020h
+        mov     [word ptr es:di + 2], 0020h
+@@L2:
+        mov     ax, TRAM_ATTR_SEG
+        mov     es, ax
+        mov     al, TEXT_AQUA
+        cmp     [@@highlighted], 1
+        jne     @@L3
+        mov     al, TEXT_YELLOW
+@@L3:
+        mov     [byte ptr es:di], al
+        mov     [byte ptr es:di + 2], al
+
+        ; Print '->'
+        add     di, 4
+        push    di                              ; push offset of the value part
+        mov     al, [byte ptr @@width]
+        cbw
+        add     di, ax
+        add     di, ax
+        mov     ax, TRAM_SEG
+        mov     es, ax
+        mov     ax, [word ptr bx + ui_slider.value]
+        cmp     ax, [word ptr bx + ui_slider.max_value]
+        je      @@L4
+        mov     [word ptr es:di], 2A02h
+        mov     [word ptr es:di + 2], 2A62h
+        jmp     @@L5
+@@L4:
+        mov     [word ptr es:di], 0020h
+        mov     [word ptr es:di + 2], 0020h
+@@L5:
+        mov     ax, TRAM_ATTR_SEG
+        mov     es, ax
+        mov     al, TEXT_AQUA
+        cmp     [@@highlighted], 1
+        jne     @@L6
+        mov     al, TEXT_YELLOW
+@@L6:
+        mov     [byte ptr es:di], al
+        mov     [byte ptr es:di + 2], al
+
+        ; Print the space before the label
+        add     di, 4
+        mov     [byte ptr es:di], TEXT_WHITE
+        mov     ax, TRAM_SEG
+        mov     es, ax
+        mov     [word ptr es:di], 0020h
+
+        ; Print the label
+        push    bx
+        push    TEXT_WHITE
+        mov     al, [byte ptr @@top_left_x_y + 1]
+        cbw
+        push    ax
+        mov     al, [byte ptr @@top_left_x_y]
+        add     al, 5
+        add     al, [byte ptr @@width]
+        cbw
+        push    ax
+        push    [bx + ui_slider.label_off]
+        push    ds
+        call    print_str
+        add     sp, 10
+        pop     bx
+
+; @@breakpoint:
+;         jmp     @@breakpoint
+
+        ; Initialize the 'value' part
+        pop     di      ; pop the offset of 'value' part on TRAM
+        mov     ax, TRAM_SEG
+        mov     es, ax
+        mov     ax, 0020h
+        mov     cl, [byte ptr @@width]
+        xor     ch, ch
+        cld
+        rep stosw
+        mov     ax, TRAM_ATTR_SEG
+        mov     es, ax
+        mov     ax, TEXT_AQUA
+        cmp     [word ptr @@highlighted], 0
+        je      @@L7
+        mov     ax, TEXT_YELLOW
+@@L7:
+        mov     cl, [byte ptr @@width]
+        xor     ch, ch
+        sub     di, 2
+        std
+        rep stosw
+        cld
+        add     di, 2   ; now di is back to the offset of the 'value' part
+        push    di
+
+        ; Calculate the length of the value string
+        push    [word ptr (bx + ui_slider.value) + 2]
+        push    [word ptr bx + ui_slider.value]
+        call    [word ptr bx + ui_slider.text_func_off]
+        add     sp, 4
+        mov     [@@value_str_off], ax
+        mov     si, ax
+        xor     dx, dx
+@@value_str_chk_len_loop:
+        cmp     [byte ptr si], 0
+        je      @@value_str_chk_len_loop_break
+        inc     si
+        inc     dx
+        jmp     @@value_str_chk_len_loop
+@@value_str_chk_len_loop_break:                 ; dx = strlen(value_str_off)
+
+        ; Print the value string. Note that this method only works for purely
+        ; half-width strings.
+        mov     al, [byte ptr @@width]
+        cbw
+        sub     ax, dx
+        and     ax, 0FFFEh
+        add     di, ax          ; the offset of the string on TRAM
+        mov     ax, TRAM_SEG
+        mov     es, ax
+        mov     si, [@@value_str_off]
+@@print_value_str_loop:
+        mov     al, [byte ptr si]
+        test    al, al
+        jz      @@print_value_str_loop_break
+        cbw
+        mov     [word ptr es:di], ax
+        add     di, 2
+        inc     si
+        jmp     @@print_value_str_loop
+@@print_value_str_loop_break:
+
+        ; Calculate the position of the indicator. The position varies from 0
+        ; to (width - 2), so the position of the indicator will be
+        ; round((value - min) / (max - min) * (width - 2)), i.e.
+        ;                   2 * (value - min) * (width - 2) + 1
+        ;            floor( ----------------------------------- ).          (*)
+        ;                              2 * (max - min)
+        cmp     [bx + ui_slider.bottom_indicator], 0
+        je      @@skip_indicator_handling
+        mov     al, [byte ptr @@width]
+        cbw
+        sub     ax, 2
+        shl     ax, 1
+        cwd
+        xchg    ecx, eax        ; ecx = 2 * (width - 2)
+        mov     eax, [bx + ui_slider.value]
+        sub     eax, [bx + ui_slider.min_value]
+        mul     ecx             ; edx:eax = 2 * (value - min) * (width - 2)
+        inc     eax
+        cmp     eax, 0
+        jne     @@L8
+        inc     edx
+@@L8:                           ; edx:eax = 2 * (value - min) * (width - 2) + 1
+        mov     ecx, [bx + ui_slider.max_value]
+        sub     ecx, [bx + ui_slider.min_value]
+        shl     ecx, 1          ; ecx = 2 * (max - min)
+        div     ecx             ; edx:eax = (*)
+        pop     di              ; offset of the 'value' part on TRAM
+        add     di, ax
+        add     di, ax
+        mov     ax, TRAM_ATTR_SEG
+        mov     es, ax
+        mov     al, [byte ptr es:di]
+        or      al, TEXT_UNDERLINE_MASK
+        mov     [byte ptr es:di], al
+        mov     [byte ptr es:di + 2], al
+        jmp     @@L9
+@@skip_indicator_handling:
+        pop     di             ; pop the unused offset of TRAM here
+@@L9:
+
+        ; Prepare the return value
+        mov     ax, [@@top_left_x_y]
+        add     ah, 5
+        add     ah, [byte ptr bx + ui_slider.width]
+        mov     di, [bx + ui_slider.label_off]
+@@label_chk_len_loop:
+        cmp     [byte ptr di], 0
+        je      @@label_chk_len_loop_break
+        inc     di
+        inc     ah
+        jmp     @@label_chk_len_loop
+@@label_chk_len_loop_break:
+        mov     [@@return_value], ax
+
+        pop     dx
+        shl     edx, 16
+        pop     dx      ; pop edx
+        pop     cx
+        shl     ecx, 16
+        pop     cx      ; pop ecx
+        pop     ax
+        shl     eax, 16 ; pop high word of eax
+
+        mov     ax, [@@return_value]
+
+        pop     si bx di es ds
+        ret
+endp draw_slider
+
+; ------------------------------ Helper functions ----------------------------
+
 TEXT_WHITE      EQU 0E1h
 TEXT_GREEN      EQU 81h
+TEXT_AQUA       EQU 0A1h
+TEXT_YELLOW     EQU 0C1h
+
+TEXT_UNDERLINE_MASK     EQU 08h
 
 SCREEN_WIDTH    EQU 80
 SCREEN_HEIGHT   EQU 25
 TRAM_SEG        EQU 0A000h
 TRAM_ATTR_SEG   EQU 0A200h
+
+; Print a frame onto the TRAM. The area inside the frame will be filled with
+; halfwidth spaces (0x0020).
+; The box-drawing characters used are shown below:
+;                          _   _
+;                         |     |   |_   _|   --    |
+;                         98h  99h  9Ah  9Bh  95h  96h
+;
+; Argument 1: X coordinate of the top-left corner
+; Argument 2: Y coordinate of the top-left corner
+; Argument 3: width of the frame
+; Argument 4: height of the frame
+; Argument 5: The text attribute
+proc print_frame near
+arg @@x0:word, @@y0:word, @@width:word, @@height:word, @@attr:word
+        push    es di ax cx si
+        mov     ax, TRAM_SEG
+        mov     es, ax
+        cld
+
+        ; Print the first row
+        mov     di, [@@y0]
+        imul    di, 80
+        add     di, [@@x0]
+        shl     di, 1
+        mov     [word es:di], 98h
+        add     di, 2
+        mov     cx, [@@width]
+        sub     cx, 2
+        mov     ax, 95h
+        rep stosw
+        mov     [word es:di], 99h
+
+        ; Print the last row
+        mov     di, [@@y0]
+        add     di, [@@height]
+        dec     di
+        imul    di, 80
+        add     di, [@@x0]
+        shl     di, 1
+        mov     [word es:di], 9Ah
+        add     di, 2
+        mov     cx, [@@width]
+        sub     cx, 2
+        mov     ax, 95h
+        rep stosw
+        mov     [word es:di], 9Bh
+
+        ; Print the middle rows
+        mov     si, 2           ; si: the 1-based index of row now printing
+@@L1:
+        mov     di, [@@y0]
+        add     di, si
+        dec     di
+        imul    di, 80
+        add     di, [@@x0]
+        shl     di, 1
+        mov     [word ptr es:di], 96h
+        add     di, 2
+        mov     ax, 20h
+        mov     cx, [@@width]
+        sub     cx, 2
+        rep stosw
+        mov     [word ptr es:di], 96h
+        inc     si
+        cmp     si, [@@height]
+        jne     @@L1
+
+        ; Set the attribute
+        mov     ax, TRAM_ATTR_SEG
+        mov     es, ax
+        mov     ax, [@@attr]
+        mov     si, 0           ; si: the 0-based index of row now printing
+@@L2:
+        mov     di, [@@y0]
+        add     di, si
+        imul    di, 80
+        add     di, [@@x0]
+        shl     di, 1
+        mov     cx, [@@width]
+        rep stosw
+        inc     si
+        cmp     si, [@@height]
+        jne     @@L2
+
+        pop     si cx ax di es
+        ret
+endp print_frame
 
 ; Print an ASCIIZ string onto screen.
 ; Argument 1: segment of pointer to string (byte array)
@@ -892,8 +1576,8 @@ arg @@str_seg:word, @@str_off:word, @@x:word, @@y:word, @@attr:word
 endp print_str
 
 ; Print an ASCII character onto screen.
-; Argument 1: The character code
-; Argument 2: X coordinate of the starting point (0 ~ 79)
+; Argument 1: The character code. Must be the same as the word on the TRAM
+; Argument 2: X coordinate (0 ~ 79)
 ; Argument 3: Y coordinate (0 ~ 24)
 ; Argument 4: The text attribute
 proc print_ch near
@@ -1027,7 +1711,7 @@ arg @@off:word, @@num:word
 endp print_hex
 
 ; Print a string to the console using INT 21h/09h.
-; Only accepts the string literals with a label at the DS segment.
+; Only accepts the string literals with a label at the CS segment.
 ; Destroys ax, ds, dx.
 macro print_string @@str_off
         mov     ax, cs
@@ -1060,16 +1744,41 @@ uninstalling            db 0
 prev_cseg               dw ?
 int2f_mux_id            db ?
 
+original_text   db 'Original', 0
+custom_text     db 'Custom', 0
+
+proc slider_test_func near
+arg @@in_lo:word, @@in_hi:word
+        mov     ax, offset custom_text
+        cmp     [@@in_lo], 0
+        jne     @@L1
+        mov     ax, offset original_text
+@@L1:
+        ret
+endp slider_test_func
+
+slider_test_label       db 'test', 0
+slider_test     ui_slider { \
+        value           = 1, \
+        min_value       = 0, \
+        max_value       = 1, \
+        width           = 13, \
+        bottom_indicator       = 0, \
+        label_off       = (offset slider_test_label), \
+        text_func_off = offset cseg:slider_test_func        \
+}
+
 ; Return value:
 ;       00h: Success
 ;       0Xh: Installation failure
-;       01h: DOS version <3
-;       02h: Cannot get the Critical Error Flag
-;       03h: Cannot register in INT 2Fh
-;       04h: Thprac98 has already been installed
+;               01h: DOS version <3
+;               02h: Cannot get the Critical Error Flag
+;               03h: Cannot register in INT 2Fh
+;               04h: Thprac98 has already been installed
 ;       1Xh: Uninstallation failure
-;       11h: Some interrupt has been hooked by someone else, cannot uninstall
-;       12h: Thprac98 hasn't been installed
+;               11h: Some interrupt has been hooked by someone else, cannot
+;                    uninstall
+;               12h: Thprac98 hasn't been installed
 ;       FFh: Unknown paramter
 real_start:
         ; Check DOS version
@@ -1123,7 +1832,7 @@ real_start:
         jne     @@L4
 @@L6:
 
-        cmp     [uninstalling], 0
+        cmp     [uninstalling], 0       ; 102B
         je      @@end_of_uninstalling
         cmp     [thprac98_installed], 0
         jne     @@L7
@@ -1222,7 +1931,7 @@ real_start:
 @@L8:
 
         ; Save the current segment
-        mov     [stored_cseg], cs
+        mov     [stored_cseg], cs       ; 1168 -
 
         ; Get the address of two flags for DOS calls in TSR
         mov     ah, 34h
@@ -1331,7 +2040,7 @@ real_start:
         print_string successfully_installed
 
         ; Terminate and stay resident
-        mov     dx, offset end_of_resident + 10Fh
+        mov     dx, offset end_of_resident + 10Fh       ; 1276 +
         shr     dx, 4
         mov     ax, 3100h
         int     21h
