@@ -33,6 +33,7 @@ bs_covered_tram_attr    dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
 bs_state        dw 0
 fx_state        dw FX_COUNT dup(0)
 prac_menu_state dw 0
+arrow_state     db 0
 
 old_int8        dd ?
 old_int7        dd ?
@@ -208,6 +209,8 @@ proc my_int8 near
         push    ax
         call    inject
         add     sp, 2
+
+        call    maintain_prac_menu_ui
 
 @@return:
         pop     ds
@@ -759,6 +762,56 @@ local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
         ret
 endp maintain_bs_menu_ui
 
+proc maintain_prac_menu_ui near
+        push    ax
+
+        cmp     [prac_menu_state], 0
+        je      @@return
+        mov     ax, 0407h
+        int     18h
+        mov     bl, [arrow_state]
+        not     bl
+        and     bl, ah                  ; bit 2,3,4,5: up,left,right,down
+        mov     [arrow_state], ah
+
+        mov     si, offset practise_menu_window
+        test    bl, 04h
+        jz      @@skip_up
+        push    0 si
+        call    window_switch_cur
+        add     sp, 4
+@@skip_up:
+        test    bl, 08h
+        jz      @@skip_left
+        push    0 [si + ui_window.cur_component_off]
+        call    slider_change_value
+        add     sp, 4
+@@skip_left:
+        test    bl, 10h
+        jz      @@skip_right
+        push    1 [si + ui_window.cur_component_off]
+        call    slider_change_value
+        add     sp, 4
+@@skip_right:
+        test    bl, 20h
+        jz      @@skip_down
+        push    1 si
+        call    window_switch_cur
+        add     sp, 4
+@@skip_down:
+
+        test    bl, 3Ch
+        jz      @@skip_redraw
+        push    si
+        call    draw_window
+        add     sp, 2
+@@skip_redraw:
+
+@@return:
+        pop     ax
+        ret
+endp maintain_prac_menu_ui
+
 proc store_covered_tram near
         mov     ax, TRAM_SEG
         mov     es, ax
@@ -833,6 +886,8 @@ proc show_practise_menu far
         mov     ds, ax
 
         mov     [prac_menu_state], 1
+        mov     [arrow_state], 0
+
         push    (offset playing_mode_slider) 0FFFFh
         push    (offset practise_menu_window)
         call    window_insert_component
@@ -848,7 +903,7 @@ proc show_practise_menu far
         push    (offset bomb_slider) (offset life_slider)
         push    (offset practise_menu_window)
         call    window_insert_component
-        add     sp, 24
+        add     sp, 30
 
         push    offset practise_menu_window
         call    draw_window
@@ -891,7 +946,7 @@ struc ui_slider
         value                   dd 0
         min_value               dd 0
         max_value               dd 0
-        step                    dw 1            ; must be a divisor of
+        step                    dd 1            ; must be a divisor of
                                                 ; (max_value - min_value) and
                                                 ; (value - min_value)
         bottom_indicator        db 1
@@ -988,7 +1043,7 @@ arg @@in_lo:word, @@in_hi:word
         ret
 endp route_text_func
 route_label      db 'Route', 0
-route_slider    ui_slider {                                     \
+route_slider    ui_slider {                              \
         value           = 0,                             \
         min_value       = 0,                             \
         max_value       = 1,                             \
@@ -999,7 +1054,7 @@ stage_slider_label      db 'Stage', 0
 stage_slider    ui_slider {                             \
         value           = 1,                            \
         min_value       = 1,                            \
-        max_value       = 35,                           \
+        max_value       = 20,                           \
         label_off       = offset stage_slider_label,    \
         text_func_off   = offset cseg:dword_to_dec      \
 }
@@ -1055,6 +1110,73 @@ arg @@window_off:word
         ret
 endp init_window
 
+; Switch the current component of the window. Nothing will happen if attempting
+; to switch to the previous component of the first one, or to switch to the next
+; component of the last one.
+; Argument 1: The offset of the window object.
+; Argument 2: Use 0 to switch to the previous component, 1 to switch to the
+;             next component.
+proc window_switch_cur near
+arg @@window_off:word, @@direction:word
+        push    bx di
+        mov     bx, [@@window_off]
+
+        mov     di, [bx + ui_window.cur_component_off]
+        cmp     di, 0FFFFh
+        je      @@return
+
+        cmp     [@@direction], 0
+        jne     @@next_component
+        mov     di, [di + ui_slider.prev_component_off]
+        cmp     di, 0FFFFh
+        je      @@return
+        mov     [bx + ui_window.cur_component_off], di
+        jmp     @@return
+@@next_component:
+        mov     di, [di + ui_slider.next_component_off]
+        cmp     di, 0FFFFh
+        je      @@return
+        mov     [bx + ui_window.cur_component_off], di
+
+@@return:
+        pop     di bx
+        ret
+endp window_switch_cur
+
+; Change the current value of the slider. Nothing will happen if attempting to
+; go out of bounds.
+; Argument 1: The offset of the slider object.
+; Argument 2: Use 0 to go less, 1 to go greater.
+proc slider_change_value near
+arg @@slider_off:word, @@direction:word
+        push    bx
+        push    ax
+        shr     eax, 16
+        push    ax      ; push eax
+        mov     bx, [@@slider_off]
+
+        mov     eax, [bx + ui_slider.value]
+        cmp     [@@direction], 0
+        jne     @@go_greater
+        cmp     eax, [bx + ui_slider.min_value]
+        je      @@return
+        sub     eax, [bx + ui_slider.step]
+        mov     [bx + ui_slider.value], eax
+        jmp     @@return
+@@go_greater:
+        cmp     eax, [bx + ui_slider.max_value]
+        je      @@return
+        add     eax, [bx + ui_slider.step]
+        mov     [bx + ui_slider.value], eax
+
+@@return:
+        pop     ax
+        shl     eax, 16
+        pop     ax      ; pop eax
+        pop     bx
+        ret
+endp slider_change_value
+
 ; Insert a UI component to the window.
 ; Argument 1: The offset of the window object
 ; Argument 2: The offset of the UI component object in the linked list to be
@@ -1108,6 +1230,8 @@ proc draw_window near
 arg @@window_off:word
         push    ax bx di
         mov     bx, [@@window_off]
+
+        mov     [word ptr bx + ui_window.cur_drawing_x], 0101h
 
         ; Print the outer frame
         push    TEXT_WHITE
@@ -1295,9 +1419,6 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         add     sp, 10
         pop     bx
 
-; @@breakpoint:
-;         jmp     @@breakpoint
-
         ; Initialize the 'value' part
         pop     di      ; pop the offset of 'value' part on TRAM
         mov     ax, TRAM_SEG
@@ -1344,6 +1465,7 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         mov     al, [byte ptr @@width]
         cbw
         sub     ax, dx
+        add     ax, 1
         and     ax, 0FFFEh
         add     di, ax          ; the offset of the string on TRAM
         mov     ax, TRAM_SEG
