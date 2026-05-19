@@ -1,4 +1,4 @@
-:: @echo off
+@echo off
 
 set shell=
 if not %1.==dos. set shell=msdos -e -x
@@ -16,7 +16,7 @@ echo -I..\3rdparty\master.lib\include -I..\3rdparty\ReC98 > cppargs.tmp
 echo -I..\3rdparty\printf -I.. >> cppargs.tmp
 echo -ms -wall -v -3 -x-RT -DANCIENT_CXX=1 >> cppargs.tmp
 echo -DPRINTF_INCLUDE_CONFIG_H=1 >> cppargs.tmp
-echo /m5 /w2 > asmargs.tmp
+echo /m5 /w2 /l > asmargs.tmp
 
 : Test if tasm, tlink and tcc exists
 %shell% %tasm% > NUL
