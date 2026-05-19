@@ -1075,6 +1075,24 @@ proc show_practise_menu far
         call    init_window
         add     sp, 2
 
+        ; Draw the background shadow
+        xor     ah, ah
+        mov     al, [practise_menu_window.height]
+        shl     ax, 4
+        push    ax
+        xor     ah, ah
+        mov     al, [practise_menu_window.width]
+        push    ax
+        xor     ah, ah
+        mov     al, [practise_menu_window.top_left_y]
+        shl     al, 4
+        push    ax
+        xor     ah, ah
+        mov     al, [practise_menu_window.top_left_x]
+        push    ax
+        call    draw_background_shadow
+        add     sp, 8
+
         mov     [prac_menu_state], 1
         mov     [arrow_state], 0
 
@@ -1749,6 +1767,73 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         pop     si bx di es ds
         ret
 endp draw_slider
+
+struc int18_47_argument_block_t
+        3plane_drawing_mode     db 00h
+        unused_1                db ?
+        1plane_drawing_mode     db 00h
+        rect_type               db ?
+        unused_2                db 4 dup (?)
+        start_x_coord           dw ?
+        start_y_coord           dw ?
+        unused_3                db 10 dup (?)
+        end_x_coord             dw ?
+        end_y_coord             dw ?
+        line_style              dw 0FFFFh
+        unused_4                db 6 dup (?)
+        graphic_type            db 1
+        working_area            db 20h dup (?)
+ends int18_47_argument_block_t
+
+int18_47_argument_block int18_47_argument_block_t {}
+
+vram_seg_arr    dw 0A800h, 0B000h, 0B800h, 0E000h
+
+; Draw a shadow color on every VRAM plane in a rectangular region.
+; Argument 1: The X coordinate of the top left corner / 8.
+; Argument 2: The Y coordinate of the top left corner.
+; Argument 3: The width of the region / 8.
+; Argument 4: The height of the region.
+proc draw_background_shadow
+arg @@top_left_x:word, @@top_left_y:word, @@width:word, @@height:word
+        push    es bx ax si di
+
+        xor     di, di
+@@vram_plane_loop:
+        mov     ax, [cs:di + vram_seg_arr]
+        mov     es, ax
+        xor     si, si
+@@draw_lines_loop:
+        cmp     si, [@@height]
+        je      @@draw_lines_loop_break
+        mov     bx, [@@top_left_y]
+        add     bx, si
+        imul    bx, bx, 50h
+        add     bx, [@@top_left_x]
+        xor     cx, cx
+@@draw_a_line_loop:
+        cmp     cx, [@@width]
+        je      @@draw_a_line_loop_break
+        mov     al, 0AAh
+        test    si, 01h
+        jz      @@L1
+        mov     al, 000h
+@@L1:
+        and     [byte ptr es:bx], al
+        inc     bx
+        inc     cx
+        jmp     @@draw_a_line_loop
+@@draw_a_line_loop_break:
+        inc     si
+        jmp     @@draw_lines_loop
+@@draw_lines_loop_break:
+        add     di, 2
+        cmp     di, 8
+        jne     @@vram_plane_loop
+
+        pop     di si ax bx es
+        ret
+endp draw_background_shadow
 
 ; ------------------------------ Helper functions ----------------------------
 
