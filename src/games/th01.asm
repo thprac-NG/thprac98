@@ -33,6 +33,7 @@ bs_covered_tram_attr    dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
 bs_state        dw 0
 fx_state        dw FX_COUNT dup(0)
 prac_menu_state dw 0
+key_z_up_once   db 0
 arrow_state     db 0
 
 old_int8        dd ?
@@ -984,12 +985,23 @@ proc maintain_prac_menu_ui near
         add     sp, 2
 @@skip_redraw:
 
-        ; Check and respond to 'Z' key presses (start the game)
+        ; Check and respond to 'Z' key presses (start the game). We first wait
+        ; for a release of 'Z', then detect its pressing.
         mov     ax, 0405h
         int     18h
+        cmp     [key_z_up_once], 0
+        je      @@z_hasnt_been_released
         and     ah, 02h
-        je      @@skip_z_press
+        jz      @@skip_z_press
         mov     [prac_menu_state], 0
+        mov     [key_z_up_once], 0
+        jmp     @@end_z_press
+@@z_hasnt_been_released:
+        and     ah, 02h
+        jnz     @@L1
+        mov     [key_z_up_once], 1
+@@L1:
+@@end_z_press:
 @@skip_z_press:
 
 @@return:
