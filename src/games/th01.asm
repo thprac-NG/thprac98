@@ -225,6 +225,8 @@ endp my_int8
 ; 4bytes: 8D xx 00 00 (lea r16, [r16 + 0000h]). 9F (bx), AE (bp),
 ;                                               B4 (si), BD (di)
 ;
+; ----------------- REIIDEN.EXE modifications -------------------
+;
 ; For the discompiled version of the Fx modifications, check:
 ; F1-F3: https://github.com/H-J-Granger/ReC98/commit/d159a9960ae4d52c4c2bb6d91fcd5046f6dad4e5
 ; F4: https://github.com/H-J-Granger/ReC98/commit/c2e20cc6a5d7b27e71ac219433e2eb4285b69adc
@@ -278,6 +280,41 @@ endp my_int8
 ; Original assembly: call text_clear (provided by master.lib)
 ; Modified assembly: call my_1924_0364
 ;
+; ------------------- OP.EXE modifications ---------------------
+;
+; practise_menu_part1 {
+;   0A1C:0612 | 9A 0C 00 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; }, where "xxxx" is cseg, and "yyyy" is
+; (offset hooked_resident_create_and_stuff_set).
+; Original assembly: call resident_create_and_stuff_set
+; Modified assembly: call hooked_resident_create_and_stuff_set
+; Check https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L343-L349
+; for the C version of the original code.
+;
+; practise_menu_part2 {
+;   0A1C:0664 | 26 C6 47 14 00 26 C7 47 3F 00 00 A0 93 00 04 02 26 88 47 15 ->
+;             | 8D AE 00 00 8D B4 00 00 8D BD 00 00 8D AE 00 00 8D B4 00 00
+; }
+; Original assembly: (es:bx has been set to the address of `resident`)
+;   0A1C:0664 | 26 C6 47 14 00          mov     [byte ptr es:bx +
+;             |                                  resdient_t.route], ROUTE_MAKAI
+;   0A1C:0669 | 26 C7 47 3F 00 00       mov     [word ptr es:bx +
+;             |                                  resident_t.stage_id], 0000h
+;   0A1C:066F | A0 93 00                mov     al, [ds:opts + cfg_options_t.
+;             |                                      credit_lives_extra]
+;   0A1C:0672 | 04 02                   add     al, 02h
+;   0A1C:0674 | 26 88 47 15             mov     [byte ptr es:bx +
+;             |                                  route_t.rem_lives], al
+; Modified assembly: (effectively nop)
+;   0A1C:0664 | 8D AE 00 00             lea     bp, [bp + 0000h]
+;   0A1C:0668 | 8D B4 00 00             lea     si, [si + 0000h]
+;   0A1C:066C | 8D BD 00 00             lea     di, [di + 0000h]
+;   0A1C:0670 | 8D AE 00 00             lea     bp, [bp + 0000h]
+;   0A1C:0674 | 8D B4 00 00             lea     si, [si + 0000h]
+; Check https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L378-L380
+; for the C version of the original code.
+;
 ; (*1) This is an absolute call, the segment address might differ.
 
 ; Due to the language restriction, the array members are represented as offsets
@@ -298,6 +335,7 @@ struc inject_code_t
 ends inject_code_t
 
 reiiden_exe     db "REIIDEN.EXE", 0
+op_exe          db "OP.EXE", 0
 must_match      db -1
 
 invincible_part1_org    db 07Eh, 02Fh
@@ -420,6 +458,35 @@ harry_up_animate        inject_code_t { \
         variable_mem = offset harry_up_animate_var, \
 }
 
+practise_menu_part1_org db 09Ah, 00Ch, 000h, 000h, 000h
+practise_menu_part1_pat db 09Ah
+                        dw offset cseg:hooked_resident_create_and_stuff_set
+                        db 000h, 000h
+practise_menu_part1_var db 0, 0, 0, 1, 1
+practise_menu_part1     inject_code_t {                         \
+        filename        = offset op_exe,                        \
+        seg             = 0A1Ch,                                \
+        off             = 0612h,                                \
+        len             = 5,                                    \
+        original_mem    = offset practise_menu_part1_org,       \
+        patched_mem     = offset practise_menu_part1_pat,       \
+        variable_mem    = offset practise_menu_part1_var,       \
+}
+practise_menu_part2_org db 026h, 0C6h, 047h, 014h, 000h, 026h, 0C7h, 047h, \
+                           03Fh, 000h, 000h, 0A0h, 093h, 000h, 004h, 002h, \
+                           026h, 088h, 047h, 015h
+practise_menu_part2_pat db 08Dh, 0AEh, 000h, 000h, 08Dh, 0B4h, 000h, 000h, \
+                           08Dh, 0BDh, 000h, 000h, 08Dh, 0AEh, 000h, 000h, \
+                           08Dh, 0B4h, 000h, 000h
+practise_menu_part2     inject_code_t {                         \
+        filename        = offset op_exe,                        \
+        seg             = 0A1Ch,                                \
+        off             = 0664h,                                \
+        len             = 20,                                   \
+        original_mem    = offset practise_menu_part2_org,       \
+        patched_mem     = offset practise_menu_part2_pat,       \
+}
+
 proc my_0b50_0775 far
         push    ax
         mov     ax, [cs:cur_psp]
@@ -450,10 +517,123 @@ proc my_1924_0364 far
         ret
 endp my_1924_0364
 
+; The segment and offset of the variable `resident` (of type resident_t far)
+; defined in
+; https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/core/resstuff.cpp#L11 .
+RESSTUFF_CPP_RESIDENT_SEG       EQU 1229h
+RESSTUFF_CPP_RESIDENT_OFF       EQU 1C56h
+
+; The offset of the variable `opts` (of type cfg_options_t far) defined in
+; https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L67-L72 .
+; (Its segment is the same as `resident`)
+OP_01_CPP_OPTS_OFF              EQU 0090h
+
+SCENE_COUNT             EQU 4
+STAGES_PER_SCENE        EQU 5
+
+; For the C version of these structures, see
+; https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/resident.hpp#L8-L72 .
+
+enum bgm_mode_t \
+        BGM_MODE_OFF, BGM_MODE_MDRV2, BGM_MODE_COUNT
+enum route_t                                    \
+        ROUTE_MAKAI, ROUTE_JIGOKU, ROUTE_COUNT, \
+        route_t_FORCE_INT16 = 7FFFh
+enum end_sequence_t \
+        ES_NONE, ES_MAKAI, ES_JIGOKU
+enum debug_mode_t                               \
+        DM_OFF = 0, DM_TEST = 1, DM_FULL = 3,   \
+        debug_mode_t_FORCE_INT16 = 7FFFh
+
+struc resident_t
+        id                      db 14 dup (?)   ; sizeof(RES_ID)
+                                                ; (i.e. "ReiidenConfig")
+        rank                    db ?
+        bgm_mode                bgm_mode_t ?
+        rem_bombs               db ?
+        credit_lives_extra      db ?            ; Add 2 for the actual
+                                                ; number of lives
+        end_flag                end_sequence_t ?
+        unused_1                db ?
+        route                   db ?            ; actual type: route_t
+        rem_lives               db ?
+        snd_need_init           db ?            ; actual type: bool
+        unused_2                db ?
+        debug_mode              db ?            ; actual type: debug_mode_t
+        pellet_speed            dw ?            ; pre-multiplied by 40
+        rand                    dd ?
+        score                   dd ?
+        continues_total         dd ?
+        continues_per_scene     dw SCENE_COUNT dup (?)
+        bonus_per_stage         dd (STAGES_PER_SCENE - 1) dup (?)
+                                                ; of the current scene, without
+                                                ; the boss stage
+        stage_id                dw ?
+        hiscore                 dd ?
+        score_highest           dd ?            ; among all continues
+        point_value             dw ?
+ends resident_t
+
+; For the C version of the structure, see
+; https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/formats/cfg.hpp#L7-L12 .
+struc cfg_options_t
+        rank                    dw ?
+        bgm_mode                bgm_mode_t ?
+        credit_bombs            dw ?
+        credit_lives_extra      dw ?            ; Add 2 for the actual number
+                                                ; of lives
+ends cfg_options_t
+
+proc hooked_resident_create_and_stuff_set far
+arg @@rank:word, @@bgm_mode:word, @@rem_bombs:word, @@credit_lives_extra:word, \
+    @@rand_lo:word, @@rand_hi:word
+        push    ax bx es
+
+        push    [@@rand_hi] [@@rand_lo] [@@credit_lives_extra] [@@rem_bombs]
+        push    [@@bgm_mode] [@@rank]
+        call    [dword ptr practise_menu_part1_org + 1]
+        add     sp, 0Ch
+
+        call    far show_practise_menu
+
+        ; Set es:bx to variable `resident`
+        mov     ah, 62h
+        int     21h
+        lea     ax, [bx + 10h + RESSTUFF_CPP_RESIDENT_SEG]
+        mov     es, ax
+        les     bx, [dword ptr es:RESSTUFF_CPP_RESIDENT_OFF]
+
+        cmp     [word ptr es:playing_mode_slider.value], 0
+        je      @@original_mode
+        mov     al, [byte ptr route_slider.value]
+        mov     [byte ptr es:bx + resident_t.route], al
+        mov     al, [byte ptr stage_slider.value]
+        dec     al
+        mov     [byte ptr es:bx + resident_t.stage_id], al
+        mov     al, [byte ptr life_slider.value]
+        mov     [byte ptr es:bx + resident_t.rem_lives], al
+        mov     al, [byte ptr bomb_slider.value]
+        mov     [byte ptr es:bx + resident_t.rem_bombs], al
+        jmp     @@end_of_resident_field_setting
+@@original_mode:
+        ; Simulate the original behaviour
+        mov     [byte ptr es:bx + resident_t.route], ROUTE_MAKAI
+        mov     [word ptr es:bx + resident_t.stage_id], 0
+        mov     al, [byte ptr es:OP_01_CPP_OPTS_OFF + \
+                                 cfg_options_t.credit_lives_extra]
+        add     al, 2
+        mov     [byte ptr es:bx + resident_t.rem_lives], al
+@@end_of_resident_field_setting:
+
+        pop     es bx ax
+        ret
+endp hooked_resident_create_and_stuff_set
+
 inject_failed   db 0
 
 proc inject near
 arg @@updated:word
+local @@saved_psp:word
         mov     ax, [@@updated]
         or      al, [inject_failed]
         test    ax, ax
@@ -473,7 +653,7 @@ arg @@updated:word
 
         mov     ah, 62h
         int     21h
-        mov     ax, bx  ; Stored PSP segment
+        mov     [@@saved_psp], bx  ; Stored PSP segment
         mov     es, bx
         mov     es, [es:2Ch]  ; Get environment segment
         mov     bx, 0
@@ -496,84 +676,79 @@ arg @@updated:word
         cmp     cl, 0
         jne     @@L3
         inc     dx  ; the filename of the executing program
-        push    ax
+
         push    dx es (offset reiiden_exe) ds
         call    strcmp_ignore_case
         add     sp, 8
-        pop     es  ; the PSP segment
         cmp     ax, 1
-        jne     @@return
+        jne     @@skip_reiiden_exe_patches
 
+        mov     es, [@@saved_psp]  ; the PSP segment
         mov     al, [byte ptr fx_state + 1]
-        push    es
         push    es ax (offset invincible_part1)
         call    inject_one
         add     sp, 6
-        pop     es
         mov     al, [byte ptr fx_state + 1]
-        push    es
         push    es ax (offset invincible_part2)
         call    inject_one
         add     sp, 6
-        pop     es
 
         mov     al, [byte ptr fx_state + 3]
-        push    es
         push    es ax (offset inf_lives_part1)
         call    inject_one
         add     sp, 6
-        pop     es
         mov     al, [byte ptr fx_state + 3]
-        push    es
         push    es ax (offset inf_lives_part2)
         call    inject_one
         add     sp, 6
-        pop     es
 
         mov     al, [byte ptr fx_state + 5]
-        push    es
         push    es ax (offset inf_bombs_part1)
         call    inject_one
         add     sp, 6
-        pop     es
         mov     al, [byte ptr fx_state + 5]
-        push    es
         push    es ax (offset inf_bombs_part2)
         call    inject_one
         add     sp, 6
-        pop     es
 
         mov     al, [byte ptr fx_state + 7]
-        push    es
         push    es ax (offset time_lock)
         call    inject_one
         add     sp, 6
-        pop     es
 
         mov     al, [byte ptr fx_state + 9]
-        push    es
         push    es ax (offset inf_card_combo)
         call    inject_one
         add     sp, 6
-        pop     es
 
         mov     al, [byte ptr fx_state + 11]
-        push    es
         push    es ax (offset inf_item_combo)
         call    inject_one
         add     sp, 6
-        pop     es
 
-        push    es
         push    es 1 (offset stage_num_animate)
         call    inject_one
         add     sp, 6
-        pop     es
-        push    es
         push    es 1 (offset harry_up_animate)
         call    inject_one
         add     sp, 6
-        pop     es
+@@skip_reiiden_exe_patches:
+
+        push    dx es (offset op_exe) ds
+        call    strcmp_ignore_case
+        add     sp, 8
+        cmp     ax, 1
+        jne     @@skip_op_exe_patches
+
+        mov     es, [@@saved_psp]  ; the PSP segment
+        push    es 1 (offset practise_menu_part1)
+        call    inject_one
+        add     sp, 6
+        push    es 1 (offset practise_menu_part2)
+        call    inject_one
+        add     sp, 6
+
+@@skip_op_exe_patches:
 
         mov     [cs:cur_psp], es
 @@return:
@@ -586,7 +761,7 @@ endp inject
 proc inject_one near
 arg @@inject_code:word, @@flag:word, @@psp_seg:word
 local @@must_match:byte
-        push    si di
+        push    si di es
         mov     si, [@@inject_code]
         add     [@@psp_seg], 10h  ; Add the size of PSP (100h)
         mov     ax, [@@psp_seg]
@@ -651,7 +826,7 @@ local @@must_match:byte
         call    memory_copy
         add     sp, 10
 @@return:
-        pop     di si
+        pop     es di si
         ret
 endp inject_one
 
@@ -767,6 +942,8 @@ proc maintain_prac_menu_ui near
 
         cmp     [prac_menu_state], 0
         je      @@return
+
+        ; Check and respond to arrow key presses
         mov     ax, 0407h
         int     18h
         mov     bl, [arrow_state]
@@ -806,6 +983,14 @@ proc maintain_prac_menu_ui near
         call    draw_window
         add     sp, 2
 @@skip_redraw:
+
+        ; Check and respond to 'Z' key presses (start the game)
+        mov     ax, 0405h
+        int     18h
+        and     ah, 02h
+        je      @@skip_z_press
+        mov     [prac_menu_state], 0
+@@skip_z_press:
 
 @@return:
         pop     ax
@@ -879,11 +1064,16 @@ proc show_bs_menu near
         ret
 endp show_bs_menu
 
-; Show the practise menu. Might be called by the game process.
+; Show the practise menu and get its input. Won't return after a 'Z' key is
+; pressed. Might be called by the game process.
 proc show_practise_menu far
         push    ax ds
         mov     ax, cs
         mov     ds, ax
+
+        push    (offset practise_menu_window)
+        call    init_window
+        add     sp, 2
 
         mov     [prac_menu_state], 1
         mov     [arrow_state], 0
@@ -909,6 +1099,15 @@ proc show_practise_menu far
         call    draw_window
         add     sp, 2
 
+@@wait_for_z_pressed_loop:
+        xor     ax, ax
+@@stall:                        ; stall for a while between two checks of memory
+        inc     ax
+        test    ax, 100h
+        jnz     @@stall
+        cmp     [prac_menu_state], 1
+        je      @@wait_for_z_pressed_loop
+
         pop     ds ax
         ret
 endp show_practise_menu
@@ -929,8 +1128,8 @@ struc ui_window
 ends ui_window
 
 practise_menu_window    ui_window {     \
-        top_left_x              = 20,   \
-        top_left_y              = 10,   \
+        top_left_x              = 40,   \
+        top_left_y              = 13,   \
         width                   = 34,   \
         height                  = 10,   \
         default_slider_width    = 22    \
@@ -1043,12 +1242,12 @@ arg @@in_lo:word, @@in_hi:word
         ret
 endp route_text_func
 route_label      db 'Route', 0
-route_slider    ui_slider {                              \
-        value           = 0,                             \
-        min_value       = 0,                             \
-        max_value       = 1,                             \
-        label_off       = offset route_label,            \
-        text_func_off   = offset cseg:route_text_func    \
+route_slider    ui_slider {                             \
+        value           = 0,                            \
+        min_value       = 0,                            \
+        max_value       = 1,                            \
+        label_off       = offset route_label,           \
+        text_func_off   = offset cseg:route_text_func   \
 }
 stage_slider_label      db 'Stage', 0
 stage_slider    ui_slider {                             \
@@ -1760,6 +1959,8 @@ endp memory_copy
 ; Returns (in ax): Whether the two string is equal (case is ignored)
 proc strcmp_ignore_case near
 arg @@str1_seg:word, @@str1_off:word, @@str2_seg:word, @@str2_off:word
+        push    es bx cx dx
+
         mov     ax, 1
 @@L1:
         mov     es, [@@str1_seg]
@@ -1790,6 +1991,7 @@ arg @@str1_seg:word, @@str1_off:word, @@str2_seg:word, @@str2_off:word
         cmp     bl, 0
         jne     @@L1
 @@return:
+        pop     dx cx bx es
         ret
 endp strcmp_ignore_case
 
@@ -1878,17 +2080,6 @@ arg @@in_lo:word, @@in_hi:word
 @@L1:
         ret
 endp slider_test_func
-
-slider_test_label       db 'test', 0
-slider_test     ui_slider { \
-        value           = 1, \
-        min_value       = 0, \
-        max_value       = 1, \
-        width           = 13, \
-        bottom_indicator       = 0, \
-        label_off       = (offset slider_test_label), \
-        text_func_off = offset cseg:slider_test_func        \
-}
 
 ; Return value:
 ;       00h: Success
@@ -2079,6 +2270,7 @@ real_start:
         mov     [word ptr stage_num_animate_pat + 3], cs
         mov     [word ptr harry_up_animate_pat + 1], offset my_1924_0364
         mov     [word ptr harry_up_animate_pat + 3], cs
+        mov     [word ptr practise_menu_part1_pat + 3], cs
 
         ; Initialize the keyboard BIOS
         mov     ah, 03h
