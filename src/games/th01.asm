@@ -578,10 +578,10 @@ ends resident_t
 ; For the C version of the structure, see
 ; https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/formats/cfg.hpp#L7-L12 .
 struc cfg_options_t
-        rank                    dw ?
+        rank                    db ?
         bgm_mode                bgm_mode_t ?
-        credit_bombs            dw ?
-        credit_lives_extra      dw ?            ; Add 2 for the actual number
+        credit_bombs            db ?
+        credit_lives_extra      db ?            ; Add 2 for the actual number
                                                 ; of lives
 ends cfg_options_t
 
@@ -604,7 +604,7 @@ arg @@rank:word, @@bgm_mode:word, @@rem_bombs:word, @@credit_lives_extra:word, \
         mov     es, ax
         les     bx, [dword ptr es:RESSTUFF_CPP_RESIDENT_OFF]
 
-        cmp     [word ptr es:playing_mode_slider.value], 0
+        cmp     [word ptr cs:playing_mode_slider.value], 0
         je      @@original_mode
         mov     al, [byte ptr route_slider.value]
         mov     [byte ptr es:bx + resident_t.route], al
@@ -620,8 +620,7 @@ arg @@rank:word, @@bgm_mode:word, @@rem_bombs:word, @@credit_lives_extra:word, \
         ; Simulate the original behaviour
         mov     [byte ptr es:bx + resident_t.route], ROUTE_MAKAI
         mov     [word ptr es:bx + resident_t.stage_id], 0
-        mov     al, [byte ptr es:OP_01_CPP_OPTS_OFF + \
-                                 cfg_options_t.credit_lives_extra]
+        mov     ax, [@@credit_lives_extra]
         add     al, 2
         mov     [byte ptr es:bx + resident_t.rem_lives], al
 @@end_of_resident_field_setting:
