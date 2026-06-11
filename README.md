@@ -7,9 +7,6 @@ Thprac98 is a PC-98 module of [thprac](https://github.com/touhouworldcup/thprac)
 support to the first five official Touhou games, thprac98 is being developed
 by the current maintainers of thprac right now.
 
-Note: The executable can't be run on a real machine right now. Also, you
-need to use LHA instead of a modern archiver to decompress the package.
-
 ---
 
 End of the README file
