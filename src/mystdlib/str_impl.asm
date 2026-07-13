@@ -33,8 +33,6 @@ endp _MEMSET_HELPER
 proc _MEMCPY_HELPER near
 arg @@dest_seg:word, @@dest_off:word, @@src_seg:word, @@src_off:word, \
 @@movsb_count:word
-        push    bp
-        mov     bp, sp
         push    ds si di
 
         mov     ax, [@@dest_seg]
