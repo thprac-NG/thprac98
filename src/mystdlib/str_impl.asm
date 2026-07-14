@@ -10,12 +10,12 @@ codeseg
         public _MEMCPY_HELPER
 
 proc _MEMSET_HELPER near
-arg @@stosd_seg:word, @@stosd_off:word, @@stosd_count:word, @@val:word
+arg @@stosd_addr:dword, @@stosd_count:word, @@val:word
         push    di
 
-        mov     ax, [@@stosd_seg]
+        mov     ax, [word ptr @@stosd_addr + 2]
         mov     es, ax
-        mov     di, [@@stosd_off]
+        mov     di, [word ptr @@stosd_addr]
         mov     ax, [@@val]
         mov     cx, ax
         shl     eax, 10h
@@ -31,16 +31,15 @@ arg @@stosd_seg:word, @@stosd_off:word, @@stosd_count:word, @@val:word
 endp _MEMSET_HELPER
 
 proc _MEMCPY_HELPER near
-arg @@dest_seg:word, @@dest_off:word, @@src_seg:word, @@src_off:word, \
-@@movsb_count:word
+arg @@dest:dword, @@src:dword, @@movsb_count:word
         push    ds si di
 
-        mov     ax, [@@dest_seg]
+        mov     ax, [word ptr @@dest + 2]
         mov     es, ax
-        mov     di, [@@dest_off]
-        mov     ax, [@@src_seg]
+        mov     di, [word ptr @@dest]
+        mov     ax, [word ptr @@src + 2]
         mov     ds, ax
-        mov     si, [@@src_off]
+        mov     si, [word ptr @@src]
         mov     cx, [@@movsb_count]
         ; # TODO: Make the following instruction aligned to 4-byte border to
         ;         improve performance.

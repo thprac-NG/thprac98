@@ -57,38 +57,36 @@ THPRAC98_STRCPY_IMPLEMENTATION(_fstrcpy_, far)
 THPRAC98_STRNCPY_IMPLEMENTATION(strncpy_, )
 THPRAC98_STRNCPY_IMPLEMENTATION(_fstrncpy_, far)
 
-extern "C" void memset_helper(uint16_t stosd_seg, uint16_t stosd_off,
-                              uint16_t stosd_count, uint16_t val);
+extern "C" void memset_helper(unsigned char far* stosd_addr,
+                              unsigned stosd_count, unsigned val);
 
-#define THPRAC98_MEMSET_IMPLEMENTATION(func_name, ptr_type, dest_seg,   \
-                                       dest_off)                        \
-  void ptr_type* func_name(void ptr_type* dest, int ch, size_t count) { \
-    int i = 0;                                                          \
-    uint8_t val = (unsigned)(ch);                                       \
-    if (count > THPRAC98_MEMCPY_TRIVIAL_COPY_THRESHOLD) {               \
-      while (i < count && (dest_off + i) & 0x03 != 0) {                 \
-        *((uint8_t ptr_type*)(dest) + i) = val;                         \
-        ++i;                                                            \
-      }                                                                 \
-      memset_helper(dest_seg, dest_off + i, (uint16_t)(count - i) >> 2, \
-                    ((uint16_t)(val) << 8) | val);                      \
-      i += (count - i) & ~0x03;                                         \
-    }                                                                   \
-    while (i < count) {                                                 \
-      *((uint8_t ptr_type*)(dest) + i) = val;                           \
-      ++i;                                                              \
-    }                                                                   \
-    return dest;                                                        \
+#define THPRAC98_MEMSET_IMPLEMENTATION(func_name, ptr_type)                    \
+  void ptr_type* func_name(void ptr_type* dest, int ch, size_t count) {        \
+    int i = 0;                                                                 \
+    uint8_t val = (unsigned)(ch);                                              \
+    if (count > THPRAC98_MEMCPY_TRIVIAL_COPY_THRESHOLD) {                      \
+      while (i < count && (FP_OFF(dest) + i) & 0x03 != 0) {                    \
+        *((uint8_t ptr_type*)(dest) + i) = val;                                \
+        ++i;                                                                   \
+      }                                                                        \
+      memset_helper((unsigned char far*)(dest) + i,                            \
+                    (uint16_t)(count - i) >> 2, ((uint16_t)(val) << 8) | val); \
+      i += (count - i) & ~0x03;                                                \
+    }                                                                          \
+    while (i < count) {                                                        \
+      *((uint8_t ptr_type*)(dest) + i) = val;                                  \
+      ++i;                                                                     \
+    }                                                                          \
+    return dest;                                                               \
   }
-THPRAC98_MEMSET_IMPLEMENTATION(memset_, , _DS, ((uint16_t)(dest)))
-THPRAC98_MEMSET_IMPLEMENTATION(_fmemset_, far, FP_SEG(dest), FP_OFF(dest))
+THPRAC98_MEMSET_IMPLEMENTATION(memset_, near)
+THPRAC98_MEMSET_IMPLEMENTATION(_fmemset_, far)
 
-extern "C" void near memcpy_helper(uint16_t dest_seg, uint16_t dest_off,
-                                   uint16_t src_seg, uint16_t src_off,
-                                   uint16_t movsb_count);
+extern "C" void near memcpy_helper(unsigned char far* dest,
+                                   unsigned char far* src,
+                                   unsigned movsb_count);
 
-#define THPRAC98_MEMCPY_IMPLEMENTATION(func_name, ptr_type, dest_seg,       \
-                                       dest_off, src_seg, src_off)          \
+#define THPRAC98_MEMCPY_IMPLEMENTATION(func_name, ptr_type)                 \
   void ptr_type* func_name(void ptr_type* dest, const void ptr_type* src,   \
                            size_t count) {                                  \
     int i = 0;                                                              \
@@ -98,11 +96,10 @@ extern "C" void near memcpy_helper(uint16_t dest_seg, uint16_t dest_off,
         ++i;                                                                \
       }                                                                     \
     } else {                                                                \
-      memcpy_helper(dest_seg, dest_off, src_seg, src_off, count);           \
+      memcpy_helper((unsigned char far*)(dest), (unsigned char far*)(src),  \
+                    count);                                                 \
     }                                                                       \
     return dest;                                                            \
   }
-THPRAC98_MEMCPY_IMPLEMENTATION(memcpy_, , _DS, ((uint16_t)(dest)), _DS,
-                               ((uint16_t)(src)))
-THPRAC98_MEMCPY_IMPLEMENTATION(_fmemcpy_, far, FP_SEG(dest), FP_OFF(dest),
-                               FP_SEG(src), FP_SEG(src))
+THPRAC98_MEMCPY_IMPLEMENTATION(memcpy_, near)
+THPRAC98_MEMCPY_IMPLEMENTATION(_fmemcpy_, far)
