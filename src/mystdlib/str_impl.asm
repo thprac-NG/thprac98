@@ -26,7 +26,6 @@ arg @@stosd_addr:dword, @@stosd_count:word, @@val:word
         rep stosd
 
         pop     di
-        pop     bp
         ret
 endp _MEMSET_HELPER
 
