@@ -42,7 +42,7 @@ if %2.==fast. goto :fastBld
 if %2.==com. goto :comBuild
 
 :: Building thprac98.exe using command `build.bat` (without args)
-if not %2.==. goto :inNoArg
+if not %2.==. goto :endNoArg
 :fastBld
 :comBuild
   echo [INFO] Building th01.com...
