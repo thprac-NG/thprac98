@@ -236,8 +236,8 @@ int fseek_(FILE_* stream, long offset, int origin) {
   in_reg.h.ah = 0x42;  // set file position
   in_reg.h.al = origin;
   in_reg.x.bx = stream->file_handle;
-  in_reg.x.cx = (offset >> 16);
-  in_reg.x.dx = offset & 0xFFFF;
+  in_reg.x.cx = (uint16_t)(offset >> 16);
+  in_reg.x.dx = (uint16_t)(offset & 0xFFFF);
   intdos(&in_reg, &out_reg);
   if (out_reg.x.cflag) {
     errno_ = out_reg.x.ax;

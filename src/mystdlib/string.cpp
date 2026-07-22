@@ -65,7 +65,7 @@ extern "C" void memset_helper(unsigned char far* stosd_addr,
     int i = 0;                                                                 \
     uint8_t val = (unsigned)(ch);                                              \
     if (count > THPRAC98_MEMCPY_TRIVIAL_COPY_THRESHOLD) {                      \
-      while (i < count && (FP_OFF(dest) + i) & 0x03 != 0) {                    \
+      while (i < count && ((FP_OFF(dest) + i) & 0x03) != 0) {                  \
         *((uint8_t ptr_type*)(dest) + i) = val;                                \
         ++i;                                                                   \
       }                                                                        \

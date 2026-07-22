@@ -76,7 +76,7 @@ int print_table(int x_min, int y_min, int x_max, int y_max,
       return;
     }
     inline bool check_x(int x) { return (x_bucket[x >> 4] >> (x & 0xF)) & 1; }
-    inline bool check_y(int y) { return (y_bucket >> y) & 1; }
+    inline bool check_y(int y) { return (bool)((y_bucket >> y) & 1); }
   };
   static helper_t helper;
   helper.init();
