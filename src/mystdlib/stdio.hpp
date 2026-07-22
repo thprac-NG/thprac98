@@ -18,9 +18,9 @@ struct FILE_;
 #define stdin stdin_
 #define stdout stdout_
 #define stderr stderr_
-extern const FILE_ *const stdin_;
-extern const FILE_ *const stdout_;
-extern const FILE_ *const stderr_;
+extern FILE_ *stdin_;
+extern FILE_ *stdout_;
+extern FILE_ *stderr_;
 
 #define fopen fopen_
 FILE_ *fopen_(const char far *filename, const char far *mode);

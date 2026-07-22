@@ -14,9 +14,9 @@ cd build
 :: Set up the arguments for tcc and tasm
 echo -I..\3rdparty\master.lib\include -I..\3rdparty\ReC98 > cppargs.tmp
 echo -I..\3rdparty\printf -I.. >> cppargs.tmp
-echo -ms -wall -v -3 -x-RT -DANCIENT_CXX=1 >> cppargs.tmp
+echo -w -ms -wall -v -3 -RT- -DANCIENT_CXX=1 >> cppargs.tmp
 echo -DPRINTF_INCLUDE_CONFIG_H=1 >> cppargs.tmp
-echo /m5 /w2 /l > asmargs.tmp
+echo /m5 /w2 /l /i..\src > asmargs.tmp
 
 : Test if tasm, tlink and tcc exists
 %shell% %tasm% > NUL
@@ -42,7 +42,7 @@ if %2.==fast. goto :fastBld
 if %2.==com. goto :comBuild
 
 :: Building thprac98.exe using command `build.bat` (without args)
-if not %2.==. goto :endNoArg
+if not %2.==. goto :inNoArg
 :fastBld
 :comBuild
   echo [INFO] Building th01.com...
@@ -115,6 +115,20 @@ if not %2.==codegen. goto :endCdGen
   goto :cleanExt
 :endCdGen
 
+:: Testing thprac98 using command `build.bat test`
+if not %2.==test. goto :endBdTst
+  echo [INFO] Building test.exe...
+  if exist test.exe del test.exe
+  set build_ret=testRet
+  set build_src=..\src\test.cpp
+  set build_base=test
+  goto :bldExe
+  :testRet
+
+  echo [INFO] Successfully built test.exe.
+  goto :cleanExt
+:endBdTst
+
 :: Unknown parameter.
 echo [ERROR] Unknown parameter %2.
 goto :return_1
@@ -150,6 +164,10 @@ goto :cleanExt
 if errorlevel 1 goto :errRet
 call ..\src\bld\bldasms.bat entrance mystdlib\str_impl mystdlib\dos_impl
 if errorlevel 1 goto :errRet
+if not %2.==test. goto :skpTstBd
+call ..\src\bld\bldasms.bat asmutils\asmutils
+if errorlevel 1 goto :errRet
+:skpTstBd
 :: Not adding noexcept.cpp for now, since it requires the standard library
 call ..\src\bld\bldcpps.bat menu utils texts textsdef version license
 if errorlevel 1 goto :errRet
@@ -161,9 +179,14 @@ call ..\src\bld\bldcpps.bat mystdlib\stdio mystdlib\string mystdlib\errno
 if errorlevel 1 goto :errRet
 %shell% tcc -c -P @cppargs.tmp ..\3rdparty\printf\printf.c
 if errorlevel 1 goto :errRet
-copy ..\3rdparty\master.lib\include\masters.lib tmp.lib
-%shell% tlink /m entrance.obj + %build_base%.obj + @..\objfiles ,,, tmp.lib
-del tmp.lib
+if not %2.==test. goto :skpTsLnk
+%shell% tlink /m entrance.obj + %build_base%.obj + @..\testsrc.rsp
+if errorlevel 1 goto :errRet
+goto :skpNmLnk
+:skpTsLnk
+%shell% tlink /m entrance.obj + %build_base%.obj + @..\mainsrc.rsp
+if errorlevel 1 goto :errRet
+:skpNmLnk
 if errorlevel 1 goto :errRet
 for %%a in (exe map) do copy entrance.%%a %build_base%.%%a
 del entrance.exe

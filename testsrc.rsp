@@ -1,0 +1,18 @@
+utils.obj +
+texts.obj +
+menu.obj +
+textsdef.obj +
+version.obj +
+license.obj +
+launcher.obj +
+mainwrpr.obj +
+tsrdata.obj +
+chars.obj +
+tui.obj +
+printf.obj +
+string.obj +
+stdio.obj +
+errno.obj +
+str_impl.obj +
+dos_impl.obj +
+asmutils.obj ,,, ..\3rdparty\master.lib\include\masters.lib

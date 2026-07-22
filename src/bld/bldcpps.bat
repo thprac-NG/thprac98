@@ -9,6 +9,7 @@
 
 :loop_start
 if %1.==. goto :loop_end
+echo [INFO] building %1.cpp...
 %shell% tcc -c @cppargs.tmp ..\src\%1.cpp
 if errorlevel 1 goto :bldcpp_return
 shift

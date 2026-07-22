@@ -1,7 +1,7 @@
 ideal
-model tiny, cpp  ; Set calling convention to C++-style
-radix 10  ; The immediates will be recognized as decimal by default
-locals  ; Enables block-scoped symbols
+model tiny, cpp
+radix 10
+locals
 p386
 
 segment cseg para private 'CODE' USE16
@@ -10,6 +10,8 @@ org 100h
 
 start:
         jmp     real_start
+
+ENV_SEG_OFF     EQU 2Ch
 
 BS_MENU_WIDTH   EQU 21
 BS_MENU_HEIGHT  EQU 8
@@ -36,187 +38,50 @@ prac_menu_state dw 0
 key_z_up_once   db 0
 arrow_state     db 0
 
-old_int8        dd ?
-old_int7        dd ?
-heartbeat_value dw 30h
-
 ; These are byte ptrs, and need to check if is both cleared before any DOS call
 ; in a TSR.
 indos_flag_addr                 dd ?
 critical_error_flag_addr        dd ?
 
-UPDATE_INTERVAL EQU 5   ; unit: 10ms
-update_counter  db (UPDATE_INTERVAL - 1)
-
-int1c_counter   dw 0
-int1c_using     db 0
-int1c_routine   dd ?
-old_int1c       dd ?
-
-old_int2f       dd ?
-mux_id          db 0
-INT2F_MAGIC_BX  EQU 0B6DDh  ; Shift-JIS of half-width katakana 'kawa'
-INT2F_MAGIC_CX  EQU 0BCDBh  ; Shift-JIS of half-width katakana 'shiro'
-
-old_int21       dd ?
-just_loaded     db 0
-WAIT_LOAD_TIME  EQU 5   ; unit: 10ms
-
 cur_psp         dw ?
 temp_proc       dd ?
-stored_cseg     dw ?
 
-proc my_int8_wrapper far
-        push    ax bx cx dx si di bp es ds
-        assume  ds:nothing
+include 'interupt.asm'  ; Hooked Interrupts
+include 'hookint.asm'   ; Hook Interrupts
 
-        pushf
-        call    [dword ptr cs:[old_int8]]
-        cmp     [cs:int1c_using], 0
-        je      @@skip_int1c_processing
-        dec     [cs:int1c_counter]
-        cmp     [cs:int1c_counter], 0
-        jne     @@L2
-        mov     [cs:int1c_using], 0
-        pushf
-        call    [dword ptr cs:[int1c_routine]]
-@@L2:
-@@skip_int1c_processing:
-
-        mov     ax, cs
-        mov     ds, ax
-        ; If just loaded, wait for some time for the program to load, then
-        ; update the menu and inject the code.
-        cmp     [just_loaded], 0
-        je      @@skip_load_check
-        dec     [just_loaded]
-        cmp     [just_loaded], 0
-        jne     @@skip_processing
+; --------------------------------------------------------------------------
+; Function: after_load_exe
+; Description: Handles procedures after loading an executable. Get called
+;              `WAIT_LOAD_TIME`*10 ms after every INT 21h/4Bh call.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc after_load_exe near
+        assume  ds:cseg
         call    store_covered_tram
         call    show_bs_menu
         call    inject
-        jmp     @@skip_processing
-@@skip_load_check:
+        ret
+endp
 
-        inc     [cs:update_counter]
-        cmp     [cs:update_counter], UPDATE_INTERVAL
-        jne     @@skip_processing
-        mov     [cs:update_counter], 0
-        call    my_int8
-@@skip_processing:
+; --------------------------------------------------------------------------
+; Function: on_tick
+; Description: Maintains the UI of the practice menu and backspace menu, and
+;              injects the code. Get called every `MY_INT8_CALL_INTERVAL`*10 ms.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc on_tick near
+        assume  ds:cseg
 
-        pop     ds es bp di si dx cx bx ax
-        iret
-endp my_int8_wrapper
-
-proc my_int1c far
-        push    ax bx cx dx si di bp es ds
-        assume  ds:nothing
-
-        cmp     ah, 02h
-        jne     @@back_to_original_int1c
-        mov     [cs:int1c_counter], cx
-        mov     [word ptr cs:int1c_routine], bx
-        mov     [word ptr cs:int1c_routine + 2], es
-        mov     [cs:int1c_using], 1
-        jmp     @@return
-
-@@back_to_original_int1c:
-        pushf
-        call    [dword ptr cs:old_int1c]
-
-@@return:
-        pop     ds es bp di si dx cx bx ax
-        iret
-endp my_int1c
-
-
-proc my_int21 far
-        cmp     ah, 4Bh
-        jne     @@L1
-        mov     [cs:just_loaded], WAIT_LOAD_TIME
-@@L1:
-        jmp     [dword ptr cs:old_int21]
-endp my_int21
-
-; AL=00h: Check whether this MUX id has been installed
-;         Returns: AL=FFh, BX=B6DDh, CX=BCDBh
-; AL=01h: Check the segment of thprac98
-;         Returns: AX=segment
-; AL=11h: Re-render the menu, and re-inject the code
-; AL=12h: Re-render the menu only
-proc my_int2f far
-        assume  ds:nothing
-        cmp     ah, [cs:mux_id]
-        je      @@L1
-        jmp     [dword ptr cs:old_int2f]
-@@L1:
-        cmp     al, 0
-        jne     @@L2
-        mov     al, 0FFh   ; convention in INT2Fh, indicating installed
-        mov     bx, INT2F_MAGIC_BX
-        mov     cx, INT2F_MAGIC_CX
-        jmp     @@return_without_pop
-@@L2:
-        cmp     al, 1
-        jne     @@L4
-        mov     ax, [cs:stored_cseg]
-        jmp     @@return_without_pop
-@@L4:
-
-        push    ax bx cx dx si di bp es ds
-        mov     bx, cs
-        mov     ds, bx
-
-        cmp     al, 11h
-        jne     @@L3
-        call    store_covered_tram
-        call    show_bs_menu
-        call    inject
-        jmp     @@return
-@@L3:
-        cmp     al, 12h
-        jne     @@return
-        call    store_covered_tram
-        call    show_bs_menu
-
-@@return:
-        pop     ds es bp di si dx cx bx ax
-@@return_without_pop:
-        iret
-endp my_int2f
-
-ENABLE_HEARTBEAT        EQU 0
-
-proc my_int8 near
-        assume  cs:cseg
-        push    ds
-        mov     bx, cs
-        mov     ds, bx
-
-        ; Heartbeat on (10,10)
-        IF ENABLE_HEARTBEAT
-        push    TEXT_WHITE 10 10 [cs:heartbeat_value]
-        call    print_ch
-        add     sp, 8
-        inc     [cs:heartbeat_value]
-        cmp     [cs:heartbeat_value], 3Ah
-        jne     @@L1
-        mov     [cs:heartbeat_value], 30h
-        ENDIF
-@@L1:
-
+        ; Maintain the backspace menu. The return value of `maintain_bs_menu_ui`
+        ; indicates whether the status of the FX has been updated, and we are
+        ; passing the value to `inject`.
         call    maintain_bs_menu_ui
         push    ax
         call    inject
-        add     sp, 2
-
+        pop     ax
         call    maintain_prac_menu_ui
-
-@@return:
-        pop     ds
         ret
-endp my_int8
+endp on_tick
 
 ; NOPs:
 ; 1byte: 90 (nop)
@@ -318,6 +183,10 @@ endp my_int8
 ;
 ; (*1) This is an absolute call, the segment address might differ.
 
+reiiden_exe     db "REIIDEN.EXE", 0
+op_exe          db "OP.EXE", 0
+must_match      db -1
+
 ; Due to the language restriction, the array members are represented as offsets
 ; of an array stored elsewhere.
 struc inject_code_t
@@ -332,12 +201,8 @@ struc inject_code_t
         ; If variable_mem[i] == 1, then original_mem[i] can vary.
         ; If variable_mem[i] == 0, then original_mem[i] must match.
         ; If variable_mem[0] == -1, then the whole memory must match.
-        variable_mem    dw offset must_match
+        variable_mem    dw (offset must_match)
 ends inject_code_t
-
-reiiden_exe     db "REIIDEN.EXE", 0
-op_exe          db "OP.EXE", 0
-must_match      db -1
 
 invincible_part1_org    db 07Eh, 02Fh
 invincible_part1_pat    db 089h, 0DBh
@@ -497,7 +362,7 @@ proc my_0b50_0775 far
         push    ds 159h
         call    [dword ptr cs:temp_proc]
         add     sp, 4
-        mov     ah, [cs:mux_id]
+        mov     ah, [cs:int2f_mux_id]
         mov     al, 12h
         int     2Fh
         pop     ax
@@ -511,7 +376,7 @@ proc my_1924_0364 far
         mov     [word ptr cs:temp_proc], 0C6Ah
         mov     [word ptr cs:temp_proc + 2], ax
         call    [dword ptr cs:temp_proc]
-        mov     ah, [cs:mux_id]
+        mov     ah, [cs:int2f_mux_id]
         mov     al, 12h
         int     2Fh
         pop     ax
@@ -1064,7 +929,7 @@ proc show_bs_menu near
         add     bx, dx
         add     bx, dx
         push    dx
-        push    cx dx 1 [word ptr bx] ds
+        push    cx dx 1 ds [word ptr bx]
         call    print_str
         add     sp, 10
         pop     dx
@@ -1641,8 +1506,8 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         add     al, [byte ptr @@width]
         cbw
         push    ax
-        push    [bx + ui_slider.label_off]
         push    ds
+        push    [bx + ui_slider.label_off]
         call    print_str
         add     sp, 10
         pop     bx
@@ -1848,18 +1713,6 @@ endp draw_background_shadow
 
 ; ------------------------------ Helper functions ----------------------------
 
-TEXT_WHITE      EQU 0E1h
-TEXT_GREEN      EQU 81h
-TEXT_AQUA       EQU 0A1h
-TEXT_YELLOW     EQU 0C1h
-
-TEXT_UNDERLINE_MASK     EQU 08h
-
-SCREEN_WIDTH    EQU 80
-SCREEN_HEIGHT   EQU 25
-TRAM_SEG        EQU 0A000h
-TRAM_ATTR_SEG   EQU 0A200h
-
 ; Print a frame onto the TRAM. The area inside the frame will be filled with
 ; halfwidth spaces (0x0020).
 ; The box-drawing characters used are shown below:
@@ -1948,85 +1801,10 @@ arg @@x0:word, @@y0:word, @@width:word, @@height:word, @@attr:word
         ret
 endp print_frame
 
-; Print an ASCIIZ string onto screen.
-; Argument 1: segment of pointer to string (byte array)
-; Argument 2: offset of pointer to string
-; Argument 3: X coordinate of the starting point (0 ~ 79)
-; Argument 4: Y coordinate (0 ~ 24)
-; Argument 5: The text attribute
-proc print_str near
-arg @@str_seg:word, @@str_off:word, @@x:word, @@y:word, @@attr:word
-        push    si di
-        mov     ax, [@@y]
-        cmp     ax, SCREEN_HEIGHT
-        jae     @@return
-        mov     dx, 160
-        mul     dx
-        mov     si, ax
-        mov     bx, [@@x]  ; bx: current x
-        mov     di, [@@str_off]  ; di: current offset of the string
-@@print_a_char:
-        cmp     bx, SCREEN_WIDTH
-        jae     @@return
-        mov     es, [@@str_seg]
-        mov     ch, 0
-        mov     cl, [byte ptr es:di]
-        cmp     cl, 0
-        je      @@return
-        mov     dx, bx
-        add     dx, bx
-        add     si, dx   ; si: current offset of TRAM
-        mov     ax, TRAM_SEG
-        mov     es, ax
-        mov     [word ptr es:si], cx
-        mov     ax, TRAM_ATTR_SEG
-        mov     es, ax
-        mov     ax, [@@attr]
-        mov     [word ptr es:si], ax
-        sub     si, dx
-        inc     di
-        inc     bx
-        jmp     @@print_a_char
-@@return:
-        pop     di si
-        ret
-endp print_str
-
-; Print an ASCII character onto screen.
-; Argument 1: The character code. Must be the same as the word on the TRAM
-; Argument 2: X coordinate (0 ~ 79)
-; Argument 3: Y coordinate (0 ~ 24)
-; Argument 4: The text attribute
-proc print_ch near
-arg @@char:word, @@x:word, @@y:word, @@attr:word
-        push    si
-        mov     ax, [@@y]
-        cmp     ax, SCREEN_HEIGHT
-        jae     @@return
-        mov     dx, 160
-        mul     dx
-        mov     si, ax
-        mov     bx, [@@x]  ; bx: [x]
-        cmp     bx, SCREEN_WIDTH
-        jae     @@return
-        mov     cx, [@@char]
-        add     si, bx
-        add     si, bx  ; si: offset of TRAM
-        mov     ax, TRAM_SEG
-        mov     es, ax
-        mov     [es:si], cx
-        mov     ax, TRAM_ATTR_SEG
-        mov     es, ax
-        mov     ax, [@@attr]
-        mov     [es:si], ax
-@@return:
-        pop     si
-        ret
-endp print_ch
-
 ; Argument 1,2: segment, offset of the source memory
 ; Argument 3,4: segment, offset of the destination memory
 ; Argument 5: The bytes to be copied
+; TODO; Change its references to movsb call.
 proc memory_copy near
 arg @@src_seg:word, @@src_off:word, @@dest_seg:word, @@dest_off:word, \
 @@size:word
@@ -2050,316 +1828,133 @@ arg @@src_seg:word, @@src_off:word, @@dest_seg:word, @@dest_off:word, \
         ret
 endp memory_copy
 
-; Argument 1,2: segment, offset of ASCIIZ string1
-; Argument 3,4: segment, offset of ASCIIZ string2
-; Returns (in ax): Whether the two string is equal (case is ignored)
-proc strcmp_ignore_case near
-arg @@str1_seg:word, @@str1_off:word, @@str2_seg:word, @@str2_off:word
-        push    es bx cx dx
-
-        mov     ax, 1
-@@L1:
-        mov     es, [@@str1_seg]
-        mov     bx, [@@str1_off]
-        mov     cl, [byte ptr es:bx]
-        mov     dl, cl
-        sub     dl, 'a'
-        cmp     dl, 25
-        ja      @@L2
-        sub     cl, 'a' - 'A'
-@@L2:
-        mov     es, [@@str2_seg]
-        mov     bx, [@@str2_off]
-        mov     bl, [byte ptr es:bx]
-        mov     dl, bl
-        sub     dl, 'a'
-        cmp     dl, 25
-        ja      @@L3
-        sub     bl, 'a' - 'A'
-@@L3:
-        cmp     bl, cl
-        je      @@L4
-        mov     ax, 0
-        jmp     @@return
-@@L4:
-        inc     [@@str1_off]
-        inc     [@@str2_off]
-        cmp     bl, 0
-        jne     @@L1
-@@return:
-        pop     dx cx bx es
-        ret
-endp strcmp_ignore_case
-
-; Argument: The hex digit to be transformed.
-; Returns (in ax): The ASCII code of the transformed character (uppercase).
-proc to_hex_digit near
-arg @@num:word
-        mov     ax, [@@num]
-        cmp     ax, 10
-        jl      @@L1
-        add     ax, 'A' - 10
-        jmp     @@return
-@@L1:
-        add     ax, '0'
-@@return:
-        ret
-endp to_hex_digit
-
-; Print a 16-bit hex number to a string. All letters are uppercase.
-; Argument 1: The offset of the string.
-; Argument 2: The 16-bit hex number to be printed.
-proc print_hex near
-arg @@off:word, @@num:word
-        mov     cx, 0
-        mov     si, [@@off]
-        add     si, 3
-@@L1:
-        mov     ax, [@@num]
-        shr     ax, cl
-        and     ax, 0Fh
-        push    cx ax
-        call    to_hex_digit
-        add     sp, 2
-        pop     cx
-        mov     [byte ptr cs:si], al
-        add     cx, 4
-        dec     si
-        cmp     cx, 16
-        jne     @@L1
-        ret
-endp print_hex
-
-; Print a string to the console using INT 21h/09h.
-; Only accepts the string literals with a label at the CS segment.
-; Destroys ax, ds, dx.
-macro print_string @@str_off
-        mov     ax, cs
-        mov     ds, ax
-        mov     dx, offset @@str_off
-        mov     ah, 09h
-        int     21h
-endm print_string
+; For some reason, Turbo Assembler refuses to take the following path as a
+; relative path to the include path specified in the command option, so we'll
+; have to make it relative to the build path.
+include "..\src\asmutils\strcmpnc.asm"
+include "..\src\asmutils\sprnthex.asm"
+include "..\src\asmutils\tramprnt.asm"
 
 label end_of_resident byte
+; ===========================================================================
+;                            NON-RESIDENT PART
+; ===========================================================================
 
 dos_version_low_message         db 'The version of DOS is too low. DOS 3+ is ',\
                                    'required.$'
 successfully_installed          db 'Successfully installed thprac98.$'
 failed_to_install               db 'Failed to install thprac98: $'
-cannot_get_critical_error_flag  db 'Cannot get the address of Critical ', \
-                                   'Error Flag.$'
+cannot_get_cef                  db 'Cannot get the address of Critical ', \
+                                   'Error Flag. Error Code: '
+cannot_get_cef_num              db '??h.$'
 cannot_get_mux_id               db 'Cannot register in INT 2Fh.$'
 already_installed               db 'Thprac98 has already been installed. $'
 failed_to_uninstall             db 'Failed to uninstall thprac98: $'
 successfully_uninstalled        db 'Successfully uninstalled thprac98.$'
-not_installed                   db 'Thprac98 hasn', 27h, 't been intsalled. $'
-int_vector_hooked               db 'IN'
-int_vector_hooked_num           db 'T ??h is hooked by someone else.$'
+not_installed                   db "Thprac98 hasn't been installed. $"
+int_vector_hooked               db 'INT '
+int_vector_hooked_num           db '??h is hooked by someone else.$'
+cannot_find_mcb                 db "Can't find the MCB of the previous TSR ", \
+                                   "in the MCB chain.$"
 unknown_parameter               db 'Unknown paramter.$'
 
 thprac98_installed      db 0
 print_temp              db '????$'
 uninstalling            db 0
 prev_cseg               dw ?
-int2f_mux_id            db ?
 
-original_text   db 'Original', 0
-custom_text     db 'Custom', 0
+COMMAND_PARAM_LEN_OFFSET        EQU 80h
+COMMAND_PARAM_OFFSET            EQU 81h
 
-proc slider_test_func near
-arg @@in_lo:word, @@in_hi:word
-        mov     ax, offset custom_text
-        cmp     [@@in_lo], 0
-        jne     @@L1
-        mov     ax, offset original_text
-@@L1:
-        ret
-endp slider_test_func
-
-; Return value:
-;       00h: Success
-;       0Xh: Installation failure
-;               01h: DOS version <3
-;               02h: Cannot get the Critical Error Flag
-;               03h: Cannot register in INT 2Fh
-;               04h: Thprac98 has already been installed
-;       1Xh: Uninstallation failure
-;               11h: Some interrupt has been hooked by someone else, cannot
-;                    uninstall
-;               12h: Thprac98 hasn't been installed
-;       FFh: Unknown paramter
-real_start:
-        ; Check DOS version
+; --------------------------------------------------------------------------
+; Function: my_main
+; Description: Our main function. We need this to use the local variables.
+; Input:  Nothing
+; Output: The value of AX:
+;               00h: Success
+;               1Xh: Installation failure
+;                       11h: Cannot register in INT 2Fh
+;                       12h: Thprac98 has already been installed
+;                       13h: Cannot get the Critical Error Flag
+;               2Xh: Uninstallation failure
+;                       21h: Some interrupt has been hooked by someone else,
+;                            cannot uninstall
+;                       22h: Thprac98 hasn't been installed
+;                       23h: Can't find the MCB of the previous TSR in the
+;                            MCB chain
+;               F1h: DOS version <3
+;               FFh: Unknown parameter
+;         The value of DX:
+;               00h: Perform INT 21h/4Ch to exit (with an errorlevel of AX)
+;               01h: Perform INT 21h/3100h to terminate and stay resident
+; --------------------------------------------------------------------------
+proc my_main near
+local @@told_to_uninstall:byte, @@int_no_hooked:word
+        ; Check if we're using DOS 3+
         mov     ah, 30h
         int     21h
         cmp     al, 3
-        jge     @@using_dos_3_plus
-        print_string dos_version_low_message
-        mov     al, 1
-        jmp     @@return_with_error_code
+        jae     @@using_dos_3_plus
+        mov     dx, offset dos_version_low_message
+        mov     ah, 09h
+        int     21h
+        mov     ax, 0F1h
+        jmp     @@return
 @@using_dos_3_plus:
 
-        mov     al, [byte ptr cs:80h]
-        cmp     al, 0
-        je      @@end_of_parameter_checking
-        mov     [uninstalling], 1
-        cmp     al, 3
-        jne     @@unknown_parameter_label
-        cmp     [byte ptr cs:82h], '/'
-        jne     @@unknown_parameter_label
-        cmp     [byte ptr cs:83h], 'U'
-        je      @@end_of_parameter_checking
-        cmp     [byte ptr cs:83h], 'u'
-        je      @@end_of_parameter_checking
-@@unknown_parameter_label:
-        print_string unknown_parameter
-        mov     al, 0FFh
-        jmp     @@return_with_error_code
-@@end_of_parameter_checking:
+        ; Check the parameter
+        mov     [@@told_to_uninstall], 0
+        mov     al, [cs:COMMAND_PARAM_LEN_OFFSET]
+        test    al, al
+        jz      @@end_of_parameter_check        ; param == "": to install
+        mov     [@@told_to_uninstall], 1
+        cmp     [byte ptr cs:COMMAND_PARAM_OFFSET + 1], '/'
+        jne     @@unknown_parameter
+        cmp     [byte ptr cs:COMMAND_PARAM_OFFSET + 2], 'U'
+        je      @@end_of_parameter_check
+        cmp     [byte ptr cs:COMMAND_PARAM_OFFSET + 2], 'u'
+        je      @@end_of_parameter_check
+@@unknown_parameter:  ; param[1] != '/' || (param[2] != 'U' && param[2] != 'u')
+        mov     dx, offset unknown_parameter
+        mov     ah, 09h
+        int     21h
+        mov     ax, 0FFh
+        jmp     @@return
+@@end_of_parameter_check:
 
-        ; Check if thprac98 has already been hooked into INT 2Fh
-        mov     dh, 0C0h
-@@L4:
-        mov     ah, dh
-        mov     al, 0
-        mov     bx, 0
-        mov     cx, 0
-        push    dx
-        int     2Fh
-        pop     dx
-        cmp     bx, INT2F_MAGIC_BX
-        jne     @@L5
-        cmp     cx, INT2F_MAGIC_CX
-        jne     @@L5
-        mov     [int2f_mux_id], ah
-        mov     [thprac98_installed], 1
-        jmp     @@L6
-@@L5:
-        inc     dh
-        cmp     dh, 0
-        jne     @@L4
-@@L6:
+        cmp     [@@told_to_uninstall], 1
+        je      @@uninstall
 
-        cmp     [uninstalling], 0       ; 102B
-        je      @@end_of_uninstalling
-        cmp     [thprac98_installed], 0
-        jne     @@L7
-        print_string failed_to_uninstall
-        print_string not_installed
-        mov     al, 12h
-        jmp     @@return_with_error_code
-@@L7:
-        mov     ah, [int2f_mux_id]
-        mov     al, 01h
-        int     2Fh
-        mov     [prev_cseg], ax
-
-        ; Check if the interrupt vectors are the same
-        mov     ax, 3508h
-        int     21h
-        mov     cx, es
-        cmp     cx, [prev_cseg]
-        jne     @@thprac98_hooked
-        cmp     bx, offset my_int8_wrapper
-        jne     @@thprac98_hooked
-        mov     ax, 351Ch
-        int     21h
-        mov     cx, es
-        cmp     cx, [prev_cseg]
-        jne     @@thprac98_hooked
-        cmp     bx, offset my_int1c
-        jne     @@thprac98_hooked
-        mov     ax, 3521h
-        int     21h
-        mov     cx, es
-        cmp     cx, [prev_cseg]
-        jne     @@thprac98_hooked
-        cmp     bx, offset my_int21
-        jne     @@thprac98_hooked
-        mov     ax, 352Fh
-        int     21h
-        mov     cx, es
-        cmp     cx, [prev_cseg]
-        jne     @@thprac98_hooked
-        cmp     bx, offset my_int2f
-        jne     @@thprac98_hooked
-
-        ; Restore interrupt vectors
-        mov     ax, [prev_cseg]
-        mov     es, ax
-        lds     dx, [dword ptr es:old_int7]
-        mov     ax, 2507h
-        int     21h
-        lds     dx, [dword ptr es:old_int8]
-        mov     ax, 2508h
-        int     21h
-        lds     dx, [dword ptr es:old_int1c]
-        mov     ax, 251Ch
-        int     21h
-        lds     dx, [dword ptr es:old_int21]
-        mov     ax, 2521h
-        int     21h
-        lds     dx, [dword ptr es:old_int2f]
-        mov     ax, 252Fh
-        int     21h
-
-        ; Free up the memory used by the previous session
-        ; es = [prev_cseg]
-        mov     ax, [es:2Ch]  ; Environment segment block
-        mov     es, ax
-        mov     ah, 49h
-        int     21h     ; free it up
-        mov     ax, [prev_cseg]
-        mov     es, ax
-        mov     ah, 49h
-        int     21h
-
-        print_string successfully_uninstalled
-        jmp     @@return_0
-
-@@thprac98_hooked:
-        mov     ah, 0
-        push    ax (offset int_vector_hooked_num)
-        call    print_hex
-        add     sp, 4
-        mov     [word ptr int_vector_hooked_num], ' T'
-        print_string failed_to_uninstall
-        print_string int_vector_hooked
-        mov     al, 11h
-        jmp     @@return_with_error_code
-
-@@end_of_uninstalling:
-
-        cmp     [thprac98_installed], 1
-        jne     @@L8
-        print_string failed_to_install
-        print_string already_installed
-        mov     al, 04h
-        jmp     @@return_with_error_code
-@@L8:
+        ; ----------- Install the TSR -----------
 
         ; Save the current segment
-        mov     [stored_cseg], cs       ; 1168 -
+        mov     [stored_cseg], cs
 
         ; Get the address of two flags for DOS calls in TSR
         mov     ah, 34h
-        int     21h
+        int     21h             ; Get InDOS flag address in ES:BX
         mov     [word ptr indos_flag_addr], bx
         mov     [word ptr indos_flag_addr + 2], es
-        push    ds
+        push    ds              ; Save DS (used in INT 21h/5D06h to return)
         mov     ax, 5D06h
-        int     21h
-        mov     ax, ds
-        mov     es, ax
-        pop     ds
+        int     21h             ; Get Critical Error Flag address in DS:SI
         jnc     @@successfully_get_critical_error_flag_addr
-        print_string cannot_get_critical_error_flag
-        mov     al, 2
-        jmp     @@return_with_error_code
+        pop     ds              ; Restore DS (branch 1)
+        push    ax (offset cannot_get_cef_num)
+        call    sprint_byte
+        add     sp, 4
+        mov     dx, offset failed_to_install
+        mov     ah, 09h
+        int     21h
+        mov     dx, offset cannot_get_cef
+        mov     ah, 09h
+        int     21h
+        mov     ax, 13h
+        jmp     @@return
 @@successfully_get_critical_error_flag_addr:
         mov     [word ptr critical_error_flag_addr], si
-        mov     [word ptr critical_error_flag_addr + 2], es
+        mov     [word ptr critical_error_flag_addr + 2], ds
+        pop     ds              ; Restore DS (branch 2)
 
         ; Set up some injected code that can only be determined in the runtime
         mov     [word ptr stage_num_animate_pat + 1], offset my_0b50_0775
@@ -2368,96 +1963,124 @@ real_start:
         mov     [word ptr harry_up_animate_pat + 3], cs
         mov     [word ptr practise_menu_part1_pat + 3], cs
 
-        ; Initialize the keyboard BIOS
+        ; Initialize the Keyboard BIOS
         mov     ah, 03h
         int     18h
 
-        ; Hook INT7, INT8, and INT1Ch/02h
-        ; In the original INT1Ch/02h routine, it will store your CX input (i.e.,
-        ; the delay before calling the routine) 0000:058A, and store your ES:BX
-        ; (i.e., the address of the routine) input into the vector of INT7.
-        ; Normally, INT8 is masked out if there is no INT1Ch/02h routine
-        ; running, and if one hooks into INT8, it won't be called anyway.
-        ; If one manually calls INT8 without setting 0000:058A, they effectively
-        ; make a call of INT1Ch/02h with CX=0000h, ES:BX=(whatever in the INT7
-        ; vector), causing a General Protection Fault to occur after 655.36s.
-        ; To prevent this from happening, we can set 0000:058A to an arbitrary
-        ; non-zero value and set INT7 to be as INT8.
-        mov     ax, 3508h
+        ; Hook the interrupts, and print an error message if an error occurs
+        call    hook_interrupts
+        test    ax, ax
+        jz      @@hook_interrupt_success
+        push    ax
+        mov     dx, offset failed_to_install
+        mov     ah, 09h
         int     21h
-        mov     [word ptr old_int8], bx
-        mov     [word ptr old_int8 + 2], es
-        mov     dx, offset my_int8_wrapper
-        mov     ax, 2508h
+        pop     ax
+        test    ax, 01h
+        jne     @@skip_printing_cannot_get_mux_id
+        push    ax
+        mov     dx, offset cannot_get_mux_id
+        mov     ah, 09h
         int     21h
-        mov     ax, 3507h
+        pop     ax
+@@skip_printing_cannot_get_mux_id:
+        test    ax, 02h
+        jne     @@skip_printing_already_installed
+        push    ax
+        mov     dx, offset already_installed
+        mov     ah, 09h
         int     21h
-        mov     [word ptr old_int7], bx
-        mov     [word ptr old_int7 + 2], es
-        mov     dx, offset my_int8_wrapper
-        mov     ax, 2507h
+        pop     ax
+@@skip_printing_already_installed:
+        jmp     @@return
+@@hook_interrupt_success:
+
+        ; Print 'Successfully installed'
+        mov     dx, (offset successfully_installed)
+        mov     ah, 09h
         int     21h
-        mov     ax, 351Ch
-        int     21h
-        mov     [word ptr old_int1c], bx
-        mov     [word ptr old_int1c + 2], es
-        mov     dx, offset my_int1c
-        mov     ax, 251Ch
-        int     21h
-        mov     ax, 00h
+
+        ; Release the environment block. We assume the INT 21h/49h call always
+        ; success, since the environment MCB will always on the chain, if our
+        ; .COM file is loaded by DOS.
+        mov     ax, [es:ENV_SEG_OFF]
         mov     es, ax
-        mov     si, 058Ah
-        mov     [word ptr es:si], 500
-        int     08h
-
-        ; Hook INT21h
-        mov     ax, 3521h
-        int     21h
-        mov     [word ptr old_int21], bx
-        mov     [word ptr old_int21 + 2], es
-        mov     dx, offset my_int21
-        mov     ax, 2521h
+        mov     ah, 49h
         int     21h
 
-        ; Hook INT2Fh
-        mov     bh, 0C0h  ; MUX id 00h~BFh is reserved
-@@L1:
-        mov     ah, bh
-        mov     al, 00h
-        push    bx
-        int     2Fh
-        pop     bx
-        cmp     al, 00h
-        jne     @@L2
-        mov     [mux_id], bh
-        jmp     @@L3
-@@L2:
-        inc     bh
-        cmp     bh, 0
-        jne     @@L1
-        print_string cannot_get_mux_id
-        mov     al, 3
-        jmp     @@return_with_error_code
-@@L3:
-        mov     ax, 352Fh
+        jmp     @@terminate_and_stay_resident
+
+@@uninstall:
+        ; ---------- Uninstall the TSR ----------
+
+        call    uninstall_previous_tsr
+        mov     [@@int_no_hooked], dx
+        test    ax, ax
+        jnz     @@uninstall_previous_tsr_success
+        push    ax
+        mov     dx, offset failed_to_uninstall
+        mov     ah, 09h
         int     21h
-        mov     [word ptr old_int2f], bx
-        mov     [word ptr old_int2f + 2], es
-        mov     dx, offset my_int2f
-        mov     ax, 252Fh
+        pop     ax
+        test    ax, 01h
+        jne     @@skip_printing_int_vector_hooked
+        push    ax
+        push    [@@int_no_hooked] (offset int_vector_hooked_num)
+        call    sprint_byte
+        add     sp, 4
+        mov     dx, offset int_vector_hooked
+        mov     ah, 09h
+        int     21h
+        pop     ax
+@@skip_printing_int_vector_hooked:
+        test    ax, 02h
+        jne     @@skip_printing_not_installed
+        push    ax
+        mov     dx, offset not_installed
+        mov     ah, 09h
+        int     21h
+        pop     ax
+@@skip_printing_not_installed:
+        test    ax, 03h
+        jne     @@skip_printing_cannot_find_mcb
+        push    ax
+        mov     dx, offset cannot_find_mcb
+        mov     ah, 09h
+        int     21h
+        pop     ax
+@@skip_printing_cannot_find_mcb:
+        jmp     @@return
+@@uninstall_previous_tsr_success:
+
+        ; Print 'Successfully uninstalled'
+        mov     dx, (offset successfully_uninstalled)
+        mov     ah, 09h
         int     21h
 
-        print_string successfully_installed
+@@terminate_and_stay_resident:
+        mov     dx, 01h
+        jmp     @@return
+@@return_0:
+        xor     dx, dx
+@@return:
+        ret
+endp my_main
 
-        ; Terminate and stay resident
-        mov     dx, offset end_of_resident + 10Fh       ; 1276 +
+; Return value:
+real_start:
+        call    my_main
+        test    dx, dx
+        jz      @@return_with_int21_4c
+
+        ; Terminate and stay resident. The parameter to INT 21h/3100h (via DX)
+        ; is the numbers of paragraph to stay resident. Adding the 100h bytes
+        ; of PSP, we have DX = ceil(((offset end_of_resident) + 100h) / 16.0).
+        mov     dx, offset end_of_resident + 10Fh
         shr     dx, 4
         mov     ax, 3100h
         int     21h
 
-@@return_0:
-        mov     al, 0
-@@return_with_error_code:
+@@return_with_int21_4c:
         mov     ah, 4Ch
         int     21h
 ends cseg

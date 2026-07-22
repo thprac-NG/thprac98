@@ -23,13 +23,17 @@ char file_handler_in_buffers[FILE_HANDLER_POOL_SIZE][FILE_HANDLER_BUFFER_SIZE];
 char file_handler_out_buffers[FILE_HANDLER_POOL_SIZE][FILE_HANDLER_BUFFER_SIZE];
 
 FILE_ stdin_content, stdout_content, stderr_content;
-const FILE_* const stdin_ = &stdin_content;
-const FILE_* const stdout_ = &stdout_content;
-const FILE_* const stderr_ = &stderr_content;
+FILE_* stdin_ = &stdin_content;
+FILE_* stdout_ = &stdout_content;
+FILE_* stderr_ = &stderr_content;
 
 extern "C" void stdio_init(void);
 void stdio_init(void) {
   int i = 0;
+  memset(file_handler_pool, 0x00, sizeof(file_handler_pool));
+  memset(&stdin_content, 0x00, sizeof(stdin_content));
+  memset(&stdout_content, 0x00, sizeof(stdout_content));
+  memset(&stderr_content, 0x00, sizeof(stderr_content));
   for (i = 0; i < FILE_HANDLER_POOL_SIZE; ++i) {
     file_handler_pool[i].file_handle = -1;
     file_handler_pool[i].in_buffer = file_handler_in_buffers[i];
