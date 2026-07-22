@@ -257,7 +257,7 @@ local @@mux_id:byte, @@prev_cseg:word
         mov     cx, es
         cmp     cx, [@@prev_cseg]
         jne     @@vectors_not_match
-        cmp     bx, offset my_int2F
+        cmp     bx, offset my_int2f
         jne     @@vectors_not_match
         jmp     @@vectors_match
 @@vectors_not_match:

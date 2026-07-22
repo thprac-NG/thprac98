@@ -16,7 +16,7 @@ echo -I..\3rdparty\master.lib\include -I..\3rdparty\ReC98 > cppargs.tmp
 echo -I..\3rdparty\printf -I.. >> cppargs.tmp
 echo -w -ms -wall -v -3 -RT- -DANCIENT_CXX=1 >> cppargs.tmp
 echo -DPRINTF_INCLUDE_CONFIG_H=1 >> cppargs.tmp
-echo /m5 /w2 /l /i..\src > asmargs.tmp
+echo /m5 /w2 /l /ml /i..\src > asmargs.tmp
 
 : Test if tasm, tlink and tcc exists
 %shell% %tasm% > NUL
@@ -194,6 +194,6 @@ del entrance.exe
 goto %build_ret%
 
 :cleanExt
-for %%a in (cpp asm) do del %%aargs.tmp
+@REM for %%a in (cpp asm) do del %%aargs.tmp
 for %%a in (shell tasm) do set %%a=
 cd ..
