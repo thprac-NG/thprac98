@@ -136,7 +136,7 @@ endp on_tick
 ;   0B50:0775 | 9A yy yy xx xx    callf   my_0b50_0775
 ;   0B50:077A | 8D 9F 00 00       lea     bx, [bx + 0000h]  ; effectively nop
 ;   0B50:077E | 83 C4 0A          add     sp, 0Ah
-; Check https://github.com/nmlgc/ReC98/blob/d892535e723b3691612363d1bbdbd2a54f43fb43/th01/main_01.cpp#L314
+; Check https://github.com/H-J-Granger/ReC98/blob/d892535e723b3691612363d1bbdbd2a54f43fb43/th01/main_01.cpp#L314
 ; for the C version of the original code.
 ;
 ; harry_up_anmiate (restore the menu after "HARRY UP" animation): {
@@ -155,7 +155,7 @@ endp on_tick
 ; (offset hooked_resident_create_and_stuff_set).
 ; Original assembly: call resident_create_and_stuff_set
 ; Modified assembly: call hooked_resident_create_and_stuff_set
-; Check https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L343-L349
+; Check https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L343-L349
 ; for the C version of the original code.
 ;
 ; practise_menu_part2 {
@@ -178,7 +178,7 @@ endp on_tick
 ;   0A1C:066C | 8D BD 00 00             lea     di, [di + 0000h]
 ;   0A1C:0670 | 8D AE 00 00             lea     bp, [bp + 0000h]
 ;   0A1C:0674 | 8D B4 00 00             lea     si, [si + 0000h]
-; Check https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L378-L380
+; Check https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L378-L380
 ; for the C version of the original code.
 ;
 ; (*1) This is an absolute call, the segment address might differ.
@@ -385,12 +385,12 @@ endp my_1924_0364
 
 ; The segment and offset of the variable `resident` (of type resident_t far)
 ; defined in
-; https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/core/resstuff.cpp#L11 .
+; https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/core/resstuff.cpp#L11 .
 RESSTUFF_CPP_RESIDENT_SEG       EQU 1229h
 RESSTUFF_CPP_RESIDENT_OFF       EQU 1C56h
 
 ; The offset of the variable `opts` (of type cfg_options_t far) defined in
-; https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L67-L72 .
+; https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L67-L72 .
 ; (Its segment is the same as `resident`)
 OP_01_CPP_OPTS_OFF              EQU 0090h
 
@@ -398,7 +398,7 @@ SCENE_COUNT             EQU 4
 STAGES_PER_SCENE        EQU 5
 
 ; For the C version of these structures, see
-; https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/resident.hpp#L8-L72 .
+; https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/resident.hpp#L8-L72 .
 
 enum bgm_mode_t \
         BGM_MODE_OFF, BGM_MODE_MDRV2, BGM_MODE_COUNT
@@ -441,7 +441,7 @@ struc resident_t
 ends resident_t
 
 ; For the C version of the structure, see
-; https://github.com/nmlgc/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/formats/cfg.hpp#L7-L12 .
+; https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/formats/cfg.hpp#L7-L12 .
 struc cfg_options_t
         rank                    db ?
         bgm_mode                bgm_mode_t ?
