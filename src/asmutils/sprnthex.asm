@@ -1,4 +1,6 @@
 ; Print hexadecimal numbers to ASCII string.
+; This is a snippet file and should be `include`d in the assembly source file
+; instead of being linked with the other .OBJ files.
 ;
 ; Procedures:
 ;       unsigned to_hex_digit(unsigned);

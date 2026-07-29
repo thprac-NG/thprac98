@@ -1,4 +1,6 @@
 ; Print characters and strings to the TRAM.
+; This is a snippet file and should be `include`d in the assembly source file
+; instead of being linked with the other .OBJ files.
 ;
 ; Procedures:
 ;       int print_ch(int code, int x, int y, int attr);
