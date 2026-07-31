@@ -4,9 +4,9 @@
 ; `include` dependency: interupt.asm
 ;
 ; Procedures:
-;       unsigned check_tsr_status(void);
-;       unsigned hook_interrupts(void);
-;       unsigned uninstall_previous_tsr(void);
+;       unsigned near check_tsr_status(void);
+;       unsigned near hook_interrupts(void);
+;       unsigned near uninstall_previous_tsr(void);
 
 pushstate
 ideal

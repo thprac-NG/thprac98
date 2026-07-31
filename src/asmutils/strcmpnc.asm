@@ -3,7 +3,7 @@
 ; instead of being linked with the other .OBJ files.
 ;
 ; Procedures:
-;       bool strcmp_ignore_case(const char far*, const char far*);
+;       int near strcmp_ignore_case(const char far*, const char far*);
 
 pushstate
 ideal

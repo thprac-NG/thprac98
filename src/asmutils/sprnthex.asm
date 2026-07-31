@@ -3,10 +3,10 @@
 ; instead of being linked with the other .OBJ files.
 ;
 ; Procedures:
-;       unsigned to_hex_digit(unsigned);
-;       void sprint_byte(char near*, unsigned);
-;       void sprint_word(char near*, unsigned);
-;       void sprint_dword(char near*, unsigned long);
+;       unsigned near to_hex_digit(unsigned);
+;       void near sprint_byte(char near*, unsigned);
+;       void near sprint_word(char near*, unsigned);
+;       void near sprint_dword(char near*, unsigned long);
 
 pushstate
 ideal
