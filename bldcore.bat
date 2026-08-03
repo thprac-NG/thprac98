@@ -2,8 +2,7 @@
 
 set shell=
 if not %1.==dos. set shell=msdos -e -x
-set tasm=tasm
-if %1.==dos. set tasm=tasm32-d
+set tasm=tasm32-d
 
 echo [INFO] Starting the build with parameter %2...
 

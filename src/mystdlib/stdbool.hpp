@@ -7,4 +7,6 @@ typedef unsigned char bool;
 #define true ((bool)(1))
 #define false ((bool)(0))
 
+typedef unsigned bool16;
+
 #endif  // #ifndef THPRAC98_SRC_MYSTDLIB_STDBOOL_HPP_

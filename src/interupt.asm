@@ -201,14 +201,11 @@ proc my_int2f far
 @@skip_jumping_to_original_int2f:
 
         ; Push all the registers to the stack
-        pushfd
-        pushad
-        push    ds es fs gs
+        push    ds
 
         ; Meet the usual assumptions in the .COM file
-        cld
-        mov     ax, cs
-        mov     ds, ax
+        mov     bx, cs
+        mov     ds, bx
         assume  ds:cseg
 
         ; AL == 00h: Check whether this MUX id has been installed
@@ -244,9 +241,7 @@ proc my_int2f far
 
         ; Restore all the registers and returns
 @@return:
-        pop     gs fs es ds
-        popad
-        popfd
+        pop     ds
         iret
 endp my_int2f
 

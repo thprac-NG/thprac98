@@ -14,6 +14,8 @@ codeseg
         public strcmp_ignore_case
         public print_ch
         public print_str
+        public memory_copy
+        public print_frame
 
         public _to_hex_digit
         public _sprint_byte
@@ -22,6 +24,8 @@ codeseg
         public _strcmp_ignore_case
         public _print_ch
         public _print_str
+        public _memory_copy
+        public _print_frame
 
 proc _to_hex_digit near
         jmp     to_hex_digit
@@ -44,9 +48,17 @@ endp _print_ch
 proc _print_str near
         jmp     print_str
 endp _print_str
+proc _memory_copy near
+        jmp     memory_copy
+endp _memory_copy
+proc _print_frame near
+        jmp     print_frame
+endp _print_frame
 
 include "..\src\asmutils\sprnthex.asm"
 include "..\src\asmutils\strcmpnc.asm"
 include "..\src\asmutils\tramprnt.asm"
+include "..\src\asmutils\memcpy.asm"
+include "..\src\asmutils\prntfrme.asm"
 
 end

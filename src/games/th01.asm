@@ -47,7 +47,6 @@ cur_psp         dw ?
 temp_proc       dd ?
 
 include 'interupt.asm'  ; Hooked Interrupts
-include 'hookint.asm'   ; Hook Interrupts
 
 ; --------------------------------------------------------------------------
 ; Function: after_load_exe
@@ -185,24 +184,8 @@ endp on_tick
 
 reiiden_exe     db "REIIDEN.EXE", 0
 op_exe          db "OP.EXE", 0
-must_match      db -1
 
-; Due to the language restriction, the array members are represented as offsets
-; of an array stored elsewhere.
-struc inject_code_t
-        ; The filename to be injected
-        filename        dw ?
-        seg             dw ?
-        off             dw ?
-        len             dw 0
-        original_mem    dw ?
-        patched_mem     dw ?
-        ; This array controls the condition of performing the patch.
-        ; If variable_mem[i] == 1, then original_mem[i] can vary.
-        ; If variable_mem[i] == 0, then original_mem[i] must match.
-        ; If variable_mem[0] == -1, then the whole memory must match.
-        variable_mem    dw (offset must_match)
-ends inject_code_t
+include "..\src\inject.asm"
 
 invincible_part1_org    db 07Eh, 02Fh
 invincible_part1_pat    db 089h, 0DBh
@@ -453,11 +436,12 @@ ends cfg_options_t
 proc hooked_resident_create_and_stuff_set far
 arg @@rank:word, @@bgm_mode:word, @@rem_bombs:word, @@credit_lives_extra:word, \
     @@rand_lo:word, @@rand_hi:word
+        assume  ds:nothing
         push    ax bx es
 
         push    [@@rand_hi] [@@rand_lo] [@@credit_lives_extra] [@@rem_bombs]
         push    [@@bgm_mode] [@@rank]
-        call    [dword ptr practise_menu_part1_org + 1]
+        call    [dword ptr cs:practise_menu_part1_org + 1]
         add     sp, 0Ch
 
         call    far show_practise_menu
@@ -542,11 +526,11 @@ local @@saved_psp:word
         jne     @@L3
         inc     dx  ; the filename of the executing program
 
-        push    dx es (offset reiiden_exe) ds
+        push    es dx ds (offset reiiden_exe)
         call    strcmp_ignore_case
         add     sp, 8
-        cmp     ax, 1
-        jne     @@skip_reiiden_exe_patches
+        test    ax, ax
+        jnz     @@skip_reiiden_exe_patches
 
         mov     es, [@@saved_psp]  ; the PSP segment
         mov     al, [byte ptr fx_state + 1]
@@ -599,11 +583,11 @@ local @@saved_psp:word
         add     sp, 6
 @@skip_reiiden_exe_patches:
 
-        push    dx es (offset op_exe) ds
+        push    es dx ds (offset op_exe)
         call    strcmp_ignore_case
         add     sp, 8
-        cmp     ax, 1
-        jne     @@skip_op_exe_patches
+        test    ax, ax
+        jnz     @@skip_op_exe_patches
 
         mov     es, [@@saved_psp]  ; the PSP segment
         push    es 1 (offset practise_menu_part1)
@@ -619,81 +603,6 @@ local @@saved_psp:word
 @@return:
         ret
 endp inject
-
-; Argument 1: offset to the inject_code_t structure
-; Argument 2: 1 means to inject, 0 means to restore
-; Argument 3: the PSP segment of the current program
-proc inject_one near
-arg @@inject_code:word, @@flag:word, @@psp_seg:word
-local @@must_match:byte
-        push    si di es
-        mov     si, [@@inject_code]
-        add     [@@psp_seg], 10h  ; Add the size of PSP (100h)
-        mov     ax, [@@psp_seg]
-        add     ax, [word ptr ds:si + inject_code_t.seg]
-        mov     es, ax
-        mov     si, [@@inject_code]
-        test    [@@flag], 1
-        jz      @@restore
-        ; Inject the code.
-        mov     dl, [byte ptr ds:si + inject_code_t.variable_mem]
-        mov     [@@must_match], dl
-        mov     ax, 0
-@@L1:
-        mov     di, [word ptr ds:si + inject_code_t.off]
-        add     di, ax
-        mov     cl, [byte ptr es:di]
-        mov     bx, [word ptr ds:si + inject_code_t.original_mem]
-        add     bx, ax
-        cmp     cl, [byte ptr ds:bx]
-        je      @@L2
-        cmp     [@@must_match], -1
-        je      @@return
-        mov     bx, [word ptr ds:si + inject_code_t.variable_mem]
-        add     bx, ax
-        cmp     [byte ptr ds:bx], 1
-        jne     @@return
-@@L2:
-        inc     ax
-        cmp     ax, [word ptr ds:si + inject_code_t.len]
-        jne     @@L1
-        mov     di, [word ptr ds:si + inject_code_t.off]
-        mov     bx, [word ptr ds:si + inject_code_t.original_mem]
-        push    es
-        push    [word ptr ds:si + inject_code_t.len] bx ds di es
-        call    memory_copy
-        add     sp, 10
-        pop     es
-        mov     bx, [word ptr ds:si + inject_code_t.patched_mem]
-        push    es
-        push    [word ptr ds:si + inject_code_t.len] di es bx ds
-        call    memory_copy
-        add     sp, 10
-        pop     es
-        jmp     @@return
-@@restore:
-        ; Restore the code.
-        mov     ax, 0
-@@L3:
-        mov     di, [word ptr ds:si + inject_code_t.off]
-        add     di, ax
-        mov     bx, [word ptr ds:si + inject_code_t.patched_mem]
-        add     bx, ax
-        mov     cl, [byte ptr es:di]
-        cmp     cl, [byte ptr ds:bx]
-        jne     @@return
-        inc     ax
-        cmp     ax, [word ptr ds:si + inject_code_t.len]
-        jne     @@L3
-        mov     bx, [word ptr ds:si + inject_code_t.original_mem]
-        mov     di, [word ptr ds:si + inject_code_t.off]
-        push    [word ptr ds:si + inject_code_t.len] di es bx ds
-        call    memory_copy
-        add     sp, 10
-@@return:
-        pop     es di si
-        ret
-endp inject_one
 
 ; Returns: Whether the FX status has been updated.
 proc maintain_bs_menu_ui near
@@ -775,7 +684,7 @@ local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
         mov     bx, offset bs_covered_tram
 @@L11:
         push    ax bx es
-        push    (2 * BS_MENU_WIDTH) ax es bx ds
+        push    (2 * BS_MENU_WIDTH) ds bx es ax
         call    memory_copy
         add     sp, 10
         pop     es bx ax
@@ -789,7 +698,7 @@ local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
         mov     bx, offset bs_covered_tram_attr
 @@L12:
         push    ax bx es
-        push    (2 * BS_MENU_WIDTH) ax es bx ds
+        push    (2 * BS_MENU_WIDTH) ds bx es ax
         call    memory_copy
         add     sp, 10
         pop     es bx ax
@@ -880,7 +789,7 @@ proc store_covered_tram near
         mov     bx, offset bs_covered_tram
 @@L4:
         push    ax bx es
-        push    (2 * BS_MENU_WIDTH) bx ds ax es
+        push    (2 * BS_MENU_WIDTH) es ax ds bx
         call    memory_copy
         add     sp, 10
         pop     es bx ax
@@ -894,7 +803,7 @@ proc store_covered_tram near
         mov     bx, offset bs_covered_tram_attr
 @@L5:
         push    ax bx es
-        push    (2 * BS_MENU_WIDTH) bx ds ax es
+        push    (2 * BS_MENU_WIDTH) es ax ds bx
         call    memory_copy
         add     sp, 10
         pop     es bx ax
@@ -1008,18 +917,8 @@ endp show_practise_menu
 
 ; ------------------------------ Practise Menu UI ----------------------------
 
-struc ui_window
-        top_left_x              db 0
-        top_left_y              db 0
-        width                   db 2
-        height                  db 2
-        first_component_off     dw 0FFFFh
-        tail_component_off      dw 0FFFFh
-        cur_component_off       dw 0FFFFh
-        default_slider_width    db 0
-        cur_drawing_x           db 1
-        cur_drawing_y           db 1
-ends ui_window
+include "..\src\tui\tsrtuidt.asm"
+include "..\src\tui\tsrtui.asm"
 
 practise_menu_window    ui_window {     \
         top_left_x              = 40,   \
@@ -1028,82 +927,6 @@ practise_menu_window    ui_window {     \
         height                  = 10,   \
         default_slider_width    = 22    \
 }
-
-UI_SLIDER_ENUM  EQU 0
-
-struc ui_slider
-        window_off              dw 0FFFFh
-        prev_component_off      dw 0FFFFh
-        next_component_off      dw 0FFFFh
-        ui_type                 db UI_SLIDER_ENUM
-        value                   dd 0
-        min_value               dd 0
-        max_value               dd 0
-        step                    dd 1            ; must be a divisor of
-                                                ; (max_value - min_value) and
-                                                ; (value - min_value)
-        bottom_indicator        db 1
-        width                   db 0FFh         ; 0FFh: use window's default
-                                                ; must be odd
-        text_func_off           dw ?            ; A near procedure, of type
-                                                ; (const char near*)(*)(dword).
-                                                ; For some reason, you can't
-                                                ; correctly set a default value
-                                                ; here.
-        label_off               dw 0FFFFh
-ends ui_slider
-
-; A dword value can have at most 10 figures, plus the terminating null.
-dword_to_dec_str        db 11 dup (0)
-; Argument 1: The high word of the dword to be converted
-; Argument 2: The lower word of the dword to be converted
-; Return: The offset of a ASCIZ string containing the decimal representation of
-;         the dword
-proc dword_to_dec near
-arg @@in_lo:word, @@in_hi:word
-        push    ds di
-
-        shr     eax, 16
-        push    ax              ; push high word of eax
-        push    bx
-        shr     ebx, 16
-        push    bx              ; push ebx
-        push    dx
-        shr     edx, 16
-        push    dx              ; push edx
-
-        mov     ax, cs
-        mov     ds, ax
-        xor     edx, edx        ; edx = 0
-        mov     ax, 10
-        cwd
-        xchg    eax, ebx        ; ebx = 10
-        mov     ax, [@@in_hi]
-        shl     eax, 16
-        mov     ax, [@@in_lo]   ; eax = in
-        mov     di, (offset dword_to_dec_str + 9)
-@@L1:
-        xor     edx, edx
-        div     ebx             ; eax = eax / 10, edx = eax % 10
-        add     dx, '0'
-        mov     [byte ptr ds:di], dl
-        dec     di
-        test    eax, eax
-        jnz     @@L1
-        inc     di
-
-        pop     dx
-        shl     edx, 16
-        pop     dx              ; pop edx
-        pop     bx
-        shl     ebx, 16
-        pop     bx              ; pop ebx
-        pop     ax
-        shl     eax, 16         ; pop high word of eax
-        mov     ax, di
-        pop     di ds
-        ret
-endp dword_to_dec
 
 playing_mode_original_str       db 'Original', 0
 playing_mode_custom_str         db 'Custom', 0
@@ -1203,447 +1026,6 @@ arg @@window_off:word
         ret
 endp init_window
 
-; Switch the current component of the window. Nothing will happen if attempting
-; to switch to the previous component of the first one, or to switch to the next
-; component of the last one.
-; Argument 1: The offset of the window object.
-; Argument 2: Use 0 to switch to the previous component, 1 to switch to the
-;             next component.
-proc window_switch_cur near
-arg @@window_off:word, @@direction:word
-        push    bx di
-        mov     bx, [@@window_off]
-
-        mov     di, [bx + ui_window.cur_component_off]
-        cmp     di, 0FFFFh
-        je      @@return
-
-        cmp     [@@direction], 0
-        jne     @@next_component
-        mov     di, [di + ui_slider.prev_component_off]
-        cmp     di, 0FFFFh
-        je      @@return
-        mov     [bx + ui_window.cur_component_off], di
-        jmp     @@return
-@@next_component:
-        mov     di, [di + ui_slider.next_component_off]
-        cmp     di, 0FFFFh
-        je      @@return
-        mov     [bx + ui_window.cur_component_off], di
-
-@@return:
-        pop     di bx
-        ret
-endp window_switch_cur
-
-; Change the current value of the slider. Nothing will happen if attempting to
-; go out of bounds.
-; Argument 1: The offset of the slider object.
-; Argument 2: Use 0 to go less, 1 to go greater.
-proc slider_change_value near
-arg @@slider_off:word, @@direction:word
-        push    bx
-        push    ax
-        shr     eax, 16
-        push    ax      ; push eax
-        mov     bx, [@@slider_off]
-
-        mov     eax, [bx + ui_slider.value]
-        cmp     [@@direction], 0
-        jne     @@go_greater
-        cmp     eax, [bx + ui_slider.min_value]
-        je      @@return
-        sub     eax, [bx + ui_slider.step]
-        mov     [bx + ui_slider.value], eax
-        jmp     @@return
-@@go_greater:
-        cmp     eax, [bx + ui_slider.max_value]
-        je      @@return
-        add     eax, [bx + ui_slider.step]
-        mov     [bx + ui_slider.value], eax
-
-@@return:
-        pop     ax
-        shl     eax, 16
-        pop     ax      ; pop eax
-        pop     bx
-        ret
-endp slider_change_value
-
-; Insert a UI component to the window.
-; Argument 1: The offset of the window object
-; Argument 2: The offset of the UI component object in the linked list to be
-;             injected after. 0FFFFh means insert to the begin of the list.
-; Argument 3: The offset of the UI component object to be injected
-proc window_insert_component near
-arg @@window_off:word, @@pos_off:word, @@component_off:word
-        push    bx di si ax ds
-        mov     ax, cs
-        mov     ds, ax
-
-        ; Insert the component to the component linked list of the window
-        mov     bx, [@@window_off]
-        mov     di, [@@component_off]
-        mov     [di + ui_slider.window_off], bx
-        cmp     [@@pos_off], 0FFFFh
-        jne     @@insert_after_an_object
-        ;   Insert to the begin of the list
-        mov     [di + ui_slider.prev_component_off], 0FFFFh
-        mov     si, [bx + ui_window.first_component_off]
-        mov     [di + ui_slider.next_component_off], si
-        mov     [bx + ui_window.first_component_off], di
-        cmp     si, 0FFFFh
-        je      @@L1
-        mov     [si + ui_slider.prev_component_off], di
-        jmp     @@L3
-@@L1:
-        mov     [bx + ui_window.cur_component_off], di
-@@L3:
-        jmp     @@end_of_inserting
-@@insert_after_an_object:
-        mov     si, [@@pos_off]
-        mov     si, [si + ui_slider.next_component_off]
-        mov     [di + ui_slider.next_component_off], si
-        cmp     si, 0FFFFh
-        je      @@L2
-        mov     [si + ui_slider.prev_component_off], di
-@@L2:
-        mov     si, [@@pos_off]
-        mov     [si + ui_slider.next_component_off], di
-        mov     [di + ui_slider.prev_component_off], si
-@@end_of_inserting:
-
-        pop     ds ax si di bx
-        ret
-endp window_insert_component
-
-; Draw a window to the screen.
-; Argument 1: The offset of the window object
-proc draw_window near
-arg @@window_off:word
-        push    ax bx di
-        mov     bx, [@@window_off]
-
-        mov     [word ptr bx + ui_window.cur_drawing_x], 0101h
-
-        ; Print the outer frame
-        push    TEXT_WHITE
-        mov     al, [bx + ui_window.height]
-        cbw
-        push    ax
-        mov     al, [bx + ui_window.width]
-        cbw
-        push    ax
-        mov     al, [bx + ui_window.top_left_y]
-        cbw
-        push    ax
-        mov     al, [bx + ui_window.top_left_x]
-        cbw
-        push    ax
-        call    print_frame
-        add     sp, 10
-
-        ; Draw the components according to their type
-        mov     di, [bx + ui_window.first_component_off]
-@@draw_components_loop:
-        cmp     di, 0FFFFh
-        je      @@draw_components_loop_break
-        cmp     [di + ui_slider.ui_type], UI_SLIDER_ENUM
-        je      @@draw_slider
-        jmp     @@draw_nothing
-@@draw_slider:
-        ; The bytes cur_drawing_x and cur_drawing_y are placed next to each
-        ; other, so the offset cur_drawing_x can also be treated as a packed
-        ; word containing X and Y coordinate.
-        mov     ax, [word ptr bx + ui_window.cur_drawing_x]
-        add     ax, [word ptr bx + ui_window.top_left_x]
-        push    ax
-        xor     ax, ax
-        cmp     di, [word ptr bx + ui_window.cur_component_off]
-        jne     @@L1
-        inc     ax
-@@L1:
-        push    ax di
-        call    draw_slider
-        add     sp, 6
-        inc     [bx + ui_window.cur_drawing_y]
-        jmp     @@draw_end
-@@draw_nothing:
-@@draw_end:
-        mov     di, [di + ui_slider.next_component_off]
-        jmp     @@draw_components_loop
-@@draw_components_loop_break:
-
-        pop     di bx ax
-        ret
-endp draw_window
-
-; Draw a slider onto the screen.
-; Component:
-;                        <-    value    ->    Label
-;               width:  | 2 |  width  | 2 | 1 + strlen(label)
-; The characters <- and -> are actually JIS 0x222B and 0x222A, respectively.
-; There is a halfwidth space between the character '->' and the content of the
-; label. The character '<-' ('->') will not be displayed if the value can't go
-; lower (greater). These characters, if displayed, will have a color of aqua
-; when not highlighted, and yellow when highlighted.
-;
-; The bottom indicator (of width 2) is implemented by giving the underline
-; attribute to an interval of the characters in the 'value' part. The underline
-; below a character always has a 1/4-width offset to the right (see the figure
-; below), so the characters must align to the fullwidth boundary, if the value
-; string can have half-width characters.
-;                         AA              AAaa
-;                          --              ----
-;       Figure. Illustration of the underline attribute given to the
-;       halfwidth and fullwidth characters. 'AA' represents halfwidth
-;       character 'A', and 'AAaa' represents a hypothetical fullwidth
-;                               character Aa.
-;
-; Argument 1: The offset of the slider object
-; Argument 2: whether it is highlighted
-; Argument 3: The lower byte is the X coordinate of the top-left corner, and
-;             the upper byte is its Y coordinate.
-; Returns: The lower byte is the X coordinate of the bottom-right corner, and
-;          the upper byte is its Y coordinate.
-proc draw_slider near
-arg @@slider_off:word, @@highlighted:word, @@top_left_x_y:word
-local @@value_str_off:word, @@return_value:word, @@width:word
-        push    ds es di bx si
-        shr     eax, 16
-        push    ax      ; push high word of eax
-        push    cx
-        shr     ecx, 16
-        push    cx      ; push ecx
-        push    dx
-        shr     edx, 16
-        push    dx      ; push edx
-        mov     ax, cs
-        mov     ds, ax
-        mov     bx, [@@slider_off]
-
-        mov     al, [bx + ui_slider.width]
-        cmp     al, 0FFh
-        jne     @@L10
-        mov     di, [bx + ui_slider.window_off]
-        mov     al, [di + ui_window.default_slider_width]
-@@L10:
-        mov     [byte ptr @@width], al
-
-        ; Print '<-'
-        mov     al, [byte ptr @@top_left_x_y + 1]
-        cbw
-        imul    dx, ax, 80
-        add     dl, [byte ptr @@top_left_x_y]
-        shl     dx, 1
-        mov     di, dx
-        mov     ax, TRAM_SEG
-        mov     es, ax
-        mov     ax, [word ptr bx + ui_slider.value]
-        cmp     ax, [word ptr bx + ui_slider.min_value]
-        je      @@L1
-        mov     [word ptr es:di], 2B02h
-        mov     [word ptr es:di + 2], 2B62h
-        jmp     @@L2
-@@L1:
-        mov     [word ptr es:di], 0020h
-        mov     [word ptr es:di + 2], 0020h
-@@L2:
-        mov     ax, TRAM_ATTR_SEG
-        mov     es, ax
-        mov     al, TEXT_AQUA
-        cmp     [@@highlighted], 1
-        jne     @@L3
-        mov     al, TEXT_YELLOW
-@@L3:
-        mov     [byte ptr es:di], al
-        mov     [byte ptr es:di + 2], al
-
-        ; Print '->'
-        add     di, 4
-        push    di                              ; push offset of the value part
-        mov     al, [byte ptr @@width]
-        cbw
-        add     di, ax
-        add     di, ax
-        mov     ax, TRAM_SEG
-        mov     es, ax
-        mov     ax, [word ptr bx + ui_slider.value]
-        cmp     ax, [word ptr bx + ui_slider.max_value]
-        je      @@L4
-        mov     [word ptr es:di], 2A02h
-        mov     [word ptr es:di + 2], 2A62h
-        jmp     @@L5
-@@L4:
-        mov     [word ptr es:di], 0020h
-        mov     [word ptr es:di + 2], 0020h
-@@L5:
-        mov     ax, TRAM_ATTR_SEG
-        mov     es, ax
-        mov     al, TEXT_AQUA
-        cmp     [@@highlighted], 1
-        jne     @@L6
-        mov     al, TEXT_YELLOW
-@@L6:
-        mov     [byte ptr es:di], al
-        mov     [byte ptr es:di + 2], al
-
-        ; Print the space before the label
-        add     di, 4
-        mov     [byte ptr es:di], TEXT_WHITE
-        mov     ax, TRAM_SEG
-        mov     es, ax
-        mov     [word ptr es:di], 0020h
-
-        ; Print the label
-        push    bx
-        push    TEXT_WHITE
-        mov     al, [byte ptr @@top_left_x_y + 1]
-        cbw
-        push    ax
-        mov     al, [byte ptr @@top_left_x_y]
-        add     al, 5
-        add     al, [byte ptr @@width]
-        cbw
-        push    ax
-        push    ds
-        push    [bx + ui_slider.label_off]
-        call    print_str
-        add     sp, 10
-        pop     bx
-
-        ; Initialize the 'value' part
-        pop     di      ; pop the offset of 'value' part on TRAM
-        mov     ax, TRAM_SEG
-        mov     es, ax
-        mov     ax, 0020h
-        mov     cl, [byte ptr @@width]
-        xor     ch, ch
-        cld
-        rep stosw
-        mov     ax, TRAM_ATTR_SEG
-        mov     es, ax
-        mov     ax, TEXT_AQUA
-        cmp     [word ptr @@highlighted], 0
-        je      @@L7
-        mov     ax, TEXT_YELLOW
-@@L7:
-        mov     cl, [byte ptr @@width]
-        xor     ch, ch
-        sub     di, 2
-        std
-        rep stosw
-        cld
-        add     di, 2   ; now di is back to the offset of the 'value' part
-        push    di
-
-        ; Calculate the length of the value string
-        push    [word ptr (bx + ui_slider.value) + 2]
-        push    [word ptr bx + ui_slider.value]
-        call    [word ptr bx + ui_slider.text_func_off]
-        add     sp, 4
-        mov     [@@value_str_off], ax
-        mov     si, ax
-        xor     dx, dx
-@@value_str_chk_len_loop:
-        cmp     [byte ptr si], 0
-        je      @@value_str_chk_len_loop_break
-        inc     si
-        inc     dx
-        jmp     @@value_str_chk_len_loop
-@@value_str_chk_len_loop_break:                 ; dx = strlen(value_str_off)
-
-        ; Print the value string. Note that this method only works for purely
-        ; half-width strings.
-        mov     al, [byte ptr @@width]
-        cbw
-        sub     ax, dx
-        add     ax, 1
-        and     ax, 0FFFEh
-        add     di, ax          ; the offset of the string on TRAM
-        mov     ax, TRAM_SEG
-        mov     es, ax
-        mov     si, [@@value_str_off]
-@@print_value_str_loop:
-        mov     al, [byte ptr si]
-        test    al, al
-        jz      @@print_value_str_loop_break
-        cbw
-        mov     [word ptr es:di], ax
-        add     di, 2
-        inc     si
-        jmp     @@print_value_str_loop
-@@print_value_str_loop_break:
-
-        ; Calculate the position of the indicator. The position varies from 0
-        ; to (width - 2), so the position of the indicator will be
-        ; round((value - min) / (max - min) * (width - 2)), i.e.
-        ;                   2 * (value - min) * (width - 2) + 1
-        ;            floor( ----------------------------------- ).          (*)
-        ;                              2 * (max - min)
-        cmp     [bx + ui_slider.bottom_indicator], 0
-        je      @@skip_indicator_handling
-        mov     al, [byte ptr @@width]
-        cbw
-        sub     ax, 2
-        shl     ax, 1
-        cwd
-        xchg    ecx, eax        ; ecx = 2 * (width - 2)
-        mov     eax, [bx + ui_slider.value]
-        sub     eax, [bx + ui_slider.min_value]
-        mul     ecx             ; edx:eax = 2 * (value - min) * (width - 2)
-        inc     eax
-        cmp     eax, 0
-        jne     @@L8
-        inc     edx
-@@L8:                           ; edx:eax = 2 * (value - min) * (width - 2) + 1
-        mov     ecx, [bx + ui_slider.max_value]
-        sub     ecx, [bx + ui_slider.min_value]
-        shl     ecx, 1          ; ecx = 2 * (max - min)
-        div     ecx             ; edx:eax = (*)
-        pop     di              ; offset of the 'value' part on TRAM
-        add     di, ax
-        add     di, ax
-        mov     ax, TRAM_ATTR_SEG
-        mov     es, ax
-        mov     al, [byte ptr es:di]
-        or      al, TEXT_UNDERLINE_MASK
-        mov     [byte ptr es:di], al
-        mov     [byte ptr es:di + 2], al
-        jmp     @@L9
-@@skip_indicator_handling:
-        pop     di             ; pop the unused offset of TRAM here
-@@L9:
-
-        ; Prepare the return value
-        mov     ax, [@@top_left_x_y]
-        add     ah, 5
-        add     ah, [byte ptr bx + ui_slider.width]
-        mov     di, [bx + ui_slider.label_off]
-@@label_chk_len_loop:
-        cmp     [byte ptr di], 0
-        je      @@label_chk_len_loop_break
-        inc     di
-        inc     ah
-        jmp     @@label_chk_len_loop
-@@label_chk_len_loop_break:
-        mov     [@@return_value], ax
-
-        pop     dx
-        shl     edx, 16
-        pop     dx      ; pop edx
-        pop     cx
-        shl     ecx, 16
-        pop     cx      ; pop ecx
-        pop     ax
-        shl     eax, 16 ; pop high word of eax
-
-        mov     ax, [@@return_value]
-
-        pop     si bx di es ds
-        ret
-endp draw_slider
-
 struc int18_47_argument_block_t
         3plane_drawing_mode     db 00h
         unused_1                db ?
@@ -1663,170 +1045,7 @@ ends int18_47_argument_block_t
 
 int18_47_argument_block int18_47_argument_block_t {}
 
-vram_seg_arr    dw 0A800h, 0B000h, 0B800h, 0E000h
-
-; Draw a shadow color on every VRAM plane in a rectangular region.
-; Argument 1: The X coordinate of the top left corner / 8.
-; Argument 2: The Y coordinate of the top left corner.
-; Argument 3: The width of the region / 8.
-; Argument 4: The height of the region.
-proc draw_background_shadow
-arg @@top_left_x:word, @@top_left_y:word, @@width:word, @@height:word
-        push    es bx ax si di
-
-        xor     di, di
-@@vram_plane_loop:
-        mov     ax, [cs:di + vram_seg_arr]
-        mov     es, ax
-        xor     si, si
-@@draw_lines_loop:
-        cmp     si, [@@height]
-        je      @@draw_lines_loop_break
-        mov     bx, [@@top_left_y]
-        add     bx, si
-        imul    bx, bx, 50h
-        add     bx, [@@top_left_x]
-        xor     cx, cx
-@@draw_a_line_loop:
-        cmp     cx, [@@width]
-        je      @@draw_a_line_loop_break
-        mov     al, 0AAh
-        test    si, 01h
-        jz      @@L1
-        mov     al, 000h
-@@L1:
-        and     [byte ptr es:bx], al
-        inc     bx
-        inc     cx
-        jmp     @@draw_a_line_loop
-@@draw_a_line_loop_break:
-        inc     si
-        jmp     @@draw_lines_loop
-@@draw_lines_loop_break:
-        add     di, 2
-        cmp     di, 8
-        jne     @@vram_plane_loop
-
-        pop     di si ax bx es
-        ret
-endp draw_background_shadow
-
 ; ------------------------------ Helper functions ----------------------------
-
-; Print a frame onto the TRAM. The area inside the frame will be filled with
-; halfwidth spaces (0x0020).
-; The box-drawing characters used are shown below:
-;                          _   _
-;                         |     |   |_   _|   --    |
-;                         98h  99h  9Ah  9Bh  95h  96h
-;
-; Argument 1: X coordinate of the top-left corner
-; Argument 2: Y coordinate of the top-left corner
-; Argument 3: width of the frame
-; Argument 4: height of the frame
-; Argument 5: The text attribute
-proc print_frame near
-arg @@x0:word, @@y0:word, @@width:word, @@height:word, @@attr:word
-        push    es di ax cx si
-        mov     ax, TRAM_SEG
-        mov     es, ax
-        cld
-
-        ; Print the first row
-        mov     di, [@@y0]
-        imul    di, 80
-        add     di, [@@x0]
-        shl     di, 1
-        mov     [word es:di], 98h
-        add     di, 2
-        mov     cx, [@@width]
-        sub     cx, 2
-        mov     ax, 95h
-        rep stosw
-        mov     [word es:di], 99h
-
-        ; Print the last row
-        mov     di, [@@y0]
-        add     di, [@@height]
-        dec     di
-        imul    di, 80
-        add     di, [@@x0]
-        shl     di, 1
-        mov     [word es:di], 9Ah
-        add     di, 2
-        mov     cx, [@@width]
-        sub     cx, 2
-        mov     ax, 95h
-        rep stosw
-        mov     [word es:di], 9Bh
-
-        ; Print the middle rows
-        mov     si, 2           ; si: the 1-based index of row now printing
-@@L1:
-        mov     di, [@@y0]
-        add     di, si
-        dec     di
-        imul    di, 80
-        add     di, [@@x0]
-        shl     di, 1
-        mov     [word ptr es:di], 96h
-        add     di, 2
-        mov     ax, 20h
-        mov     cx, [@@width]
-        sub     cx, 2
-        rep stosw
-        mov     [word ptr es:di], 96h
-        inc     si
-        cmp     si, [@@height]
-        jne     @@L1
-
-        ; Set the attribute
-        mov     ax, TRAM_ATTR_SEG
-        mov     es, ax
-        mov     ax, [@@attr]
-        mov     si, 0           ; si: the 0-based index of row now printing
-@@L2:
-        mov     di, [@@y0]
-        add     di, si
-        imul    di, 80
-        add     di, [@@x0]
-        shl     di, 1
-        mov     cx, [@@width]
-        rep stosw
-        inc     si
-        cmp     si, [@@height]
-        jne     @@L2
-
-        pop     si cx ax di es
-        ret
-endp print_frame
-
-; Argument 1,2: segment, offset of the source memory
-; Argument 3,4: segment, offset of the destination memory
-; Argument 5: The bytes to be copied
-; TODO; Change its references to movsb call.
-proc memory_copy near
-arg @@src_seg:word, @@src_off:word, @@dest_seg:word, @@dest_off:word, \
-@@size:word
-        mov     ax, 0
-@@move_a_byte:
-        cmp     ax, [@@size]
-        je      @@return
-        mov     bx, [@@src_seg]
-        mov     es, bx
-        mov     bx, [@@src_off]
-        mov     ch, [byte ptr es:bx]
-        mov     bx, [@@dest_seg]
-        mov     es, bx
-        mov     bx, [@@dest_off]
-        mov     [byte ptr es:bx], ch
-        inc     [@@dest_off]
-        inc     [@@src_off]
-        inc     ax
-        jmp     @@move_a_byte
-@@return:
-        ret
-endp memory_copy
 
 ; For some reason, Turbo Assembler refuses to take the following path as a
 ; relative path to the include path specified in the command option, so we'll
@@ -1834,6 +1053,8 @@ endp memory_copy
 include "..\src\asmutils\strcmpnc.asm"
 include "..\src\asmutils\sprnthex.asm"
 include "..\src\asmutils\tramprnt.asm"
+include "..\src\asmutils\memcpy.asm"
+include "..\src\asmutils\prntfrme.asm"
 
 label end_of_resident byte
 ; ===========================================================================
@@ -1858,13 +1079,10 @@ cannot_find_mcb                 db "Can't find the MCB of the previous TSR ", \
                                    "in the MCB chain.$"
 unknown_parameter               db 'Unknown paramter.$'
 
-thprac98_installed      db 0
-print_temp              db '????$'
-uninstalling            db 0
-prev_cseg               dw ?
-
 COMMAND_PARAM_LEN_OFFSET        EQU 80h
 COMMAND_PARAM_OFFSET            EQU 81h
+
+include 'hookint.asm'   ; Hook Interrupts
 
 ; --------------------------------------------------------------------------
 ; Function: my_main
@@ -1952,8 +1170,8 @@ local @@told_to_uninstall:byte, @@int_no_hooked:word
         mov     ax, 13h
         jmp     @@return
 @@successfully_get_critical_error_flag_addr:
-        mov     [word ptr critical_error_flag_addr], si
-        mov     [word ptr critical_error_flag_addr + 2], ds
+        mov     [word ptr cs:critical_error_flag_addr], si
+        mov     [word ptr cs:critical_error_flag_addr + 2], ds
         pop     ds              ; Restore DS (branch 2)
 
         ; Set up some injected code that can only be determined in the runtime
@@ -2016,13 +1234,13 @@ local @@told_to_uninstall:byte, @@int_no_hooked:word
         call    uninstall_previous_tsr
         mov     [@@int_no_hooked], dx
         test    ax, ax
-        jnz     @@uninstall_previous_tsr_success
+        jz      @@uninstall_previous_tsr_success
         push    ax
         mov     dx, offset failed_to_uninstall
         mov     ah, 09h
         int     21h
         pop     ax
-        test    ax, 01h
+        cmp     ax, 01h
         jne     @@skip_printing_int_vector_hooked
         push    ax
         push    [@@int_no_hooked] (offset int_vector_hooked_num)
@@ -2033,7 +1251,7 @@ local @@told_to_uninstall:byte, @@int_no_hooked:word
         int     21h
         pop     ax
 @@skip_printing_int_vector_hooked:
-        test    ax, 02h
+        cmp     ax, 02h
         jne     @@skip_printing_not_installed
         push    ax
         mov     dx, offset not_installed
@@ -2041,7 +1259,7 @@ local @@told_to_uninstall:byte, @@int_no_hooked:word
         int     21h
         pop     ax
 @@skip_printing_not_installed:
-        test    ax, 03h
+        cmp     ax, 03h
         jne     @@skip_printing_cannot_find_mcb
         push    ax
         mov     dx, offset cannot_find_mcb

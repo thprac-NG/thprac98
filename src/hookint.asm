@@ -120,6 +120,8 @@ local @@mux_id:byte
         mov     ax, 01h
         jmp     @@return
 @@avaiable_mux_id_exists:
+        mov     al, [@@mux_id]
+        mov     [int2f_mux_id], al
 
         ; Store the previous addresses of the interrupts
         mov     ax, 3507h
@@ -176,7 +178,7 @@ local @@mux_id:byte
         ; Hook into INT 21h/4Bh and INT 2Fh/[@@mux_id].
         mov     ax, 2521h
         mov     dx, offset my_int21
-        ; int     21h
+        int     21h
         mov     al, 2Fh
         mov     dx, offset my_int2f
         int     21h
@@ -209,7 +211,7 @@ ends mcb
 ;         AX == 03h: Can't find the MCB of the previous TSR in the MCB chain
 ; --------------------------------------------------------------------------
 proc uninstall_previous_tsr near
-local @@mux_id:byte, @@prev_cseg:word
+local @@mux_id:byte, @@prev_cseg:word, @@found_mcb:byte
         push    ds
 
         ; Return 02h if TSR has already been installed
@@ -266,7 +268,7 @@ local @@mux_id:byte, @@prev_cseg:word
 @@vectors_match:
 
         ; Check through the MCB chain to find the MCB of the previous TSR
-        xor     dx, dx                          ; dx = found_psp flag
+        mov     [@@found_mcb], 0
         mov     ah, 52h
         int     21h
         mov     ax, [es:bx - 2]
@@ -285,25 +287,27 @@ local @@mux_id:byte, @@prev_cseg:word
         mov     ax, [es:mcb.owner_psp_seg]
         cmp     ax, [@@prev_cseg]
         jne     @@not_this_mcb                  ; check MCB owner field
-        mov     dx, 1
+        mov     [@@found_mcb], 1
+        jmp     @@mcb_chain_check_loop_break
 @@not_this_mcb:
         ; Move to the next MCB
         mov     ax, [es:mcb.size_in_paragraph]
         mov     bx, es
         add     ax, bx
+        inc     ax
         cmp     ax, 0A000h
         jae     @@mcb_chain_check_loop_break    ; MCB corrupted, break
         mov     es, ax
         jmp     @@mcb_chain_check_loop
 @@mcb_chain_check_loop_break:
-        test    dx, dx
-        jz      @@skip_return_3
+        cmp     [@@found_mcb], 0
+        jne     @@skip_return_3
         mov     ax, 3
         jmp     @@return
 @@skip_return_3:
 
         ; Restore the interrupt vectors
-        mov     ax, [prev_cseg]
+        mov     ax, [@@prev_cseg]
         mov     es, ax
         lds     dx, [dword ptr es:old_int7]
         mov     ax, 2507h
@@ -311,9 +315,9 @@ local @@mux_id:byte, @@prev_cseg:word
         lds     dx, [dword ptr es:old_int8]
         mov     al, 08h
         int     21h
-        lds     dx, [dword ptr es:old_int1c]
-        mov     al, 1Ch
-        int     21h
+        ; lds     dx, [dword ptr es:old_int1c]
+        ; mov     al, 1Ch
+        ; int     21h
         lds     dx, [dword ptr es:old_int21]
         mov     al, 21h
         int     21h
