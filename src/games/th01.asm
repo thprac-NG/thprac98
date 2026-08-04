@@ -1274,6 +1274,7 @@ local @@told_to_uninstall:byte, @@int_no_hooked:word
         mov     dx, (offset successfully_uninstalled)
         mov     ah, 09h
         int     21h
+        jmp     @@return_0
 
 @@terminate_and_stay_resident:
         mov     dx, 01h

@@ -211,7 +211,7 @@ ends mcb
 ;         AX == 03h: Can't find the MCB of the previous TSR in the MCB chain
 ; --------------------------------------------------------------------------
 proc uninstall_previous_tsr near
-local @@mux_id:byte, @@prev_cseg:word, @@found_mcb:byte
+local @@mux_id:byte, @@prev_cseg:word, @@found_mcb:byte, @@prev_env:word
         push    ds
 
         ; Return 02h if TSR has already been installed
@@ -268,6 +268,10 @@ local @@mux_id:byte, @@prev_cseg:word, @@found_mcb:byte
 @@vectors_match:
 
         ; Check through the MCB chain to find the MCB of the previous TSR
+        mov     ax, [@@prev_cseg]
+        mov     es, ax
+        mov     ax, [word ptr es:2Ch]
+        mov     [@@prev_env], ax
         mov     [@@found_mcb], 0
         mov     ah, 52h
         int     21h
@@ -281,15 +285,22 @@ local @@mux_id:byte, @@prev_cseg:word, @@found_mcb:byte
         jne     @@mcb_chain_check_loop_break    ; MCB corrupted, break
         ; Check if the current MCB belongs to the previous TSR
         mov     ax, es
-        inc     ax
-        cmp     ax, [@@prev_cseg]
-        jne     @@not_this_mcb                  ; check MCB segment address
         mov     ax, [es:mcb.owner_psp_seg]
         cmp     ax, [@@prev_cseg]
-        jne     @@not_this_mcb                  ; check MCB owner field
-        mov     [@@found_mcb], 1
-        jmp     @@mcb_chain_check_loop_break
-@@not_this_mcb:
+        jne     @@doesnt_belong_to_previous_tsr       ; check MCB owner field
+        mov     ax, es
+        inc     ax
+        cmp     ax, [@@prev_cseg]
+        jne     @@not_prev_cseg                 ; Check if it's previous cseg
+        or      [@@found_mcb], 1
+@@not_prev_cseg:
+        cmp     ax, [@@prev_env]
+        jne     @@not_prev_env                  ; Check if it's previous env
+        or      [@@found_mcb], 2
+@@not_prev_env:
+        cmp     [@@found_mcb], 3
+        je      @@mcb_chain_check_loop_break    ; Break if found both
+@@doesnt_belong_to_previous_tsr:
         ; Move to the next MCB
         mov     ax, [es:mcb.size_in_paragraph]
         mov     bx, es
@@ -328,6 +339,10 @@ local @@mux_id:byte, @@prev_cseg:word, @@found_mcb:byte
         ; Free the memory of TSR. The INT 21h/49h call is guarenteed to success
         ; at this point.
         mov     ax, [@@prev_cseg]
+        mov     es, ax
+        mov     ah, 49h
+        int     21h
+        mov     ax, [@@prev_env]
         mov     es, ax
         mov     ah, 49h
         int     21h
