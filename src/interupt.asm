@@ -139,6 +139,7 @@ proc my_int1c
         je      @@skip_jumping_to_original_int1c
         pushf
         call    [dword ptr cs:old_int1c]
+        jmp     @@return
 @@skip_jumping_to_original_int1c:
 
         ; Store the registers.
@@ -155,6 +156,7 @@ proc my_int1c
 
         ; Restore the registers and return
         pop     ds ax
+@@return:
         iret
 endp my_int1c
 

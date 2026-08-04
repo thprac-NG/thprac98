@@ -315,9 +315,9 @@ local @@mux_id:byte, @@prev_cseg:word, @@found_mcb:byte
         lds     dx, [dword ptr es:old_int8]
         mov     al, 08h
         int     21h
-        ; lds     dx, [dword ptr es:old_int1c]
-        ; mov     al, 1Ch
-        ; int     21h
+        lds     dx, [dword ptr es:old_int1c]
+        mov     al, 1Ch
+        int     21h
         lds     dx, [dword ptr es:old_int21]
         mov     al, 21h
         int     21h
