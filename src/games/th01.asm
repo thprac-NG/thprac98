@@ -711,6 +711,43 @@ local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
         ret
 endp maintain_bs_menu_ui
 
+; --------------------------------------------------------------------------
+; Function: update_prac_window_components_from_its_values
+; Description: As the name suggests, the components of the practise window is
+;              relavant to its value (e.g. only the game mode slider is visible
+;              when its value is 'Original'). This procedure updates it.
+; Warning: This function assumes the next component (if any) of the playing
+;          mode slider is always the route slider, and the last component (if
+;          the playing mode is 'Custom' is always the bomb slider.
+; Input:  Nothing
+; Output: Nothing
+; --------------------------------------------------------------------------
+proc update_prac_window_components_from_its_values near
+        ; Dealing with the game mode slider. AL: whether the game mode is
+        ; 'Original', AH: whether the window only contains the game mode slider.
+        cmp     [byte ptr playing_mode_slider.value], 0
+        setz    al
+        cmp     [playing_mode_slider.next_component_off], 0FFFFh
+        setz    ah
+        cmp     ah, al
+        je      @@end_of_updating_game_mode_slider  ; skip if already up to date
+        ; If the playing mode is 'Original', remove all other components on the
+        ; list. Note that we don't modify the data of the removed components.
+        test    al, al
+        jz      @@skip_unlinking_every_other_slider
+        mov     [playing_mode_slider.next_component_off], 0FFFFh
+        mov     [practise_menu_window.tail_component_off], \
+                        (offset playing_mode_slider)
+        jmp     @@end_of_updating_game_mode_slider
+@@skip_unlinking_every_other_slider:
+        ; If the playing mode is 'Custom', link the route slider right after
+        ; the playing mode slider. Destroys AX.
+        mov     [playing_mode_slider.next_component_off], (offset route_slider)
+        mov     [practise_menu_window.tail_component_off], (offset bomb_slider)
+@@end_of_updating_game_mode_slider:
+        ret
+endp
+
 proc maintain_prac_menu_ui near
         push    ax
 
@@ -753,6 +790,7 @@ proc maintain_prac_menu_ui near
 
         test    bl, 3Ch
         jz      @@skip_redraw
+        call    update_prac_window_components_from_its_values
         push    si
         call    draw_window
         add     sp, 2
@@ -883,21 +921,22 @@ proc show_practise_menu far
 
         push    (offset playing_mode_slider) 0FFFFh
         push    (offset practise_menu_window)
-        call    window_insert_component
+        call    window_insert_component                         ; delayed sp+6
         push    (offset route_slider) (offset playing_mode_slider)
         push    (offset practise_menu_window)
-        call    window_insert_component
+        call    window_insert_component                         ; delayed sp+6
         push    (offset stage_slider) (offset route_slider)
         push    (offset practise_menu_window)
-        call    window_insert_component
+        call    window_insert_component                         ; delayed sp+6
         push    (offset life_slider) (offset stage_slider)
         push    (offset practise_menu_window)
-        call    window_insert_component
+        call    window_insert_component                         ; delayed sp+6
         push    (offset bomb_slider) (offset life_slider)
         push    (offset practise_menu_window)
-        call    window_insert_component
-        add     sp, 30
+        call    window_insert_component                         ; delayed sp+6
+        add     sp, 30                                          ; sp+30
 
+        call    update_prac_window_components_from_its_values
         push    offset practise_menu_window
         call    draw_window
         add     sp, 2
