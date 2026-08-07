@@ -436,6 +436,7 @@ ends cfg_options_t
 proc hooked_resident_create_and_stuff_set far
 arg @@rank:word, @@bgm_mode:word, @@rem_bombs:word, @@credit_lives_extra:word, \
     @@rand_lo:word, @@rand_hi:word
+local @@route:byte
         assume  ds:nothing
         push    ax bx es
 
@@ -446,6 +447,16 @@ arg @@rank:word, @@bgm_mode:word, @@rem_bombs:word, @@credit_lives_extra:word, \
 
         call    far show_practise_menu
 
+        ; Calculate selected route
+        mov     bx, 0
+        mov     ax, [word ptr section_slider.value]
+        test    ax, ax
+        jz      @@skip_route_checking
+        and     ax, 1
+        mov     bx, ax
+@@skip_route_checking:
+        mov     [@@route], bl
+
         ; Set es:bx to variable `resident`
         mov     ah, 62h
         int     21h
@@ -455,9 +466,9 @@ arg @@rank:word, @@bgm_mode:word, @@rem_bombs:word, @@credit_lives_extra:word, \
 
         cmp     [word ptr cs:playing_mode_slider.value], 0
         je      @@original_mode
-        mov     al, [byte ptr route_slider.value]
+        mov     al, [@@route]
         mov     [byte ptr es:bx + resident_t.route], al
-        mov     al, [byte ptr stage_slider.value]
+        mov     al, [real_stage]
         dec     al
         mov     [byte ptr es:bx + resident_t.stage_id], al
         mov     al, [byte ptr life_slider.value]
@@ -717,7 +728,7 @@ endp maintain_bs_menu_ui
 ;              relavant to its value (e.g. only the game mode slider is visible
 ;              when its value is 'Original'). This procedure updates it.
 ; Warning: This function assumes the next component (if any) of the playing
-;          mode slider is always the route slider, and the last component (if
+;          mode slider is always the section slider, and the last component (if
 ;          the playing mode is 'Custom' is always the bomb slider.
 ; Input:  Nothing
 ; Output: Nothing
@@ -740,9 +751,10 @@ proc update_prac_window_components_from_its_values near
                         (offset playing_mode_slider)
         jmp     @@end_of_updating_game_mode_slider
 @@skip_unlinking_every_other_slider:
-        ; If the playing mode is 'Custom', link the route slider right after
+        ; If the playing mode is 'Custom', link the section slider right after
         ; the playing mode slider. Destroys AX.
-        mov     [playing_mode_slider.next_component_off], (offset route_slider)
+        mov     [playing_mode_slider.next_component_off], \
+                        (offset section_slider)
         mov     [practise_menu_window.tail_component_off], (offset bomb_slider)
 @@end_of_updating_game_mode_slider:
         ret
@@ -922,10 +934,10 @@ proc show_practise_menu far
         push    (offset playing_mode_slider) 0FFFFh
         push    (offset practise_menu_window)
         call    window_insert_component                         ; delayed sp+6
-        push    (offset route_slider) (offset playing_mode_slider)
+        push    (offset section_slider) (offset playing_mode_slider)
         push    (offset practise_menu_window)
         call    window_insert_component                         ; delayed sp+6
-        push    (offset stage_slider) (offset route_slider)
+        push    (offset stage_slider) (offset section_slider)
         push    (offset practise_menu_window)
         call    window_insert_component                         ; delayed sp+6
         push    (offset life_slider) (offset stage_slider)
@@ -962,7 +974,7 @@ include "..\src\tui\tsrtui.asm"
 practise_menu_window    ui_window {     \
         top_left_x              = 40,   \
         top_left_y              = 13,   \
-        width                   = 34,   \
+        width                   = 36,   \
         height                  = 10,   \
         default_slider_width    = 22    \
 }
@@ -986,32 +998,60 @@ playing_mode_slider     ui_slider {                             \
         label_off       = offset playing_mode_label,            \
         text_func_off   = offset cseg:playing_mode_text_func    \
 }
-route_makai_str         db 'Makai', 0
-route_jigoku_str        db 'Jigoku', 0
-proc route_text_func near
+; TODO: Maybe compress this a little bit.
+section_str_arr                 dw \
+        (offset section_str_1_5), \
+        (offset section_str_makai_6_10), (offset section_str_jigoku_6_10), \
+        (offset section_str_makai_11_15), (offset section_str_jigoku_11_15), \
+        (offset section_str_makai_16_20), (offset section_str_jigoku_16_20)
+section_str_1_5                 db '1-5', 0
+section_str_makai_6_10          db ' Makai 6-10', 0
+section_str_jigoku_6_10         db 'Jigoku 6-10', 0
+section_str_makai_11_15         db ' Makai 11-16', 0
+section_str_jigoku_11_15        db 'Jigoku 11-16', 0
+section_str_makai_16_20         db ' Makai 16-20', 0
+section_str_jigoku_16_20        db 'Jigoku 16-20', 0
+proc section_text_func near
 arg @@in_lo:word, @@in_hi:word
-        mov     ax, offset route_jigoku_str
-        cmp     [@@in_lo], 0
-        jne     @@L1
-        mov     ax, offset route_makai_str
-@@L1:
+        ; Yes, I could use BX here, but the legacy code calling this procedure
+        ; requires BX to be saved, so we're using SI anyway.
+        push    si
+        mov     si, [@@in_lo]
+        add     si, si
+        mov     ax, [si + (offset section_str_arr)]
+        pop     si
         ret
-endp route_text_func
-route_label      db 'Route', 0
-route_slider    ui_slider {                             \
+endp section_text_func
+section_label      db 'Section', 0
+section_slider    ui_slider {                           \
         value           = 0,                            \
         min_value       = 0,                            \
-        max_value       = 1,                            \
-        label_off       = offset route_label,           \
-        text_func_off   = offset cseg:route_text_func   \
+        max_value       = 6,                            \
+        label_off       = offset section_label,         \
+        text_func_off   = offset cseg:section_text_func \
 }
+real_stage      db 0
+proc stage_text_func near
+arg @@in_lo:word, @@in_hi:word
+        ; Real stage number = (Route slider value + 1) / 2 * 5 + display value
+        mov     ax, [word ptr section_slider.value]
+        inc     ax
+        sar     ax, 1
+        imul    ax, 5
+        add     ax, [@@in_lo]
+        mov     [real_stage], al
+        push    0 ax
+        call    dword_to_dec
+        add     sp, 2
+        ret
+endp stage_text_func
 stage_slider_label      db 'Stage', 0
 stage_slider    ui_slider {                             \
         value           = 1,                            \
         min_value       = 1,                            \
-        max_value       = 20,                           \
+        max_value       = 5,                            \
         label_off       = offset stage_slider_label,    \
-        text_func_off   = offset cseg:dword_to_dec      \
+        text_func_off   = offset cseg:stage_text_func   \
 }
 life_slider_label       db 'Life', 0
 life_slider     ui_slider {                             \
