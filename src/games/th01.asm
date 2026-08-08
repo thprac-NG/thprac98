@@ -452,6 +452,7 @@ local @@route:byte
         mov     ax, [word ptr section_slider.value]
         test    ax, ax
         jz      @@skip_route_checking
+        inc     ax
         and     ax, 1
         mov     bx, ax
 @@skip_route_checking:
@@ -1007,8 +1008,8 @@ section_str_arr                 dw \
 section_str_1_5                 db '1-5', 0
 section_str_makai_6_10          db ' Makai 6-10', 0
 section_str_jigoku_6_10         db 'Jigoku 6-10', 0
-section_str_makai_11_15         db ' Makai 11-16', 0
-section_str_jigoku_11_15        db 'Jigoku 11-16', 0
+section_str_makai_11_15         db ' Makai 11-15', 0
+section_str_jigoku_11_15        db 'Jigoku 11-15', 0
 section_str_makai_16_20         db ' Makai 16-20', 0
 section_str_jigoku_16_20        db 'Jigoku 16-20', 0
 proc section_text_func near
