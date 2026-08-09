@@ -2,11 +2,13 @@
 ; This is a snippet file and should be `include`d in the assembly source file
 ; instead of being linked with the other .OBJ files.
 ; Include dependency: tsrtuidt.asm
-; Procedure dependency: print_frame and print_str
+; Procedure dependency: print_frame, print_str, and string_length
 ;
 ; Structs:
 ;       ui_window
+;       ui_component_common
 ;       ui_slider
+;       ui_tickbox
 ; Enums:
 ;       ui_type_t
 ; Procedures:
@@ -42,8 +44,16 @@ struc ui_window
 ends ui_window
 
 enum ui_type_t {
-        UI_SLIDER_NUM = 0
+        UI_SLIDER_NUM = 0,
+        UI_TICKBOX_NUM = 1
 }
+
+struc ui_component_common
+        window_off              dw 0FFFFh
+        prev_component_off      dw 0FFFFh
+        next_component_off      dw 0FFFFh
+        ui_type                 ui_type_t ?
+ends ui_component_common
 
 struc ui_slider
         window_off              dw 0FFFFh
@@ -63,6 +73,17 @@ struc ui_slider
         text_func_off           dw ?
         label_off               dw 0FFFFh
 ends ui_slider
+
+struc ui_tickbox
+        window_off              dw 0FFFFh
+        prev_component_off      dw 0FFFFh
+        next_component_off      dw 0FFFFh
+        ui_type                 ui_type_t UI_TICKBOX_NUM
+        value                   db 0
+        width                   db 0FFh         ; 0FFh: use window's default
+                                                ; must be odd
+        label_off               dw 0FFFFh
+ends ui_tickbox
 
 ; --------------------------------------------------------------------------
 ; Function: window_switch_cur
@@ -196,52 +217,66 @@ endp window_insert_component
 ; --------------------------------------------------------------------------
 proc draw_window near
 arg @@window_off:word
-        push    ax bx di
-        mov     bx, [@@window_off]
+        push    ax si di
+        mov     si, [@@window_off]
 
-        mov     [word ptr bx + ui_window.cur_drawing_x], 0101h
+        mov     [word ptr si + ui_window.cur_drawing_x], 0101h
 
         ; Print the outer frame
         push    TEXT_WHITE
-        mov     al, [bx + ui_window.height]
+        mov     al, [si + ui_window.height]
         cbw
         push    ax
-        mov     al, [bx + ui_window.width]
+        mov     al, [si + ui_window.width]
         cbw
         push    ax
-        mov     al, [bx + ui_window.top_left_y]
+        mov     al, [si + ui_window.top_left_y]
         cbw
         push    ax
-        mov     al, [bx + ui_window.top_left_x]
+        mov     al, [si + ui_window.top_left_x]
         cbw
         push    ax
         call    print_frame
         add     sp, 10
 
         ; Draw the components according to their type
-        mov     di, [bx + ui_window.first_component_off]
+        mov     di, [si + ui_window.first_component_off]
 @@draw_components_loop:
         cmp     di, 0FFFFh
         je      @@draw_components_loop_break
         cmp     [di + ui_slider.ui_type], UI_SLIDER_NUM
         je      @@draw_slider
+        cmp     [di + ui_slider.ui_type], UI_TICKBOX_NUM
+        je      @@draw_tickbox
         jmp     @@draw_nothing
 @@draw_slider:
         ; The bytes cur_drawing_x and cur_drawing_y are placed next to each
         ; other, so the offset cur_drawing_x can also be treated as a packed
         ; word containing X and Y coordinate.
-        mov     ax, [word ptr bx + ui_window.cur_drawing_x]
-        add     ax, [word ptr bx + ui_window.top_left_x]
+        mov     ax, [word ptr si + ui_window.cur_drawing_x]
+        add     ax, [word ptr si + ui_window.top_left_x]
         push    ax
         xor     ax, ax
-        cmp     di, [word ptr bx + ui_window.cur_component_off]
+        cmp     di, [word ptr si + ui_window.cur_component_off]
         jne     @@L1
         inc     ax
 @@L1:
         push    ax di
         call    draw_slider
         add     sp, 6
-        inc     [bx + ui_window.cur_drawing_y]
+        inc     [byte ptr si + ui_window.cur_drawing_y]
+        jmp     @@draw_end
+@@draw_tickbox:
+        mov     ax, [word ptr si + ui_window.cur_drawing_x]
+        add     ax, [word ptr si + ui_window.top_left_x]
+        push    ax
+        cmp     di, [word ptr si + ui_window.cur_component_off]
+        setz    al
+        cbw
+        push    ax di
+        call    draw_tickbox
+        add     sp, 6
+        inc     [byte ptr si + ui_window.cur_drawing_y]
         jmp     @@draw_end
 @@draw_nothing:
 @@draw_end:
@@ -249,7 +284,7 @@ arg @@window_off:word
         jmp     @@draw_components_loop
 @@draw_components_loop_break:
 
-        pop     di bx ax
+        pop     di si ax
         ret
 endp draw_window
 
@@ -342,7 +377,9 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         mov     al, [byte ptr @@top_left_x_y + 1]
         cbw
         imul    dx, ax, 80
-        add     dl, [byte ptr @@top_left_x_y]
+        mov     al, [byte ptr @@top_left_x_y]
+        cbw
+        add     dx, ax
         shl     dx, 1
         mov     di, dx
         mov     ax, TRAM_SEG
@@ -542,6 +579,68 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         pop     si bx di es ds
         ret
 endp draw_slider
+
+; --------------------------------------------------------------------------
+; Function: draw_tickbox
+; Description: Draw a tickbox onto the screen. Its components are:
+;                        [ ]  Label
+;               width:  | 3 | 1 + strlen(label)
+; Input:  Argument 1 (word): The offset of the tickbox object.
+;         Argument 2 (word): Whether the tickbox is highlighted.
+;         Argument 3 (word): The lower byte is the X coordinate of the top-left
+;                            corner, and the upper byte is its Y coordinate.
+; Output (in AX): The lower byte is the X coordinate of the bottom-right
+;                 corner, and the upper byte is its Y coordinate.
+; --------------------------------------------------------------------------
+proc draw_tickbox near
+arg @@tickbox_off:word, @@highlighted:word, @@packed_coord:word
+local @@bracket_str:byte:5, @@cur_x:word, @@cur_y:word
+        push    si
+        mov     si, [@@tickbox_off]
+
+        xor     ax, ax
+        mov     [@@cur_x], ax
+        mov     [@@cur_y], ax
+
+        ; Print the bracket
+        mov     [word ptr @@bracket_str], ' ['
+        mov     [word ptr @@bracket_str + 2], ' ]'
+        mov     [byte ptr @@bracket_str + 4], 0
+        test    [byte ptr si + ui_tickbox.value], 1
+        jz      @@skip_adding_cross
+        mov     [byte ptr @@bracket_str + 1], 'X'
+@@skip_adding_cross:
+        mov     ax, TEXT_AQUA
+        cmp     [word ptr @@highlighted], 1
+        jne     @@skip_setting_color_to_yellow
+        mov     ax, TEXT_YELLOW
+@@skip_setting_color_to_yellow:
+        mov     cx, [@@packed_coord]
+        mov     [byte ptr @@cur_x], cl
+        mov     [byte ptr @@cur_y], ch
+        lea     cx, [@@bracket_str]
+        push    ax [word ptr @@cur_y] [word ptr @@cur_x] ss cx
+        call    print_str
+        add     sp, 10
+
+        ; Print the label
+        add     [word ptr @@cur_x], 4
+        push    TEXT_WHITE [word ptr @@cur_y] [word ptr @@cur_x]
+        push    ds [word ptr si + ui_tickbox.label_off]
+        call    print_str
+        add     sp, 10
+
+        ; Prepare return value
+        push    ds [word ptr si + ui_tickbox.label_off]
+        call    string_length
+        add     sp, 4
+        add     al, [byte ptr @@cur_x]
+        add     al, 4
+        mov     ah, [byte ptr @@cur_y]
+
+        pop     si
+        ret
+endp draw_tickbox
 
 ; --------------------------------------------------------------------------
 ; Function: draw_background_shadow

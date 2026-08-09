@@ -36,7 +36,8 @@ bs_state        dw 0
 fx_state        dw FX_COUNT dup(0)
 prac_menu_state dw 0
 key_z_up_once   db 0
-arrow_state     db 0
+arrow_state     db 0    ; stored in bit 2,3,4,5 for up, left, right, down
+space_state     db 0    ; stored in bit 4
 
 ; These are byte ptrs, and need to check if is both cleared before any DOS call
 ; in a TSR.
@@ -762,10 +763,13 @@ proc update_prac_window_components_from_its_values near
 endp
 
 proc maintain_prac_menu_ui near
+local @@to_redraw:byte
         push    ax
 
         cmp     [prac_menu_state], 0
         je      @@return
+
+        mov     [byte ptr @@to_redraw], 0
 
         ; Check and respond to arrow key presses
         mov     ax, 0407h
@@ -776,32 +780,56 @@ proc maintain_prac_menu_ui near
         mov     [arrow_state], ah
 
         mov     si, offset practise_menu_window
+        mov     di, [si + ui_window.cur_component_off]
+        cmp     [byte ptr di + ui_component_common.ui_type], UI_SLIDER_NUM
+        jne     @@skip_left_right
+        test    bl, 08h
+        jz      @@skip_left
+        push    0 di
+        call    slider_change_value
+        add     sp, 4
+@@skip_left:
+        test    bl, 10h
+        jz      @@skip_right
+        push    1 di
+        call    slider_change_value
+        add     sp, 4
+@@skip_right:
+@@skip_left_right:
         test    bl, 04h
         jz      @@skip_up
         push    0 si
         call    window_switch_cur
         add     sp, 4
 @@skip_up:
-        test    bl, 08h
-        jz      @@skip_left
-        push    0 [si + ui_window.cur_component_off]
-        call    slider_change_value
-        add     sp, 4
-@@skip_left:
-        test    bl, 10h
-        jz      @@skip_right
-        push    1 [si + ui_window.cur_component_off]
-        call    slider_change_value
-        add     sp, 4
-@@skip_right:
         test    bl, 20h
         jz      @@skip_down
         push    1 si
         call    window_switch_cur
         add     sp, 4
 @@skip_down:
-
+        mov     di, [si + ui_window.cur_component_off]
         test    bl, 3Ch
+        setnz   al
+        mov     [@@to_redraw], al
+
+        ; Check and respond to the Space key press
+        cmp     [byte ptr di + ui_component_common.ui_type], UI_TICKBOX_NUM
+        jne     @@skip_space_check
+        mov     ax, 0406h
+        int     18h
+        mov     bl, [space_state]
+        not     bl
+        and     bl, ah
+        mov     [space_state], ah
+        test    bl, 10h
+        jz      @@skip_space
+        xor     [byte ptr di + ui_tickbox.value], 1
+        mov     [byte ptr @@to_redraw], 1
+@@skip_space:
+@@skip_space_check:
+
+        test    [byte ptr @@to_redraw], 1
         jz      @@skip_redraw
         call    update_prac_window_components_from_its_values
         push    si
@@ -1135,6 +1163,7 @@ include "..\src\asmutils\sprnthex.asm"
 include "..\src\asmutils\tramprnt.asm"
 include "..\src\asmutils\memcpy.asm"
 include "..\src\asmutils\prntfrme.asm"
+include "..\src\asmutils\strlen.asm"
 
 label end_of_resident byte
 ; ===========================================================================

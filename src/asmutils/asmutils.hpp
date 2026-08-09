@@ -21,4 +21,7 @@ extern "C" void near memory_copy(void far* dest, void far* src, unsigned size);
 extern "C" void near print_frame(unsigned x0, unsigned y0, unsigned width,
                                  unsigned height, unsigned attr);
 
+// defined in strlen.asm
+extern "C" void near string_length(char const far* str);
+
 #endif  // #ifndef THPRAC98_SRC_ASMUTILS_ASMUTILS_HPP_

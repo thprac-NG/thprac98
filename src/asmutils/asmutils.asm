@@ -16,6 +16,7 @@ codeseg
         public print_str
         public memory_copy
         public print_frame
+        public string_length
 
         public _to_hex_digit
         public _sprint_byte
@@ -26,6 +27,7 @@ codeseg
         public _print_str
         public _memory_copy
         public _print_frame
+        public _string_length
 
 proc _to_hex_digit near
         jmp     to_hex_digit
@@ -54,11 +56,15 @@ endp _memory_copy
 proc _print_frame near
         jmp     print_frame
 endp _print_frame
+proc _string_length near
+        jmp     string_length
+endp _string_length
 
 include "..\src\asmutils\sprnthex.asm"
 include "..\src\asmutils\strcmpnc.asm"
 include "..\src\asmutils\tramprnt.asm"
 include "..\src\asmutils\memcpy.asm"
 include "..\src\asmutils\prntfrme.asm"
+include "..\src\asmutils\strlen.asm"
 
 end
