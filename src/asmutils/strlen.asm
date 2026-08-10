@@ -23,7 +23,7 @@ arg @@str:dword
         mov     es, [word ptr @@str + 2]
         xor     ax, ax
 @@main_loop:
-        test    [byte ptr es:bx], 0
+        cmp     [byte ptr es:bx], 0
         je      @@main_loop_break
         inc     bx
         inc     ax
