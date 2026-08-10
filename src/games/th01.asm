@@ -725,6 +725,39 @@ local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
 endp maintain_bs_menu_ui
 
 ; --------------------------------------------------------------------------
+; Function: link_components
+; Description: Link the given component list. Note that the front/tail
+;              component of the window object is not modified.
+; Input:  Argument 1 (word): offset to an 0FFFFh-ending array of component
+;                            offsets.
+; Output: Nothing
+; --------------------------------------------------------------------------
+proc link_components near
+arg @@component_arr:word
+        push    si di
+        mov     bx, [@@component_arr]
+@@main_loop:
+        mov     si, [bx]
+        mov     di, [bx + 2]
+        cmp     di, 0FFFFh
+        je      @@return
+        mov     [word ptr si + ui_component_common.next_component_off], di
+        mov     [word ptr di + ui_component_common.prev_component_off], si
+        add     bx, 2
+        jmp     @@main_loop
+@@return:
+        pop     di si
+        ret
+endp link_components
+
+current_ui_boss db 0
+regular_stage_linking   dw (offset stage_slider), (offset life_slider), 0FFFFh
+shingyoku_linking       dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset p2_attack), \
+                           (offset skip_opening), (offset life_slider), 0FFFFh
+last_phase      db 0
+
+; --------------------------------------------------------------------------
 ; Function: update_prac_window_components_from_its_values
 ; Description: As the name suggests, the components of the practise window is
 ;              relavant to its value (e.g. only the game mode slider is visible
@@ -759,6 +792,56 @@ proc update_prac_window_components_from_its_values near
                         (offset section_slider)
         mov     [practise_menu_window.tail_component_off], (offset bomb_slider)
 @@end_of_updating_game_mode_slider:
+
+        ; Regular stage
+        cmp     [byte ptr stage_slider.value], 5
+        je      @@add_bosses
+        cmp     [byte ptr current_ui_boss], 0
+        je      @@skip_regular_stage
+        mov     [byte ptr current_ui_boss], 0
+        push    (offset regular_stage_linking)
+        call    link_components
+        add     sp, 2
+@@skip_regular_stage:
+        jmp     @@skip_adding_bosses
+
+@@add_bosses:
+        ; Shingyoku
+        cmp     [byte ptr section_slider.value], 0
+        jne     @@skip_shingyoku
+        cmp     [byte ptr current_ui_boss], 1
+        je      @@skip_shingyoku_linking
+        mov     [byte ptr current_ui_boss], 1
+        mov     [byte ptr phase_slider.max_value], 2
+        mov     [byte ptr skip_opening.value], 0
+        mov     [byte ptr p2_attack.value], 0
+        mov     [byte ptr p2_attack.min_value], 0
+        mov     [byte ptr p2_attack.max_value], 4
+        mov     [word ptr p2_cur_first_attack_str], \
+                (offset p2_attack_shingyoku_1)
+        push    (offset shingyoku_linking)
+        call    link_components
+        add     sp, 2
+        mov     [byte ptr last_phase], 0
+@@skip_shingyoku_linking:
+        ; TODO: Maybe make the following HP handling code into a procedure?
+        mov     al, [byte ptr last_phase]
+        cmp     [byte ptr phase_slider.value], al
+        je      @@skip_shingyoku_init_hp
+        mov     al, 8
+        mov     [byte ptr hp_slider.min_value], 7
+        cmp     [byte ptr phase_slider.value], 2
+        jne     @@skip_shingyoku_p2_hp
+        mov     [byte ptr hp_slider.min_value], 1
+        mov     al, 6
+@@skip_shingyoku_p2_hp:
+        mov     [byte ptr hp_slider.max_value], al
+        mov     [byte ptr hp_slider.value], al
+@@skip_shingyoku_init_hp:
+        mov     al, [byte ptr phase_slider.value]
+        mov     [byte ptr last_phase], al
+@@skip_shingyoku:
+@@skip_adding_bosses:
         ret
 endp
 
@@ -1002,9 +1085,9 @@ include "..\src\tui\tsrtui.asm"
 
 practise_menu_window    ui_window {     \
         top_left_x              = 40,   \
-        top_left_y              = 13,   \
+        top_left_y              = 12,   \
         width                   = 36,   \
-        height                  = 10,   \
+        height                  = 11,   \
         default_slider_width    = 22    \
 }
 
@@ -1025,7 +1108,8 @@ playing_mode_slider     ui_slider {                             \
         min_value       = 0,                                    \
         max_value       = 1,                                    \
         label_off       = offset playing_mode_label,            \
-        text_func_off   = offset cseg:playing_mode_text_func    \
+        text_func_off   = offset cseg:playing_mode_text_func,   \
+        window_off      = offset practise_menu_window           \
 }
 ; TODO: Maybe compress this a little bit.
 section_str_arr                 dw \
@@ -1052,12 +1136,13 @@ arg @@in_lo:word, @@in_hi:word
         ret
 endp section_text_func
 section_label      db 'Section', 0
-section_slider    ui_slider {                           \
-        value           = 0,                            \
-        min_value       = 0,                            \
-        max_value       = 6,                            \
-        label_off       = offset section_label,         \
-        text_func_off   = offset cseg:section_text_func \
+section_slider    ui_slider {                                   \
+        value           = 0,                                    \
+        min_value       = 0,                                    \
+        max_value       = 6,                                    \
+        label_off       = offset section_label,                 \
+        text_func_off   = offset cseg:section_text_func,        \
+        window_off      = offset practise_menu_window           \
 }
 real_stage      db 0
 proc stage_text_func near
@@ -1080,7 +1165,8 @@ stage_slider    ui_slider {                             \
         min_value       = 1,                            \
         max_value       = 5,                            \
         label_off       = offset stage_slider_label,    \
-        text_func_off   = offset cseg:stage_text_func   \
+        text_func_off   = offset cseg:stage_text_func,  \
+        window_off      = offset practise_menu_window   \
 }
 life_slider_label       db 'Life', 0
 life_slider     ui_slider {                             \
@@ -1088,7 +1174,8 @@ life_slider     ui_slider {                             \
         min_value       = 0,                            \
         max_value       = 6,                            \
         label_off       = offset life_slider_label,     \
-        text_func_off   = offset cseg:dword_to_dec      \
+        text_func_off   = offset cseg:dword_to_dec,     \
+        window_off      = offset practise_menu_window   \
 }
 bomb_slider_label       db 'Bomb', 0
 bomb_slider     ui_slider {                             \
@@ -1096,7 +1183,85 @@ bomb_slider     ui_slider {                             \
         min_value       = 0,                            \
         max_value       = 5,                            \
         label_off       = offset bomb_slider_label,     \
-        text_func_off   = offset cseg:dword_to_dec      \
+        text_func_off   = offset cseg:dword_to_dec,     \
+        window_off      = offset practise_menu_window   \
+}
+phase_slider_label      db 'Phase', 0
+phase_slider    ui_slider {                             \
+        value           = 1,                            \
+        min_value       = 1,                            \
+        max_value       = 2,                            \
+        label_off       = offset phase_slider_label,    \
+        text_func_off   = offset cseg:dword_to_dec,     \
+        window_off      = offset practise_menu_window   \
+}
+hp_slider_label         db 'HP', 0
+hp_slider       ui_slider {                             \
+        value           = 1,                            \
+        min_value       = 1,                            \
+        max_value       = 2,                            \
+        label_off       = offset hp_slider_label,       \
+        text_func_off   = offset cseg:dword_to_dec,     \
+        window_off      = offset practise_menu_window   \
+}
+skip_opening_label      db 'Skip Opening Animation', 0
+skip_opening    ui_tickbox {                            \
+        label_off       = offset skip_opening_label,    \
+        window_off      = offset practise_menu_window   \
+}
+
+vanilla_attack          db 'Vanilla', 0
+p2_attack_shingyoku_1   db '1', 0
+p2_attack_shingyoku_2   db '2', 0
+p2_attack_shingyoku_3   db '3', 0
+p2_attack_shingyoku_4   db '4', 0
+p2_cur_first_attack_str dw (offset p2_attack_shingyoku_1)
+; Returns 'Vanilla' if [@@val] is 0, the ([@@val]-1)-th string starting from
+; @@first_str otherwise.
+proc attack_text_func near
+arg @@val:word, @@first_str:word
+local @@last_str:word, @@remain:word
+        push    si
+        push    es bx  ; draw_slider requires it to save all regsiters
+        cmp     [byte ptr @@val], 0
+        jne     @@not_0
+        mov     ax, (offset vanilla_attack)
+        jmp     @@return
+@@not_0:
+        mov     si, [@@first_str]
+        mov     ax, [@@val]
+        mov     [@@remain], ax
+@@main_loop:
+        mov     [@@last_str], si
+        dec     [word ptr @@remain]
+        cmp     [word ptr @@remain], 0
+        jne     @@not_found_yet
+        mov     ax, [@@last_str]
+        jmp     @@return
+@@not_found_yet:
+        push    ds si
+        call    string_length
+        add     sp, 4
+        add     si, ax
+        inc     si
+        jmp     @@main_loop
+@@return:
+        pop     bx es
+        pop     si
+        ret
+endp attack_text_func
+proc p2_text_func near
+arg @@in_lo:word, @@in_hi:word
+        push    [word ptr p2_cur_first_attack_str] [word ptr @@in_lo]
+        call    attack_text_func
+        add     sp, 4
+        ret
+endp p2_text_func
+p2_attack_label         db 'P2 Atk', 0
+p2_attack       ui_slider {                             \
+        label_off       = offset p2_attack_label,       \
+        text_func_off   = offset cseg:p2_text_func,     \
+        window_off      = offset practise_menu_window   \
 }
 
 ; Initialize the component linked list of a window object, then print it onto

@@ -244,9 +244,9 @@ arg @@window_off:word
 @@draw_components_loop:
         cmp     di, 0FFFFh
         je      @@draw_components_loop_break
-        cmp     [di + ui_slider.ui_type], UI_SLIDER_NUM
+        cmp     [di + ui_component_common.ui_type], UI_SLIDER_NUM
         je      @@draw_slider
-        cmp     [di + ui_slider.ui_type], UI_TICKBOX_NUM
+        cmp     [di + ui_component_common.ui_type], UI_TICKBOX_NUM
         je      @@draw_tickbox
         jmp     @@draw_nothing
 @@draw_slider:
