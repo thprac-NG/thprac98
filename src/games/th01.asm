@@ -1156,7 +1156,7 @@ arg @@in_lo:word, @@in_hi:word
         mov     [real_stage], al
         push    0 ax
         call    dword_to_dec
-        add     sp, 2
+        add     sp, 4
         ret
 endp stage_text_func
 stage_slider_label      db 'Stage', 0
