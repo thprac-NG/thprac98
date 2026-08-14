@@ -33,11 +33,10 @@ proc _MEMCPY_HELPER near
 arg @@dest:dword, @@src:dword, @@movsb_count:word
         push    ds si di
 
-        mov     ax, [word ptr @@dest + 2]
-        mov     es, ax
+        mov     es, [word ptr @@dest + 2]
         mov     di, [word ptr @@dest]
-        mov     ax, [word ptr @@src + 2]
-        mov     ds, ax
+        mov     ds, [word ptr @@src + 2]
+        assume  ds:nothing
         mov     si, [word ptr @@src]
         mov     cx, [@@movsb_count]
         ; # TODO: Make the following instruction aligned to 4-byte border to
@@ -45,6 +44,7 @@ arg @@dest:dword, @@src:dword, @@movsb_count:word
         rep movsb
 
         pop     di si ds
+        assume  ds:dataseg
         ret
 endp _MEMCPY_HELPER
 end

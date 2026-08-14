@@ -42,72 +42,72 @@ ends inject_code_t
 proc inject_one near
 arg @@inject_code:word, @@flag:word, @@psp_seg:word
 local @@must_match:byte
-        push    si di es
+        push    si di
         mov     si, [@@inject_code]
         add     [@@psp_seg], 10h  ; Add the size of PSP (100h)
         mov     ax, [@@psp_seg]
-        add     ax, [word ptr ds:si + inject_code_t.seg]
+        add     ax, [word ptr si + inject_code_t.seg]
         mov     es, ax
         mov     si, [@@inject_code]
         test    [@@flag], 1
         jz      @@restore
         ; Inject the code.
-        mov     dl, [byte ptr ds:si + inject_code_t.variable_mem]
+        mov     dl, [byte ptr si + inject_code_t.variable_mem]
         mov     [@@must_match], dl
-        mov     ax, 0
-@@L1:
-        mov     di, [word ptr ds:si + inject_code_t.off]
+        xor     ax, ax
+@@check_inject_code_matching_loop:
+        mov     di, [word ptr si + inject_code_t.off]
         add     di, ax
         mov     cl, [byte ptr es:di]
-        mov     bx, [word ptr ds:si + inject_code_t.original_mem]
+        mov     bx, [word ptr si + inject_code_t.original_mem]
         add     bx, ax
-        cmp     cl, [byte ptr ds:bx]
-        je      @@L2
+        cmp     cl, [byte ptr bx]
+        je      @@byte_match
         cmp     [@@must_match], -1
         je      @@return
-        mov     bx, [word ptr ds:si + inject_code_t.variable_mem]
+        mov     bx, [word ptr si + inject_code_t.variable_mem]
         add     bx, ax
-        cmp     [byte ptr ds:bx], 1
+        cmp     [byte ptr bx], 1
         jne     @@return
-@@L2:
+@@byte_match:
         inc     ax
-        cmp     ax, [word ptr ds:si + inject_code_t.len]
-        jne     @@L1
-        mov     di, [word ptr ds:si + inject_code_t.off]
-        mov     bx, [word ptr ds:si + inject_code_t.original_mem]
+        cmp     ax, [word ptr si + inject_code_t.len]
+        jne     @@check_inject_code_matching_loop
+        mov     di, [word ptr si + inject_code_t.off]
+        mov     bx, [word ptr si + inject_code_t.original_mem]
         push    es
-        push    [word ptr ds:si + inject_code_t.len] es di ds bx
+        push    [word ptr si + inject_code_t.len] es di ds bx
         call    memory_copy
         add     sp, 10
         pop     es
-        mov     bx, [word ptr ds:si + inject_code_t.patched_mem]
+        mov     bx, [word ptr si + inject_code_t.patched_mem]
         push    es
-        push    [word ptr ds:si + inject_code_t.len] ds bx es di
+        push    [word ptr si + inject_code_t.len] ds bx es di
         call    memory_copy
         add     sp, 10
         pop     es
         jmp     @@return
 @@restore:
         ; Restore the code.
-        mov     ax, 0
-@@L3:
-        mov     di, [word ptr ds:si + inject_code_t.off]
+        xor     ax, ax
+@@restore_code_loop:
+        mov     di, [word ptr si + inject_code_t.off]
         add     di, ax
-        mov     bx, [word ptr ds:si + inject_code_t.patched_mem]
+        mov     bx, [word ptr si + inject_code_t.patched_mem]
         add     bx, ax
         mov     cl, [byte ptr es:di]
-        cmp     cl, [byte ptr ds:bx]
+        cmp     cl, [byte ptr bx]
         jne     @@return
         inc     ax
-        cmp     ax, [word ptr ds:si + inject_code_t.len]
-        jne     @@L3
-        mov     bx, [word ptr ds:si + inject_code_t.original_mem]
-        mov     di, [word ptr ds:si + inject_code_t.off]
-        push    [word ptr ds:si + inject_code_t.len] ds bx es di
+        cmp     ax, [word ptr si + inject_code_t.len]
+        jne     @@restore_code_loop
+        mov     bx, [word ptr si + inject_code_t.original_mem]
+        mov     di, [word ptr si + inject_code_t.off]
+        push    [word ptr si + inject_code_t.len] ds bx es di
         call    memory_copy
         add     sp, 10
 @@return:
-        pop     es di si
+        pop     di si
         ret
 endp inject_one
 

@@ -91,6 +91,7 @@ arg @@int_no:word, @@in_regs_off:word, @@in_regs_seg:word, \
         mov     si, [@@seg_regs_off]
         mov     ax, [word ptr es:si + sregs_t.ds_]
         mov     ds, ax
+        assume  ds:nothing
         push    [word ptr es:si + sregs_t.es_]          ; push sregs_t.es_
         mov     ax, [@@in_regs_seg]
         mov     es, ax
@@ -128,6 +129,7 @@ arg @@int_no:word, @@in_regs_off:word, @@in_regs_seg:word, \
         pop     [word ptr es:si + wordregs_t.si_]       ; pop (si after INT)
 
         pop     si di ds
+        assume  ds:dataseg
         ret
 endp _INT86X_
 

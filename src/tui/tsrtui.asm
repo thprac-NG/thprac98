@@ -97,7 +97,7 @@ ends ui_tickbox
 ; --------------------------------------------------------------------------
 proc window_switch_cur near
 arg @@window_off:word, @@direction:word
-        push    bx di
+        push    di
         mov     bx, [@@window_off]
 
         mov     di, [bx + ui_window.cur_component_off]
@@ -118,7 +118,7 @@ arg @@window_off:word, @@direction:word
         mov     [bx + ui_window.cur_component_off], di
 
 @@return:
-        pop     di bx
+        pop     di
         ret
 endp window_switch_cur
 
@@ -132,8 +132,6 @@ endp window_switch_cur
 ; --------------------------------------------------------------------------
 proc slider_change_value near
 arg @@slider_off:word, @@direction:word
-        push    bx
-        push    eax
         mov     bx, [@@slider_off]
 
         mov     eax, [bx + ui_slider.value]
@@ -151,8 +149,6 @@ arg @@slider_off:word, @@direction:word
         mov     [bx + ui_slider.value], eax
 
 @@return:
-        pop     eax
-        pop     bx
         ret
 endp slider_change_value
 
@@ -169,9 +165,7 @@ endp slider_change_value
 ; --------------------------------------------------------------------------
 proc window_insert_component near
 arg @@window_off:word, @@pos_off:word, @@component_off:word
-        push    bx di si ax ds
-        mov     ax, cs
-        mov     ds, ax
+        push    di si
 
         ; Insert the component to the component linked list of the window
         mov     bx, [@@window_off]
@@ -185,27 +179,27 @@ arg @@window_off:word, @@pos_off:word, @@component_off:word
         mov     [di + ui_slider.next_component_off], si
         mov     [bx + ui_window.first_component_off], di
         cmp     si, 0FFFFh
-        je      @@L1
+        je      @@window_has_no_component_now
         mov     [si + ui_slider.prev_component_off], di
-        jmp     @@L3
-@@L1:
+        jmp     @@end_of_insert_to_the_front
+@@window_has_no_component_now:
         mov     [bx + ui_window.cur_component_off], di
-@@L3:
+@@end_of_insert_to_the_front:
         jmp     @@end_of_inserting
 @@insert_after_an_object:
         mov     si, [@@pos_off]
         mov     si, [si + ui_slider.next_component_off]
         mov     [di + ui_slider.next_component_off], si
         cmp     si, 0FFFFh
-        je      @@L2
+        je      @@we_are_at_the_end
         mov     [si + ui_slider.prev_component_off], di
-@@L2:
+@@we_are_at_the_end:
         mov     si, [@@pos_off]
         mov     [si + ui_slider.next_component_off], di
         mov     [di + ui_slider.prev_component_off], si
 @@end_of_inserting:
 
-        pop     ds ax si di bx
+        pop     si di
         ret
 endp window_insert_component
 
@@ -217,24 +211,20 @@ endp window_insert_component
 ; --------------------------------------------------------------------------
 proc draw_window near
 arg @@window_off:word
-        push    ax si di
+        push    si di
         mov     si, [@@window_off]
 
         mov     [word ptr si + ui_window.cur_drawing_x], 0101h
 
         ; Print the outer frame
         push    TEXT_WHITE
-        mov     al, [si + ui_window.height]
-        cbw
+        movzx   ax, [si + ui_window.height]
         push    ax
-        mov     al, [si + ui_window.width]
-        cbw
+        movzx   ax, [si + ui_window.width]
         push    ax
-        mov     al, [si + ui_window.top_left_y]
-        cbw
+        movzx   ax, [si + ui_window.top_left_y]
         push    ax
-        mov     al, [si + ui_window.top_left_x]
-        cbw
+        movzx   ax, [si + ui_window.top_left_x]
         push    ax
         call    print_frame
         add     sp, 10
@@ -284,7 +274,7 @@ arg @@window_off:word
         jmp     @@draw_components_loop
 @@draw_components_loop_break:
 
-        pop     di si ax
+        pop     di si
         ret
 endp draw_window
 
@@ -298,7 +288,6 @@ endp draw_window
 proc dword_to_dec near
 arg @@num:dword
         push    ds di
-        push    eax ebx edx
 
         mov     ax, cs
         mov     ds, ax
@@ -320,7 +309,6 @@ arg @@num:dword
         jnz     @@L1
         inc     di
 
-        pop     edx ebx eax
         mov     ax, di
         pop     di ds
         ret
@@ -359,26 +347,21 @@ endp dword_to_dec
 proc draw_slider near
 arg @@slider_off:word, @@highlighted:word, @@top_left_x_y:word
 local @@value_str_off:word, @@return_value:word, @@width:word
-        push    ds es di bx si
-        push    eax ecx edx
-        mov     ax, cs
-        mov     ds, ax
+        push    di si
         mov     bx, [@@slider_off]
 
         mov     al, [bx + ui_slider.width]
         cmp     al, 0FFh
-        jne     @@L10
+        jne     @@skip_set_default_width
         mov     di, [bx + ui_slider.window_off]
         mov     al, [di + ui_window.default_slider_width]
-@@L10:
+@@skip_set_default_width:
         mov     [byte ptr @@width], al
 
         ; Print '<-'
-        mov     al, [byte ptr @@top_left_x_y + 1]
-        cbw
+        movzx   ax, [byte ptr @@top_left_x_y + 1]
         imul    dx, ax, 80
-        mov     al, [byte ptr @@top_left_x_y]
-        cbw
+        movzx   ax, [byte ptr @@top_left_x_y]
         add     dx, ax
         shl     dx, 1
         mov     di, dx
@@ -386,50 +369,41 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         mov     es, ax
         mov     ax, [word ptr bx + ui_slider.value]
         cmp     ax, [word ptr bx + ui_slider.min_value]
-        je      @@L1
-        mov     [word ptr es:di], 2B02h
-        mov     [word ptr es:di + 2], 2B62h
-        jmp     @@L2
-@@L1:
-        mov     [word ptr es:di], 0020h
-        mov     [word ptr es:di + 2], 0020h
-@@L2:
+        mov     [dword ptr es:di], 00200020h
+        je      @@skip_drawing_left_arrow
+        mov     [dword ptr es:di], 2B622B02h
+@@skip_drawing_left_arrow:
         mov     ax, TRAM_ATTR_SEG
         mov     es, ax
         mov     al, TEXT_AQUA
         cmp     [@@highlighted], 1
-        jne     @@L3
+        jne     @@skip_highlighting_left_arrow
         mov     al, TEXT_YELLOW
-@@L3:
+@@skip_highlighting_left_arrow:
         mov     [byte ptr es:di], al
         mov     [byte ptr es:di + 2], al
 
         ; Print '->'
         add     di, 4
         push    di                              ; push offset of the value part
-        mov     al, [byte ptr @@width]
-        cbw
+        movzx   ax, [byte ptr @@width]
         add     di, ax
         add     di, ax
         mov     ax, TRAM_SEG
         mov     es, ax
         mov     ax, [word ptr bx + ui_slider.value]
         cmp     ax, [word ptr bx + ui_slider.max_value]
-        je      @@L4
-        mov     [word ptr es:di], 2A02h
-        mov     [word ptr es:di + 2], 2A62h
-        jmp     @@L5
-@@L4:
-        mov     [word ptr es:di], 0020h
-        mov     [word ptr es:di + 2], 0020h
-@@L5:
+        mov     [dword ptr es:di], 00200020h
+        je      @@skip_drawing_right_arrow
+        mov     [dword ptr es:di], 2A622A02h
+@@skip_drawing_right_arrow:
         mov     ax, TRAM_ATTR_SEG
         mov     es, ax
         mov     al, TEXT_AQUA
         cmp     [@@highlighted], 1
-        jne     @@L6
+        jne     @@skip_highlighting_right_arrow
         mov     al, TEXT_YELLOW
-@@L6:
+@@skip_highlighting_right_arrow:
         mov     [byte ptr es:di], al
         mov     [byte ptr es:di + 2], al
 
@@ -443,13 +417,11 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         ; Print the label
         push    bx
         push    TEXT_WHITE
-        mov     al, [byte ptr @@top_left_x_y + 1]
-        cbw
+        movzx   ax, [byte ptr @@top_left_x_y + 1]
         push    ax
-        mov     al, [byte ptr @@top_left_x_y]
+        movzx   ax, [byte ptr @@top_left_x_y]
         add     al, 5
         add     al, [byte ptr @@width]
-        cbw
         push    ax
         push    ds
         push    [bx + ui_slider.label_off]
@@ -462,19 +434,16 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         mov     ax, TRAM_SEG
         mov     es, ax
         mov     ax, 0020h
-        mov     cl, [byte ptr @@width]
-        xor     ch, ch
-        cld
+        movzx   cx, [byte ptr @@width]
         rep stosw
         mov     ax, TRAM_ATTR_SEG
         mov     es, ax
         mov     ax, TEXT_AQUA
         cmp     [word ptr @@highlighted], 0
-        je      @@L7
+        je      @@skip_highlighting_value_part
         mov     ax, TEXT_YELLOW
-@@L7:
-        mov     cl, [byte ptr @@width]
-        xor     ch, ch
+@@skip_highlighting_value_part:
+        movzx   cx, [byte ptr @@width]
         sub     di, 2
         std
         rep stosw
@@ -483,10 +452,12 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         push    di
 
         ; Calculate the length of the value string
+        push    bx
         push    [word ptr (bx + ui_slider.value) + 2]
         push    [word ptr bx + ui_slider.value]
         call    [word ptr bx + ui_slider.text_func_off]
         add     sp, 4
+        pop     bx
         mov     [@@value_str_off], ax
         mov     si, ax
         xor     dx, dx
@@ -500,8 +471,7 @@ local @@value_str_off:word, @@return_value:word, @@width:word
 
         ; Print the value string. Note that this method only works for purely
         ; half-width strings.
-        mov     al, [byte ptr @@width]
-        cbw
+        movzx   ax, [byte ptr @@width]
         sub     ax, dx
         add     ax, 1
         and     ax, 0FFFEh
@@ -510,10 +480,9 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         mov     es, ax
         mov     si, [@@value_str_off]
 @@print_value_str_loop:
-        mov     al, [byte ptr si]
+        movzx   ax, [byte ptr si]
         test    al, al
         jz      @@print_value_str_loop_break
-        cbw
         mov     [word ptr es:di], ax
         add     di, 2
         inc     si
@@ -528,20 +497,17 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         ;                              2 * (max - min)
         cmp     [bx + ui_slider.bottom_indicator], 0
         je      @@skip_indicator_handling
-        mov     al, [byte ptr @@width]
-        cbw
-        sub     ax, 2
-        shl     ax, 1
-        cwd
-        xchg    ecx, eax        ; ecx = 2 * (width - 2)
+        movzx   ecx, [byte ptr @@width]
+        sub     cx, 2
+        shl     cx, 1           ; ecx = 2 * (width - 2)
         mov     eax, [bx + ui_slider.value]
         sub     eax, [bx + ui_slider.min_value]
         mul     ecx             ; edx:eax = 2 * (value - min) * (width - 2)
         inc     eax
-        cmp     eax, 0
-        jne     @@L8
+        test    eax, eax
+        jne     @@skip_carring_to_edx
         inc     edx
-@@L8:                           ; edx:eax = 2 * (value - min) * (width - 2) + 1
+@@skip_carring_to_edx:          ; edx:eax = 2 * (value - min) * (width - 2) + 1
         mov     ecx, [bx + ui_slider.max_value]
         sub     ecx, [bx + ui_slider.min_value]
         shl     ecx, 1          ; ecx = 2 * (max - min)
@@ -555,10 +521,10 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         or      al, TEXT_UNDERLINE_MASK
         mov     [byte ptr es:di], al
         mov     [byte ptr es:di + 2], al
-        jmp     @@L9
+        jmp     @@skip_restoring_di
 @@skip_indicator_handling:
         pop     di             ; pop the unused offset of TRAM here
-@@L9:
+@@skip_restoring_di:
 
         ; Prepare the return value
         mov     ax, [@@top_left_x_y]
@@ -574,9 +540,8 @@ local @@value_str_off:word, @@return_value:word, @@width:word
 @@label_chk_len_loop_break:
         mov     [@@return_value], ax
 
-        pop     edx ecx eax
         mov     ax, [@@return_value]
-        pop     si bx di es ds
+        pop     si di
         ret
 endp draw_slider
 
@@ -654,7 +619,7 @@ endp draw_tickbox
 proc draw_background_shadow near
 arg @@top_left_x:word, @@top_left_y:word, @@width:word, @@height:word
 local @@vram_seg_arr:dword
-        push    es bx ax si di
+        push    si di
 
         xor     di, di
 @@vram_plane_loop:
@@ -690,7 +655,7 @@ local @@vram_seg_arr:dword
         cmp     di, 4
         jne     @@vram_plane_loop
 
-        pop     di si ax bx es
+        pop     di si
         ret
 endp draw_background_shadow
 

@@ -56,7 +56,6 @@ include 'interupt.asm'  ; Hooked Interrupts
 ; Input/Output: Nothing
 ; --------------------------------------------------------------------------
 proc after_load_exe near
-        assume  ds:cseg
         call    store_covered_tram
         call    show_bs_menu
         call    inject
@@ -70,18 +69,21 @@ endp
 ; Input/Output: Nothing
 ; --------------------------------------------------------------------------
 proc on_tick near
-        assume  ds:cseg
-
+local @@return_val:byte
         ; Maintain the backspace menu. The return value of `maintain_bs_menu_ui`
         ; indicates whether the status of the FX has been updated, and we are
         ; passing the value to `inject`.
         call    maintain_bs_menu_ui
-        push    ax
+        mov     [@@return_val], al
         call    inject
-        pop     ax
         call    maintain_prac_menu_ui
+        movzx   ax, [@@return_val]
         ret
 endp on_tick
+
+; ===========================================================================
+;                                INJECT CODE
+; ===========================================================================
 
 ; NOPs:
 ; 1byte: 90 (nop)
@@ -91,7 +93,8 @@ endp on_tick
 ; 4bytes: 8D xx 00 00 (lea r16, [r16 + 0000h]). 9F (bx), AE (bp),
 ;                                               B4 (si), BD (di)
 ;
-; ----------------- REIIDEN.EXE modifications -------------------
+; REIIDEN.EXE modifications
+; ==============================================================
 ;
 ; For the discompiled version of the Fx modifications, check:
 ; F1-F3: https://github.com/H-J-Granger/ReC98/commit/d159a9960ae4d52c4c2bb6d91fcd5046f6dad4e5
@@ -122,65 +125,7 @@ endp on_tick
 ; }
 ; F7: Everlasting BGM
 ;
-; stage_num_animate (restore the menu after "STAGE XX" animation): {
-;   0B50:0775 | 1E 68 59 01 9A 7A 62 00 10 83 C4 0E ->
-;             |                      ^^ ^^ (*1)
-;             | 9A yy yy xx xx 8D 9F 00 00 83 C4 0A
-; }, where "xxxx" is cseg, and "yyyy" is (offset my_0b50_0775).
-; Original assembly:
-;   0B50:0775 | 1E                push    DS
-;   0B50:0776 | 68 59 01          push    159h    ; offset of the string "\x1B*"
-;   0B50:0779 | 9A 7A 62 00 10    callf   printf
-;   0B50:077E | 83 C4 0E          add     sp, 0Eh
-; Modified assembly:
-;   0B50:0775 | 9A yy yy xx xx    callf   my_0b50_0775
-;   0B50:077A | 8D 9F 00 00       lea     bx, [bx + 0000h]  ; effectively nop
-;   0B50:077E | 83 C4 0A          add     sp, 0Ah
-; Check https://github.com/H-J-Granger/ReC98/blob/d892535e723b3691612363d1bbdbd2a54f43fb43/th01/main_01.cpp#L314
-; for the C version of the original code.
-;
-; harry_up_anmiate (restore the menu after "HARRY UP" animation): {
-;   1924:0364 | 9A 6A 0C 00 00 -> 9A yy yy xx xx
-;             |          ^^ ^^ (*1)
-; }, where "xxxx" is cseg, and "yyyy" is (offset my_1924_0364).
-; Original assembly: call text_clear (provided by master.lib)
-; Modified assembly: call my_1924_0364
-;
-; ------------------- OP.EXE modifications ---------------------
-;
-; practise_menu_part1 {
-;   0A1C:0612 | 9A 0C 00 00 00 -> 9A yy yy xx xx
-;             |          ^^ ^^ (*1)
-; }, where "xxxx" is cseg, and "yyyy" is
-; (offset hooked_resident_create_and_stuff_set).
-; Original assembly: call resident_create_and_stuff_set
-; Modified assembly: call hooked_resident_create_and_stuff_set
-; Check https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L343-L349
-; for the C version of the original code.
-;
-; practise_menu_part2 {
-;   0A1C:0664 | 26 C6 47 14 00 26 C7 47 3F 00 00 A0 93 00 04 02 26 88 47 15 ->
-;             | 8D AE 00 00 8D B4 00 00 8D BD 00 00 8D AE 00 00 8D B4 00 00
-; }
-; Original assembly: (es:bx has been set to the address of `resident`)
-;   0A1C:0664 | 26 C6 47 14 00          mov     [byte ptr es:bx +
-;             |                                  resdient_t.route], ROUTE_MAKAI
-;   0A1C:0669 | 26 C7 47 3F 00 00       mov     [word ptr es:bx +
-;             |                                  resident_t.stage_id], 0000h
-;   0A1C:066F | A0 93 00                mov     al, [ds:opts + cfg_options_t.
-;             |                                      credit_lives_extra]
-;   0A1C:0672 | 04 02                   add     al, 02h
-;   0A1C:0674 | 26 88 47 15             mov     [byte ptr es:bx +
-;             |                                  route_t.rem_lives], al
-; Modified assembly: (effectively nop)
-;   0A1C:0664 | 8D AE 00 00             lea     bp, [bp + 0000h]
-;   0A1C:0668 | 8D B4 00 00             lea     si, [si + 0000h]
-;   0A1C:066C | 8D BD 00 00             lea     di, [di + 0000h]
-;   0A1C:0670 | 8D AE 00 00             lea     bp, [bp + 0000h]
-;   0A1C:0674 | 8D B4 00 00             lea     si, [si + 0000h]
-; Check https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L378-L380
-; for the C version of the original code.
-;
+; -----------------------
 ; (*1) This is an absolute call, the segment address might differ.
 
 reiiden_exe     db "REIIDEN.EXE", 0
@@ -281,6 +226,33 @@ inf_item_combo          inject_code_t { \
         patched_mem = offset inf_item_combo_pat, \
 }
 
+; stage_num_animate (restore the menu after "STAGE XX" animation): {
+;   0B50:0775 | 1E 68 59 01 9A 7A 62 00 10 83 C4 0E ->
+;             |                      ^^ ^^ (*1)
+;             | 9A yy yy xx xx 8D 9F 00 00 83 C4 0A
+; }, where "xxxx" is cseg, and "yyyy" is (offset my_0b50_0775).
+; Original assembly:
+;   0B50:0775 | 1E                push    DS
+;   0B50:0776 | 68 59 01          push    159h    ; offset of the string "\x1B*"
+;   0B50:0779 | 9A 7A 62 00 10    callf   printf
+;   0B50:077E | 83 C4 0E          add     sp, 0Eh
+; Modified assembly:
+;   0B50:0775 | 9A yy yy xx xx    callf   my_0b50_0775
+;   0B50:077A | 8D 9F 00 00       lea     bx, [bx + 0000h]  ; effectively nop
+;   0B50:077E | 83 C4 0A          add     sp, 0Ah
+; Check https://github.com/H-J-Granger/ReC98/blob/d892535e723b3691612363d1bbdbd2a54f43fb43/th01/main_01.cpp#L314
+; for the C version of the original code.
+;
+; harry_up_anmiate (restore the menu after "HARRY UP" animation): {
+;   1924:0364 | 9A 6A 0C 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; }, where "xxxx" is cseg, and "yyyy" is (offset my_1924_0364).
+; Original assembly: call text_clear (provided by master.lib)
+; Modified assembly: call my_1924_0364
+;
+; -----------------------
+; (*1) This is an absolute call, the segment address might differ.
+
 stage_num_animate_org   db 01Eh, 068h, 059h, 001h, 09Ah, 07Ah, 062h, 000h, \
                            010h, 083h, 0C4h, 00Eh
 stage_num_animate_pat   db 09Ah, 000h, 000h, 000h, 000h, 08Dh, 09Fh, 000h, \
@@ -307,6 +279,86 @@ harry_up_animate        inject_code_t { \
         patched_mem = offset harry_up_animate_pat, \
         variable_mem = offset harry_up_animate_var, \
 }
+
+; --------------------------------------------------------------------------
+; Function: my_0b50_0775
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc my_0b50_0775 far
+        assume  ds:nothing
+        push    ax
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h
+        mov     [word ptr cs:temp_proc], 627Ah
+        mov     [word ptr cs:temp_proc + 2], ax
+        push    ds 159h
+        call    [dword ptr cs:temp_proc]
+        add     sp, 4
+        mov     ah, [cs:int2f_mux_id]
+        mov     al, 12h
+        int     2Fh
+        pop     ax
+        assume  ds:cseg
+        ret
+endp my_0b50_0775
+
+; --------------------------------------------------------------------------
+; Function: my_1924_0364
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc my_1924_0364 far
+        assume  ds:nothing
+        push    ax
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h
+        mov     [word ptr cs:temp_proc], 0C6Ah
+        mov     [word ptr cs:temp_proc + 2], ax
+        call    [dword ptr cs:temp_proc]
+        mov     ah, [cs:int2f_mux_id]
+        mov     al, 12h
+        int     2Fh
+        pop     ax
+        assume  ds:cseg
+        ret
+endp my_1924_0364
+
+; OP.EXE modifications
+; ==============================================================
+;
+; practise_menu_part1 {
+;   0A1C:0612 | 9A 0C 00 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; }, where "xxxx" is cseg, and "yyyy" is
+; (offset hooked_resident_create_and_stuff_set).
+; Original assembly: call resident_create_and_stuff_set
+; Modified assembly: call hooked_resident_create_and_stuff_set
+; Check https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L343-L349
+; for the C version of the original code.
+;
+; practise_menu_part2 {
+;   0A1C:0664 | 26 C6 47 14 00 26 C7 47 3F 00 00 A0 93 00 04 02 26 88 47 15 ->
+;             | 8D AE 00 00 8D B4 00 00 8D BD 00 00 8D AE 00 00 8D B4 00 00
+; }
+; Original assembly: (es:bx has been set to the address of `resident`)
+;   0A1C:0664 | 26 C6 47 14 00          mov     [byte ptr es:bx +
+;             |                                  resdient_t.route], ROUTE_MAKAI
+;   0A1C:0669 | 26 C7 47 3F 00 00       mov     [word ptr es:bx +
+;             |                                  resident_t.stage_id], 0000h
+;   0A1C:066F | A0 93 00                mov     al, [ds:opts + cfg_options_t.
+;             |                                      credit_lives_extra]
+;   0A1C:0672 | 04 02                   add     al, 02h
+;   0A1C:0674 | 26 88 47 15             mov     [byte ptr es:bx +
+;             |                                  route_t.rem_lives], al
+; Modified assembly: (effectively nop)
+;   0A1C:0664 | 8D AE 00 00             lea     bp, [bp + 0000h]
+;   0A1C:0668 | 8D B4 00 00             lea     si, [si + 0000h]
+;   0A1C:066C | 8D BD 00 00             lea     di, [di + 0000h]
+;   0A1C:0670 | 8D AE 00 00             lea     bp, [bp + 0000h]
+;   0A1C:0674 | 8D B4 00 00             lea     si, [si + 0000h]
+; Check https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L378-L380
+; for the C version of the original code.
 
 practise_menu_part1_org db 09Ah, 00Ch, 000h, 000h, 000h
 practise_menu_part1_pat db 09Ah
@@ -336,36 +388,6 @@ practise_menu_part2     inject_code_t {                         \
         original_mem    = offset practise_menu_part2_org,       \
         patched_mem     = offset practise_menu_part2_pat,       \
 }
-
-proc my_0b50_0775 far
-        push    ax
-        mov     ax, [cs:cur_psp]
-        add     ax, 10h
-        mov     [word ptr cs:temp_proc], 627Ah
-        mov     [word ptr cs:temp_proc + 2], ax
-        push    ds 159h
-        call    [dword ptr cs:temp_proc]
-        add     sp, 4
-        mov     ah, [cs:int2f_mux_id]
-        mov     al, 12h
-        int     2Fh
-        pop     ax
-        ret
-endp my_0b50_0775
-
-proc my_1924_0364 far
-        push    ax
-        mov     ax, [cs:cur_psp]
-        add     ax, 10h
-        mov     [word ptr cs:temp_proc], 0C6Ah
-        mov     [word ptr cs:temp_proc + 2], ax
-        call    [dword ptr cs:temp_proc]
-        mov     ah, [cs:int2f_mux_id]
-        mov     al, 12h
-        int     2Fh
-        pop     ax
-        ret
-endp my_1924_0364
 
 ; The segment and offset of the variable `resident` (of type resident_t far)
 ; defined in
@@ -430,23 +452,36 @@ struc cfg_options_t
         rank                    db ?
         bgm_mode                bgm_mode_t ?
         credit_bombs            db ?
-        credit_lives_extra      db ?            ; Add 2 for the actual number
-                                                ; of lives
+        credit_lives_extra      db ?    ; Add 2 for the actual number of lives
 ends cfg_options_t
 
+; --------------------------------------------------------------------------
+; Function: hooked_resident_create_and_stuff_set
+; Description: (See the comment above)
+; Input: (See the code in ReC98)
+; Output: Nothing
+; --------------------------------------------------------------------------
 proc hooked_resident_create_and_stuff_set far
 arg @@rank:word, @@bgm_mode:word, @@rem_bombs:word, @@credit_lives_extra:word, \
-    @@rand_lo:word, @@rand_hi:word
-local @@route:byte
+    @@rand:dword
+local @@route:byte, @@saved_df:byte
         assume  ds:nothing
-        push    ax bx es
+        ; Push all the registers that may be modified by the near procedures.
+        pushad
+        push    ds
+        pushfd
 
-        push    [@@rand_hi] [@@rand_lo] [@@credit_lives_extra] [@@rem_bombs]
+        push    [dword ptr @@rand] [@@credit_lives_extra] [@@rem_bombs]
         push    [@@bgm_mode] [@@rank]
         call    [dword ptr cs:practise_menu_part1_org + 1]
         add     sp, 0Ch
 
-        call    far show_practise_menu
+        ; Meet the assumptions of the .COM procedures
+        mov     ax, cs
+        mov     ds, ax
+        cld
+
+        call    show_practise_menu
 
         ; Calculate selected route
         mov     bx, 0
@@ -487,15 +522,23 @@ local @@route:byte
         mov     [byte ptr es:bx + resident_t.rem_lives], al
 @@end_of_resident_field_setting:
 
-        pop     es bx ax
+        popfd
+        pop     ds
+        popad
         ret
 endp hooked_resident_create_and_stuff_set
 
 inject_failed   db 0
 
+; --------------------------------------------------------------------------
+; Function: inject
+; Description: Check the filename of the current program, and inject the
+;              code if needed.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
 proc inject near
 arg @@updated:word
-local @@saved_psp:word
+local @@saved_psp:word, @@saved_filename_ptr:dword
         mov     ax, [@@updated]
         or      al, [inject_failed]
         test    ax, ax
@@ -508,123 +551,124 @@ local @@saved_psp:word
         mov     es, [word ptr critical_error_flag_addr + 2]
         or      al, [byte ptr es:bx]
         test    al, al
-        jz      @@L1
+        jz      @@save_to_inject
         mov     [inject_failed], 1
         jmp     @@return
-@@L1:
+@@save_to_inject:
 
         mov     ah, 62h
         int     21h
         mov     [@@saved_psp], bx  ; Stored PSP segment
+        mov     [cs:cur_psp], bx
         mov     es, bx
         mov     es, [es:2Ch]  ; Get environment segment
-        mov     bx, 0
-@@L2:
-        mov     cx, [word ptr es:bx]
-        inc     bx
+        xor     di, di
+@@find_2_continuous_zero_loop:
+        mov     cx, [word ptr es:di]
+        inc     di
         test    cx, cx
-        jnz     @@L2
-        add     bx, 3  ; Get the full path of the executing program
-        mov     dh, 0
-        mov     dl, bl
-        dec     dl
-@@L3:
-        mov     cl, [byte ptr es:bx]
-        cmp     cl, 5Ch
-        jne     @@L4
-        mov     dl, bl
-@@L4:
-        inc     bx
-        cmp     cl, 0
-        jne     @@L3
+        jnz     @@find_2_continuous_zero_loop
+        ; Now, ES:DI is pointing to the full path of the executing program
+        add     di, 3
+        lea     dx, [di - 1]    ; DX: last encountered 3C
+@@scan_for_backslash_loop:
+        mov     cl, [byte ptr es:di]
+        cmp     cl, '\'
+        jne     @@not_backslash
+        mov     dx, di
+@@not_backslash:
+        inc     di
+        test    cl, cl
+        jnz     @@scan_for_backslash_loop
         inc     dx  ; the filename of the executing program
-
+        mov     [word ptr @@saved_filename_ptr], dx
+        mov     [word ptr @@saved_filename_ptr + 2], es
         push    es dx ds (offset reiiden_exe)
         call    strcmp_ignore_case
         add     sp, 8
         test    ax, ax
         jnz     @@skip_reiiden_exe_patches
 
-        mov     es, [@@saved_psp]  ; the PSP segment
-        mov     al, [byte ptr fx_state + 1]
-        push    es ax (offset invincible_part1)
+        movzx   ax, [byte ptr fx_state + 1]
+        push    [word ptr @@saved_psp] ax (offset invincible_part1)
         call    inject_one
         add     sp, 6
-        mov     al, [byte ptr fx_state + 1]
-        push    es ax (offset invincible_part2)
-        call    inject_one
-        add     sp, 6
-
-        mov     al, [byte ptr fx_state + 3]
-        push    es ax (offset inf_lives_part1)
-        call    inject_one
-        add     sp, 6
-        mov     al, [byte ptr fx_state + 3]
-        push    es ax (offset inf_lives_part2)
+        movzx   ax, [byte ptr fx_state + 1]
+        push    [word ptr @@saved_psp] ax (offset invincible_part2)
         call    inject_one
         add     sp, 6
 
-        mov     al, [byte ptr fx_state + 5]
-        push    es ax (offset inf_bombs_part1)
+        movzx   ax, [byte ptr fx_state + 3]
+        push    [word ptr @@saved_psp] ax (offset inf_lives_part1)
         call    inject_one
         add     sp, 6
-        mov     al, [byte ptr fx_state + 5]
-        push    es ax (offset inf_bombs_part2)
-        call    inject_one
-        add     sp, 6
-
-        mov     al, [byte ptr fx_state + 7]
-        push    es ax (offset time_lock)
+        movzx   ax, [byte ptr fx_state + 3]
+        push    [word ptr @@saved_psp] ax (offset inf_lives_part2)
         call    inject_one
         add     sp, 6
 
-        mov     al, [byte ptr fx_state + 9]
-        push    es ax (offset inf_card_combo)
+        movzx   ax, [byte ptr fx_state + 5]
+        push    [word ptr @@saved_psp] ax (offset inf_bombs_part1)
+        call    inject_one
+        add     sp, 6
+        movzx   ax, [byte ptr fx_state + 5]
+        push    [word ptr @@saved_psp] ax (offset inf_bombs_part2)
         call    inject_one
         add     sp, 6
 
-        mov     al, [byte ptr fx_state + 11]
-        push    es ax (offset inf_item_combo)
+        movzx   ax, [byte ptr fx_state + 7]
+        push    [word ptr @@saved_psp] ax (offset time_lock)
         call    inject_one
         add     sp, 6
 
-        push    es 1 (offset stage_num_animate)
+        movzx   ax, [byte ptr fx_state + 9]
+        push    [word ptr @@saved_psp] ax (offset inf_card_combo)
         call    inject_one
         add     sp, 6
-        push    es 1 (offset harry_up_animate)
+
+        movzx   ax, [byte ptr fx_state + 11]
+        push    [word ptr @@saved_psp] ax (offset inf_item_combo)
+        call    inject_one
+        add     sp, 6
+
+        push    [word ptr @@saved_psp] 1 (offset stage_num_animate)
+        call    inject_one
+        add     sp, 6
+        push    [word ptr @@saved_psp] 1 (offset harry_up_animate)
         call    inject_one
         add     sp, 6
 @@skip_reiiden_exe_patches:
 
-        push    es dx ds (offset op_exe)
+        push    [dword ptr @@saved_filename_ptr] ds (offset op_exe)
         call    strcmp_ignore_case
         add     sp, 8
         test    ax, ax
         jnz     @@skip_op_exe_patches
 
-        mov     es, [@@saved_psp]  ; the PSP segment
-        push    es 1 (offset practise_menu_part1)
+        push    [word ptr @@saved_psp] 1 (offset practise_menu_part1)
         call    inject_one
         add     sp, 6
-        push    es 1 (offset practise_menu_part2)
+        push    [word ptr @@saved_psp] 1 (offset practise_menu_part2)
         call    inject_one
         add     sp, 6
-
 @@skip_op_exe_patches:
-
-        mov     [cs:cur_psp], es
 @@return:
         ret
 endp inject
 
-; Returns: Whether the FX status has been updated.
+; --------------------------------------------------------------------------
+; Function: maintain_bs_menu_ui
+; Description: Maintain the UI of the backspace menu.
+; Input: Nothing
+; Output (in AX): 1 if the FX status has been updated, 0 otherwise
+; --------------------------------------------------------------------------
 proc maintain_bs_menu_ui near
 local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
 @@return_val:word
         mov     al, [byte ptr bs_state + 1]
         mov     [@@prev_bs_state], al
-        mov     dx, 0
-@@L8:
+        xor     dx, dx
+@@save_fx_state_loop:
         mov     bx, offset fx_state + 1
         add     bx, dx
         add     bx, dx
@@ -634,19 +678,19 @@ local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
         mov     [byte ptr ss:bx], al
         inc     dx
         cmp     dx, FX_COUNT
-        jne     @@L8
+        jne     @@save_fx_state_loop
 
-        mov     [@@update], 0
-        mov     [@@return_val], 0
+        mov     [word ptr @@update], 0
+        mov     [word ptr @@return_val], 0
         mov     ax, 0401h
         int     18h
         shr     ah, 6
         and     ah, 1
         cmp     [byte ptr bs_state], ah
-        jge     @@L2
+        jge     @@skip_flipping_bs_state
         xor     [byte ptr bs_state + 1], 1  ; [bs_state] == 0, prev == 1, flip
         mov     [@@update], 1
-@@L2:
+@@skip_flipping_bs_state:
         mov     [byte ptr bs_state], ah
         cmp     [byte ptr bs_state + 1], 1
         jne     @@skip_fx_checking  ; if the BS menu is hidden, ignore FX inputs
@@ -659,11 +703,11 @@ local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
         mov     ch, ah
         and     ch, 1
         cmp     [byte ptr bx], ch
-        jge     @@L3
+        jge     @@skip_flipping_fx_state
         xor     [byte ptr bx + 1], 1  ; current state == 0, prev == 1, flip
         mov     [@@update], 1
         mov     [@@return_val], 1
-@@L3:
+@@skip_flipping_fx_state:
         mov     [byte ptr bx], ch
         shr     ah, 1
         add     bx, 2
@@ -690,35 +734,7 @@ local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
         call    show_bs_menu
         jmp     @@end_of_bs_menu_update
 @@restore_bs_covered:
-        ; Restore the covered TRAM space
-        mov     ax, TRAM_SEG
-        mov     es, ax
-        mov     ax, 0
-        mov     bx, offset bs_covered_tram
-@@L11:
-        push    ax bx es
-        push    (2 * BS_MENU_WIDTH) ds bx es ax
-        call    memory_copy
-        add     sp, 10
-        pop     es bx ax
-        add     ax, 0A0h
-        add     bx, (2 * BS_MENU_WIDTH)
-        cmp     ax, (0A0h * BS_MENU_HEIGHT)
-        jne     @@L11
-        mov     ax, TRAM_ATTR_SEG
-        mov     es, ax
-        mov     ax, 0
-        mov     bx, offset bs_covered_tram_attr
-@@L12:
-        push    ax bx es
-        push    (2 * BS_MENU_WIDTH) ds bx es ax
-        call    memory_copy
-        add     sp, 10
-        pop     es bx ax
-        add     ax, 0A0h
-        add     bx, (2 * BS_MENU_WIDTH)
-        cmp     ax, (0A0h * BS_MENU_HEIGHT)
-        jne     @@L12
+        call    restore_covered_tram
 @@end_of_bs_menu_update:
         mov     ax, [@@return_val]
         ret
@@ -843,12 +859,21 @@ proc update_prac_window_components_from_its_values near
 @@skip_shingyoku:
 @@skip_adding_bosses:
         ret
-endp
+endp update_prac_window_components_from_its_values
 
+; --------------------------------------------------------------------------
+; Function: maintain_prac_menu_ui
+; Description: As the name suggests, the components of the practise window is
+;              relavant to its value (e.g. only the game mode slider is visible
+;              when its value is 'Original'). This procedure updates it.
+; Warning: This function assumes the next component (if any) of the playing
+;          mode slider is always the section slider, and the last component (if
+;          the playing mode is 'Custom' is always the bomb slider.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
 proc maintain_prac_menu_ui near
-local @@to_redraw:byte
-        push    ax
-
+local @@to_redraw:byte, \
+@@arrow_state_rising_edge:byte  ; bit 2,3,4,5: up, left, right, down
         cmp     [prac_menu_state], 0
         je      @@return
 
@@ -859,40 +884,41 @@ local @@to_redraw:byte
         int     18h
         mov     bl, [arrow_state]
         not     bl
-        and     bl, ah                  ; bit 2,3,4,5: up,left,right,down
+        and     bl, ah
+        mov     [@@arrow_state_rising_edge], bl
         mov     [arrow_state], ah
 
         mov     si, offset practise_menu_window
         mov     di, [si + ui_window.cur_component_off]
         cmp     [byte ptr di + ui_component_common.ui_type], UI_SLIDER_NUM
         jne     @@skip_left_right
-        test    bl, 08h
+        test    [byte ptr @@arrow_state_rising_edge], 08h
         jz      @@skip_left
         push    0 di
         call    slider_change_value
         add     sp, 4
 @@skip_left:
-        test    bl, 10h
+        test    [byte ptr @@arrow_state_rising_edge], 10h
         jz      @@skip_right
         push    1 di
         call    slider_change_value
         add     sp, 4
 @@skip_right:
 @@skip_left_right:
-        test    bl, 04h
+        test    [byte ptr @@arrow_state_rising_edge], 04h
         jz      @@skip_up
         push    0 si
         call    window_switch_cur
         add     sp, 4
 @@skip_up:
-        test    bl, 20h
+        test    [byte ptr @@arrow_state_rising_edge], 20h
         jz      @@skip_down
         push    1 si
         call    window_switch_cur
         add     sp, 4
 @@skip_down:
         mov     di, [si + ui_window.cur_component_off]
-        test    bl, 3Ch
+        test    [byte ptr @@arrow_state_rising_edge], 3Ch
         setnz   al
         mov     [@@to_redraw], al
 
@@ -933,51 +959,96 @@ local @@to_redraw:byte
         jmp     @@end_z_press
 @@z_hasnt_been_released:
         and     ah, 02h
-        jnz     @@L1
+        jnz     @@skip_set_key_z_up_once
         mov     [key_z_up_once], 1
-@@L1:
+@@skip_set_key_z_up_once:
 @@end_z_press:
 @@skip_z_press:
 
 @@return:
-        pop     ax
         ret
 endp maintain_prac_menu_ui
 
+; --------------------------------------------------------------------------
+; Function: store_covered_tram
+; Description: Store the TRAM space (text and attribute) covered by the
+;              backspace menu.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
 proc store_covered_tram near
+        push    ds si di
+
+        mov     ax, ds
+        mov     es, ax
         mov     ax, TRAM_SEG
-        mov     es, ax
-        mov     ax, 0
-        mov     bx, offset bs_covered_tram
-@@L4:
-        push    ax bx es
-        push    (2 * BS_MENU_WIDTH) es ax ds bx
-        call    memory_copy
-        add     sp, 10
-        pop     es bx ax
-        add     ax, 0A0h
-        add     bx, (2 * BS_MENU_WIDTH)
-        cmp     ax, (0A0h * BS_MENU_HEIGHT)
-        jne     @@L4
+        mov     ds, ax
+        assume  ds:nothing
+        xor     si, si
+        mov     di, offset bs_covered_tram
+@@store_tram_loop:
+        mov     cx, BS_MENU_WIDTH
+        rep movsw
+        add     si, 0A0h - 2 * BS_MENU_WIDTH
+        cmp     si, (0A0h * BS_MENU_HEIGHT)
+        jne     @@store_tram_loop
         mov     ax, TRAM_ATTR_SEG
-        mov     es, ax
-        mov     ax, 0
-        mov     bx, offset bs_covered_tram_attr
-@@L5:
-        push    ax bx es
-        push    (2 * BS_MENU_WIDTH) es ax ds bx
-        call    memory_copy
-        add     sp, 10
-        pop     es bx ax
-        add     ax, 0A0h
-        add     bx, (2 * BS_MENU_WIDTH)
-        cmp     ax, (0A0h * BS_MENU_HEIGHT)
-        jne     @@L5
+        mov     ds, ax
+        xor     si, si
+        mov     di, offset bs_covered_tram_attr
+@@store_tram_attr_loop:
+        mov     cx, BS_MENU_WIDTH
+        rep movsw
+        add     si, 0A0h - 2 * BS_MENU_WIDTH
+        cmp     si, (0A0h * BS_MENU_HEIGHT)
+        jne     @@store_tram_attr_loop
+
+        pop     di si ds
+        assume  ds:cseg
         ret
 endp store_covered_tram
 
+; --------------------------------------------------------------------------
+; Function: resstore_covered_tram
+; Description: Restore the TRAM space (text and attribute) covered by the
+;              backspace menu from data saved by store_covered_tram.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc restore_covered_tram near
+        push    di si
+
+        mov     ax, TRAM_SEG
+        mov     es, ax
+        xor     di, di
+        mov     si, (offset bs_covered_tram)
+@@restore_tram_loop:
+        mov     cx, BS_MENU_WIDTH
+        rep movsw
+        add     di, 0A0h - (2 * BS_MENU_WIDTH)
+        cmp     di, (0A0h * BS_MENU_HEIGHT)
+        jne     @@restore_tram_loop
+        mov     ax, TRAM_ATTR_SEG
+        mov     es, ax
+        xor     di, di
+        mov     si, offset bs_covered_tram_attr
+@@restore_tram_attr_loop:
+        mov     cx, BS_MENU_WIDTH
+        rep movsw
+        add     di, 0A0h - (2 * BS_MENU_WIDTH)
+        cmp     di, (0A0h * BS_MENU_HEIGHT)
+        jne     @@restore_tram_attr_loop
+
+        pop     si di
+        ret
+endp restore_covered_tram
+
+; --------------------------------------------------------------------------
+; Function: resstore_covered_tram
+; Description: Restore the TRAM space (text and attribute) covered by the
+;              backspace menu from data saved by store_covered_tram.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
 proc show_bs_menu near
-        cmp     [byte ptr cs:bs_state + 1], 0
+        cmp     [byte ptr bs_state + 1], 0
         je      @@return
 
         push    TEXT_WHITE BS_MENU_HEIGHT BS_MENU_WIDTH 0 0
@@ -985,17 +1056,15 @@ proc show_bs_menu near
         add     sp, 10
 
         mov     dx, 1
-@@L7:
+@@main_loop:
         mov     bx, offset fx_state - 1
         add     bx, dx
         add     bx, dx
-        test    [byte ptr cs:bx], 1
-        jz      @@L9
-        mov     cx, TEXT_GREEN
-        jmp     @@L10
-@@L9:
         mov     cx, TEXT_WHITE
-@@L10:
+        test    [byte ptr bx], 1
+        jz      @@set_text_white
+        mov     cx, TEXT_GREEN
+@@set_text_white:
         mov     bx, offset fx_text - 2
         add     bx, dx
         add     bx, dx
@@ -1006,42 +1075,38 @@ proc show_bs_menu near
         pop     dx
         inc     dx
         cmp     dx, FX_COUNT + 1
-        jne     @@L7
+        jne     @@main_loop
 @@return:
         ret
 endp show_bs_menu
 
-; Show the practise menu and get its input. Won't return after a 'Z' key is
-; pressed. Might be called by the game process.
-proc show_practise_menu far
-        push    ax ds
-        mov     ax, cs
-        mov     ds, ax
-
+; --------------------------------------------------------------------------
+; Function: show_practise_menu
+; Description: Show the practise menu and get its input. Won't return after a
+;              'Z' key is pressed.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc show_practise_menu near
         push    (offset practise_menu_window)
         call    init_window
         add     sp, 2
 
         ; Draw the background shadow
-        xor     ah, ah
-        mov     al, [practise_menu_window.height]
+        movzx   ax, [byte ptr practise_menu_window.height]
         shl     ax, 4
         push    ax
-        xor     ah, ah
-        mov     al, [practise_menu_window.width]
+        movzx   ax, [byte ptr practise_menu_window.width]
         push    ax
-        xor     ah, ah
-        mov     al, [practise_menu_window.top_left_y]
+        movzx   ax, [byte ptr practise_menu_window.top_left_y]
         shl     al, 4
         push    ax
-        xor     ah, ah
-        mov     al, [practise_menu_window.top_left_x]
+        movzx   ax, [byte ptr practise_menu_window.top_left_x]
         push    ax
         call    draw_background_shadow
         add     sp, 8
 
-        mov     [prac_menu_state], 1
-        mov     [arrow_state], 0
+        mov     [word ptr prac_menu_state], 1
+        mov     [byte ptr arrow_state], 0
 
         push    (offset playing_mode_slider) 0FFFFh
         push    (offset practise_menu_window)
@@ -1071,15 +1136,15 @@ proc show_practise_menu far
         inc     ax
         test    ax, 100h
         jnz     @@stall
-        cmp     [prac_menu_state], 1
+        cmp     [word ptr prac_menu_state], 1
         je      @@wait_for_z_pressed_loop
 
-        pop     ds ax
         ret
 endp show_practise_menu
 
-; ------------------------------ Practise Menu UI ----------------------------
-
+; ============================================================================
+;                                PRACTISE MENU UI
+; ============================================================================
 include "..\src\tui\tsrtuidt.asm"
 include "..\src\tui\tsrtui.asm"
 
@@ -1097,9 +1162,9 @@ proc playing_mode_text_func near
 arg @@in_lo:word, @@in_hi:word
         mov     ax, offset playing_mode_custom_str
         cmp     [@@in_lo], 0
-        jne     @@L1
+        jne     @@skip_set_playing_mode_original
         mov     ax, offset playing_mode_original_str
-@@L1:
+@@skip_set_playing_mode_original:
         ret
 endp playing_mode_text_func
 playing_mode_label      db 'Mode', 0
@@ -1126,13 +1191,9 @@ section_str_makai_16_20         db ' Makai 16-20', 0
 section_str_jigoku_16_20        db 'Jigoku 16-20', 0
 proc section_text_func near
 arg @@in_lo:word, @@in_hi:word
-        ; Yes, I could use BX here, but the legacy code calling this procedure
-        ; requires BX to be saved, so we're using SI anyway.
-        push    si
-        mov     si, [@@in_lo]
-        add     si, si
-        mov     ax, [si + (offset section_str_arr)]
-        pop     si
+        mov     bx, [@@in_lo]
+        add     bx, bx
+        mov     ax, [bx + (offset section_str_arr)]
         ret
 endp section_text_func
 section_label      db 'Section', 0
@@ -1222,7 +1283,7 @@ proc attack_text_func near
 arg @@val:word, @@first_str:word
 local @@last_str:word, @@remain:word
         push    si
-        push    es bx  ; draw_slider requires it to save all regsiters
+
         cmp     [byte ptr @@val], 0
         jne     @@not_0
         mov     ax, (offset vanilla_attack)
@@ -1245,8 +1306,8 @@ local @@last_str:word, @@remain:word
         add     si, ax
         inc     si
         jmp     @@main_loop
+
 @@return:
-        pop     bx es
         pop     si
         ret
 endp attack_text_func
@@ -1265,14 +1326,10 @@ p2_attack       ui_slider {                             \
 }
 
 ; Initialize the component linked list of a window object, then print it onto
-; the screen. Unused.
+; the screen.
 ; Argument 1: The offset of the window object
 proc init_window near
 arg @@window_off:word
-        push    ax ds bx
-        mov     ax, cs
-        mov     ds, ax
-
         ; Initialize the component linked list
         mov     bx, [@@window_off]
         xor     ax, ax
@@ -1282,9 +1339,8 @@ arg @@window_off:word
         mov     [bx + ui_window.cur_component_off], ax
 
         ; Print the frame onto the screen
-        mov     ah, 0
         push    TEXT_WHITE
-        mov     al, [bx + ui_window.height]
+        movzx   ax, [byte ptr bx + ui_window.height]
         push    ax
         mov     al, [bx + ui_window.width]
         push    ax
@@ -1294,8 +1350,6 @@ arg @@window_off:word
         push    ax
         call    print_frame
         add     sp, 10
-
-        pop     bx ds ax
         ret
 endp init_window
 

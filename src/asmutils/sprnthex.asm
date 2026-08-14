@@ -75,7 +75,7 @@ endp sprint_byte
 proc sprint_word near
 arg @@off:word, @@num:word
         push    si
-        mov     cx, 0
+        xor     cx, cx
         mov     si, [@@off]
         add     si, 3
 @@print_nibble_loop:

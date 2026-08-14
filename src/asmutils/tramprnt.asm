@@ -33,8 +33,7 @@ arg @@str:dword, @@x:word, @@y:word, @@attr:word
         mov     di, [@@x]
 
 @@main_loop:
-        mov     al, [ds:si]
-        xor     ah, ah
+        movzx   ax, [ds:si]
         test    ax, ax
         jz      @@return_0
         push    [@@attr] [@@y] di ax

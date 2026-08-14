@@ -25,8 +25,6 @@ SMALLEST_POSSIBLE_MUX_ID        = 0C0h
 ; --------------------------------------------------------------------------
 proc check_tsr_status near
 local @@mux_id:byte
-        assume  ds:cseg
-
         ; Initialize. We don't know whether the other INT 2Fh will change these
         ; callee-saved registers, so we're saving it for safety.
         mov     [@@mux_id], 0
@@ -78,7 +76,6 @@ endp check_tsr_status
 ; --------------------------------------------------------------------------
 proc hook_interrupts near
 local @@mux_id:byte
-        assume  ds:cseg
         push    si
 
         ; Return 02h if TSR has already been installed
@@ -145,11 +142,6 @@ local @@mux_id:byte
         mov     [word ptr old_int2f], bx
         mov     [word ptr old_int2f + 2], es
 
-        ; Save DS and set it to our CS in order to call INT 21h/25h
-        push    ds
-        mov     ax, cs
-        mov     ds, ax
-
         ; Hook into INT 07h, INT 08h, and INT 1Ch/02h.
         ; In the original INT1Ch/02h routine, it will store your CX input (i.e.,
         ; the delay before calling the routine) 0000:058A, and store your ES:BX
@@ -184,7 +176,6 @@ local @@mux_id:byte
         int     21h
 
         ; Successfully installed. Restore DS and return 00h.
-        pop     ds
         xor     ax, ax
 
 @@return:
@@ -321,6 +312,7 @@ local @@mux_id:byte, @@prev_cseg:word, @@found_mcb:byte, @@prev_env:word
         mov     ax, [@@prev_cseg]
         mov     es, ax
         lds     dx, [dword ptr es:old_int7]
+        assume  ds:nothing
         mov     ax, 2507h
         int     21h
         lds     dx, [dword ptr es:old_int8]
@@ -352,6 +344,7 @@ local @@mux_id:byte, @@prev_cseg:word, @@found_mcb:byte, @@prev_env:word
 
 @@return:
         pop     ds
+        assume  ds:cseg
         ret
 endp uninstall_previous_tsr
 

@@ -21,16 +21,12 @@ p386
 ; --------------------------------------------------------------------------
 proc strcmp_ignore_case near
 arg @@str1:dword, @@str2:dword
-        push    es bx cx dx     ; Saving the registers for now.
-                                ; # TODO: Save the caller-saved registers before
-                                ; calling this function.
         push    ds si di
 
-        mov     ax, [word ptr @@str1 + 2]
-        mov     es, ax
+        mov     es, [word ptr @@str1 + 2]
         mov     di, [word ptr @@str1]
-        mov     ax, [word ptr @@str2 + 2]
-        mov     ds, ax
+        mov     ds, [word ptr @@str2 + 2]
+        assume  ds:nothing
         mov     si, [word ptr @@str2]
 
 @@str_check_loop:
@@ -66,7 +62,7 @@ arg @@str1:dword, @@str2:dword
 
 @@return:
         pop     di si ds
-        pop     dx cx bx es
+        assume  ds:cseg
         ret
 endp strcmp_ignore_case
 

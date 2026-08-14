@@ -30,7 +30,7 @@ p386
 ; --------------------------------------------------------------------------
 proc print_frame near
 arg @@x0:word, @@y0:word, @@width:word, @@height:word, @@attr:word
-        push    es di ax cx si
+        push    di si
         mov     ax, TRAM_SEG
         mov     es, ax
         cld
@@ -100,7 +100,7 @@ arg @@x0:word, @@y0:word, @@width:word, @@height:word, @@attr:word
         cmp     si, [@@height]
         jne     @@L2
 
-        pop     si cx ax di es
+        pop     si di
         ret
 endp print_frame
 
