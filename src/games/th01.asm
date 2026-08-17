@@ -524,6 +524,7 @@ local @@route:byte, @@saved_df:byte
 
         popfd
         pop     ds
+        assume  ds:cseg
         popad
         ret
 endp hooked_resident_create_and_stuff_set
@@ -856,7 +857,13 @@ proc update_prac_window_components_from_its_values near
 @@skip_shingyoku_init_hp:
         mov     al, [byte ptr phase_slider.value]
         mov     [byte ptr last_phase], al
+        jmp     @@skip_adding_bosses
 @@skip_shingyoku:
+        ; Other boss stages are treated as regular stages for now.
+        mov     [byte ptr current_ui_boss], 0
+        push    (offset regular_stage_linking)
+        call    link_components
+        add     sp, 2
 @@skip_adding_bosses:
         ret
 endp update_prac_window_components_from_its_values
@@ -917,12 +924,12 @@ local @@to_redraw:byte, \
         call    window_switch_cur
         add     sp, 4
 @@skip_down:
-        mov     di, [si + ui_window.cur_component_off]
         test    [byte ptr @@arrow_state_rising_edge], 3Ch
         setnz   al
         mov     [@@to_redraw], al
 
         ; Check and respond to the Space key press
+        mov     di, [si + ui_window.cur_component_off]
         cmp     [byte ptr di + ui_component_common.ui_type], UI_TICKBOX_NUM
         jne     @@skip_space_check
         mov     ax, 0406h
