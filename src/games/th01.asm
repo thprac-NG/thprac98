@@ -255,8 +255,9 @@ inf_item_combo          inject_code_t { \
 
 stage_num_animate_org   db 01Eh, 068h, 059h, 001h, 09Ah, 07Ah, 062h, 000h, \
                            010h, 083h, 0C4h, 00Eh
-stage_num_animate_pat   db 09Ah, 000h, 000h, 000h, 000h, 08Dh, 09Fh, 000h, \
-                           000h, 083h, 0C4h, 00Ah
+stage_num_animate_pat   db 09Ah
+                        dw (offset my_0b50_0775), 0
+                        dw 08Dh, 09Fh, 000h, 000h, 083h, 0C4h, 00Ah
 stage_num_animate_var   db 7 dup(0), 1, 1, 3 dup(0)
 stage_num_animate       inject_code_t { \
         filename = offset reiiden_exe, \
@@ -268,7 +269,8 @@ stage_num_animate       inject_code_t { \
         variable_mem = offset stage_num_animate_var, \
 }
 harry_up_animate_org    db 09Ah, 06Ah, 00Ch, 000h, 000h
-harry_up_animate_pat    db 09Ah, 000h, 000h, 000h, 000h
+harry_up_animate_pat    db 09Ah
+                        dw (offset my_1924_0364), 0
 harry_up_animate_var    db 0, 0, 0, 1, 1
 harry_up_animate        inject_code_t { \
         filename = offset reiiden_exe, \
@@ -323,6 +325,198 @@ proc my_1924_0364 far
         assume  ds:cseg
         ret
 endp my_1924_0364
+
+; Shingyoku Warps
+; ======================
+; Check [URL NEEDED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!]
+; for the C version of the modification in this section.
+;
+; shingyoku_p2_attack {
+;   2269:0B68 | 9A 08 16 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; }, where "xxxx" is cseg, and "yyyy" is (offset shingyoku_p2_attack_select).
+; Original assembly: callf irand
+; Modified assembly: callf shingyoku_p2_attack_select
+;
+; shingyoku_init {
+;   2269:08C6 | 80 3E 3E 13 00 -> 9A yy yy xx xx
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_2269_08c6).
+; Original assembly: cmp [byte ptr DS:BOSS_PHASE_OFFSET], 00h
+; Modified assembly: callf hooked_reiiden_2269_08c6
+;
+; shingyoku_skip_opening {
+;   2269:090A | E9 8F 00 -> E9 99 00
+; }
+; Original assembly: jmp 2269:099C  ; the while loop's "jump to middle"
+; Modified assembly: jmp 2269:09A6  ; make the jump skip the conditional test
+;
+; shingyoku_skip_hp_animation_part1 {
+;   2269:0A3A | 75 13 -> EB 13
+; }
+; Original assembly: jnz 2269:0A4F  ; Skip HP animation if done
+; Modified assembly: jmp 2269:0A4F  ; Skip HP animation completely
+;
+; shingyoku_skip_hp_animation_part2 {
+;   2269:0B13 | FF 06 DF 59 FF 06 E1 59 -> 9A yy yy xx xx 8D 74 00
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_2269_0b13).
+; Original assembly: (expanded from the inline function phase.frame_common)
+;   2269:0B13 | FF 06 DF 59       inc    [word ptr boss_phase_frame]
+;   2269:0B17 | FF 06 E1 59       inc    [word ptr invincibility_frame]
+; Modified assembly:
+;   2269:0B13 | 9A yy yy xx xx    callf  hooked_reiiden_2269_0b13
+;   2269:0B18 | 8D 74 00          lea    si, [si + 00h]  ; effectively nop
+;
+; -----------------------
+; (*1) This is an absolute call, the segment address might differ.
+
+shingyoku_p2_attack_org db 09Ah, 008h, 016h, 000h, 000h
+shingyoku_p2_attack_pat db 09Ah
+                        dw (offset shingyoku_p2_attack_select), 0
+shingyoku_p2_attack_var db 0, 0, 0, 1, 1
+shingyoku_p2_attack     inject_code_t {                 \
+        filename = offset reiiden_exe,                  \
+        seg = 2269h,                                    \
+        off = 0B68h,                                    \
+        len = 5,                                        \
+        original_mem = offset shingyoku_p2_attack_org,  \
+        patched_mem = offset shingyoku_p2_attack_pat,   \
+        variable_mem = offset shingyoku_p2_attack_var,  \
+}
+shingyoku_init_org      db 080h, 03Eh, 03Eh, 013h, 000h
+shingyoku_init_pat      db 09Ah
+                        dw (offset hooked_reiiden_2269_08c6), 0
+shingyoku_init          inject_code_t {                 \
+        filename = offset reiiden_exe,                  \
+        seg = 2269h,                                    \
+        off = 08C6h,                                    \
+        len = 5,                                        \
+        original_mem = offset shingyoku_init_org,       \
+        patched_mem = offset shingyoku_init_pat,        \
+}
+shingyoku_skip_opening_org      db 0E9h, 08Fh, 000h
+shingyoku_skip_opening_pat      db 0E9h, 099h, 000h
+shingyoku_skip_opening          inject_code_t {                 \
+        filename = offset reiiden_exe,                          \
+        seg = 2269h,                                            \
+        off = 090Ah,                                            \
+        len = 3,                                                \
+        original_mem = offset shingyoku_skip_opening_org,       \
+        patched_mem = offset shingyoku_skip_opening_pat,        \
+}
+shingyoku_skip_hp_animation_part1_org   db 075h, 013h
+shingyoku_skip_hp_animation_part1_pat   db 0EBh, 013h
+shingyoku_skip_hp_animation_part1       inject_code_t {                 \
+        filename = offset reiiden_exe,                                  \
+        seg = 2269h,                                                    \
+        off = 0A3Ah,                                                    \
+        len = 2,                                                        \
+        original_mem = offset shingyoku_skip_hp_animation_part1_org,    \
+        patched_mem = offset shingyoku_skip_hp_animation_part1_pat,     \
+}
+shingyoku_skip_hp_animation_part2_org   db 0FFh, 006h, 0DFh, 059h, \
+                                           0FFh, 006h, 0E1h, 059h
+shingyoku_skip_hp_animation_part2_pat   db 09Ah
+                                        dw offset hooked_reiiden_2269_0b13, 0
+                                        db 08Dh, 074h, 000h
+shingyoku_skip_hp_animation_part2       inject_code_t {                 \
+        filename = offset reiiden_exe,                                  \
+        seg = 2269h,                                                    \
+        off = 0B13h,                                                    \
+        len = 8,                                                        \
+        original_mem = offset shingyoku_skip_hp_animation_part2_org,    \
+        patched_mem = offset shingyoku_skip_hp_animation_part2_pat,     \
+}
+shingyoku_init_flag                     db 0
+shingyoku_do_skip_opening               db 0
+shingyoku_do_skip_p1                    db 0
+shingyoku_rerender_hp_flag              db 0
+BOSS_PHASE_OFFSET                       = 133Eh
+BOSS_HP_OFFSET                          = 59E3h
+SHINGYOKU_PHASE_FRAME_OFFSET            = 59DFh
+SHINGYOKU_INVINCIBILITY_FRAME_OFFSET    = 59E1h
+HUD_HP_RENDER_SEGMENT                   = 2188h
+HUD_HP_RENDER_OFFSET                    = 009Ch
+HUD_HP_FUNC_RERENDER                    = 0FFFFh
+
+
+; --------------------------------------------------------------------------
+; Function: shingyoku_p2_attack_select
+; Description: Select the attack of the Phase 2 of Shingyoku, according to
+;              the practise settings.
+; Input: Nothing
+; Output (in AX): The chosen attack number.
+; --------------------------------------------------------------------------
+proc shingyoku_p2_attack_select far
+        assume  ds:nothing
+        push    bx
+        mov     ax, [word ptr p2_attack.value]
+        cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
+        setz    bl
+        test    ax, ax
+        setnz   bh
+        test    bh, bl
+        jnz     @@skip_irand_calling
+        call    [dword ptr shingyoku_p2_attack_org + 1]
+@@skip_irand_calling:
+        pop     bx
+        ret
+        assume  ds:cseg
+endp shingyoku_p2_attack_select
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_2269_08c6
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc hooked_reiiden_2269_08c6 far
+        assume  ds:nothing
+        cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
+        jne     @@skip_handling
+        cmp     [byte ptr shingyoku_init_flag], 1
+        jne     @@skip_handling
+        mov     [byte ptr shingyoku_init_flag], 0
+        push    ax
+        mov     ax, [word ptr hp_slider.value]
+        mov     [ds:BOSS_HP_OFFSET], ax
+        pop     ax
+@@skip_handling:
+        cmp     [byte ptr ds:BOSS_PHASE_OFFSET], 0  ; The hooked instruction
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_2269_08c6
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_2269_0b13
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc hooked_reiiden_2269_0b13 far
+local @@hud_hp_render_addr:dword
+        assume  ds:nothing
+        cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
+        jne     @@skip_handling
+        cmp     [byte ptr shingyoku_do_skip_p1], 1
+        jne     @@skip_handling
+        cmp     [byte ptr shingyoku_rerender_hp_flag], 1
+        jne     @@skip_handling
+        pushad
+        mov     [byte ptr shingyoku_rerender_hp_flag], 0
+        mov     [word ptr @@hud_hp_render_addr], HUD_HP_RENDER_OFFSET
+        mov     ax, [cur_psp]
+        add     ax, 10h + HUD_HP_RENDER_SEGMENT
+        mov     [word ptr @@hud_hp_render_addr + 2], ax
+        push    HUD_HP_FUNC_RERENDER
+        push    [word ptr hp_slider.value]
+        call    [dword ptr @@hud_hp_render_addr]
+        add     sp, 4
+        popad
+@@skip_handling:
+        ; The hooked instruction
+        inc     [word ptr ds:SHINGYOKU_PHASE_FRAME_OFFSET]
+        inc     [word ptr ds:SHINGYOKU_INVINCIBILITY_FRAME_OFFSET]
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_2269_0b13
 
 ; OP.EXE modifications
 ; ==============================================================
@@ -638,6 +832,27 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         push    [word ptr @@saved_psp] 1 (offset harry_up_animate)
         call    inject_one
         add     sp, 6
+
+        push    [word ptr @@saved_psp] 1 (offset shingyoku_p2_attack)
+        call    inject_one
+        add     sp, 6
+        push    [word ptr @@saved_psp] 1 (offset shingyoku_init)
+        call    inject_one
+        add     sp, 6
+        movzx   ax, [shingyoku_do_skip_opening]
+        push    [word ptr @@saved_psp] ax (offset shingyoku_skip_opening)
+        call    inject_one
+        add     sp, 6
+        movzx   ax, [shingyoku_do_skip_p1]
+        push    [word ptr @@saved_psp] ax \
+                (offset shingyoku_skip_hp_animation_part1)
+        call    inject_one
+        add     sp, 6
+        push    [word ptr @@saved_psp] 1 \
+                (offset shingyoku_skip_hp_animation_part2)
+        call    inject_one
+        add     sp, 6
+
 @@skip_reiiden_exe_patches:
 
         push    [dword ptr @@saved_filename_ptr] ds (offset op_exe)
@@ -767,12 +982,15 @@ arg @@component_arr:word
         ret
 endp link_components
 
+enum ui_boss_t  UI_REGULAR, UI_SHINGYOKU, UI_YUUGEN_MAGAN, UI_ELIS, UI_SARIEL, \
+                UI_MIMA, UI_KIKURI, UI_KONGARA
+
 current_ui_boss db 0
 regular_stage_linking   dw (offset stage_slider), (offset life_slider), 0FFFFh
 shingyoku_linking       dw (offset stage_slider), (offset phase_slider), \
                            (offset hp_slider), (offset p2_attack), \
                            (offset skip_opening), (offset life_slider), 0FFFFh
-last_phase      db 0
+prev_phase      db 0
 
 ; --------------------------------------------------------------------------
 ; Function: update_prac_window_components_from_its_values
@@ -813,9 +1031,9 @@ proc update_prac_window_components_from_its_values near
         ; Regular stage
         cmp     [byte ptr stage_slider.value], 5
         je      @@add_bosses
-        cmp     [byte ptr current_ui_boss], 0
+        cmp     [byte ptr current_ui_boss], UI_REGULAR
         je      @@skip_regular_stage
-        mov     [byte ptr current_ui_boss], 0
+        mov     [byte ptr current_ui_boss], UI_REGULAR
         push    (offset regular_stage_linking)
         call    link_components
         add     sp, 2
@@ -826,9 +1044,10 @@ proc update_prac_window_components_from_its_values near
         ; Shingyoku
         cmp     [byte ptr section_slider.value], 0
         jne     @@skip_shingyoku
-        cmp     [byte ptr current_ui_boss], 1
+        cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
         je      @@skip_shingyoku_linking
-        mov     [byte ptr current_ui_boss], 1
+        mov     [byte ptr current_ui_boss], UI_SHINGYOKU
+        ;   Link the UI components that are relevant to Shingyoku
         mov     [byte ptr phase_slider.max_value], 2
         mov     [byte ptr skip_opening.value], 0
         mov     [byte ptr p2_attack.value], 0
@@ -839,12 +1058,13 @@ proc update_prac_window_components_from_its_values near
         push    (offset shingyoku_linking)
         call    link_components
         add     sp, 2
-        mov     [byte ptr last_phase], 0
+        mov     [byte ptr prev_phase], 0
 @@skip_shingyoku_linking:
-        ; TODO: Maybe make the following HP handling code into a procedure?
-        mov     al, [byte ptr last_phase]
+        ;   TODO: Maybe make the following HP handling code into a procedure?
+        mov     al, [byte ptr prev_phase]
         cmp     [byte ptr phase_slider.value], al
         je      @@skip_shingyoku_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
         mov     al, 8
         mov     [byte ptr hp_slider.min_value], 7
         cmp     [byte ptr phase_slider.value], 2
@@ -856,15 +1076,31 @@ proc update_prac_window_components_from_its_values near
         mov     [byte ptr hp_slider.value], al
 @@skip_shingyoku_init_hp:
         mov     al, [byte ptr phase_slider.value]
-        mov     [byte ptr last_phase], al
+        mov     [byte ptr prev_phase], al
+        ;   Raise the "Skip P1" flags if the selected phase is P2
+        cmp     [byte ptr phase_slider.value], 2
+        sete    bl
+        mov     [shingyoku_do_skip_p1], bl
+        mov     [shingyoku_rerender_hp_flag], bl
+        mov     [byte ptr shingyoku_init_flag], 1
+        ;   Raise the "skip opening" flag if either P1 isn't selected or the
+        ;   "Skip Opening Animation" tickbox is ticked.
+        cmp     [byte ptr phase_slider.value], 1
+        setne   al
+        cmp     [skip_opening.value], 1
+        sete    ah
+        or      al, ah
+        mov     [byte ptr shingyoku_do_skip_opening], al
         jmp     @@skip_adding_bosses
 @@skip_shingyoku:
+
         ; Other boss stages are treated as regular stages for now.
         mov     [byte ptr current_ui_boss], 0
         push    (offset regular_stage_linking)
         call    link_components
         add     sp, 2
 @@skip_adding_bosses:
+
         ret
 endp update_prac_window_components_from_its_values
 
@@ -1510,11 +1746,12 @@ local @@told_to_uninstall:byte, @@int_no_hooked:word
         pop     ds              ; Restore DS (branch 2)
 
         ; Set up some injected code that can only be determined in the runtime
-        mov     [word ptr stage_num_animate_pat + 1], offset my_0b50_0775
         mov     [word ptr stage_num_animate_pat + 3], cs
-        mov     [word ptr harry_up_animate_pat + 1], offset my_1924_0364
         mov     [word ptr harry_up_animate_pat + 3], cs
         mov     [word ptr practise_menu_part1_pat + 3], cs
+        mov     [word ptr shingyoku_p2_attack_pat + 3], cs
+        mov     [word ptr shingyoku_init_pat + 3], cs
+        mov     [word ptr shingyoku_skip_hp_animation_part2_pat + 3], cs
 
         ; Initialize the Keyboard BIOS
         mov     ah, 03h
