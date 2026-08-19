@@ -852,7 +852,6 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
                 (offset shingyoku_skip_hp_animation_part2)
         call    inject_one
         add     sp, 6
-
 @@skip_reiiden_exe_patches:
 
         push    [dword ptr @@saved_filename_ptr] ds (offset op_exe)
@@ -999,7 +998,7 @@ prev_phase      db 0
 ;              when its value is 'Original'). This procedure updates it.
 ; Warning: This function assumes the next component (if any) of the playing
 ;          mode slider is always the section slider, and the last component (if
-;          the playing mode is 'Custom' is always the bomb slider.
+;          any) is always the bomb slider.
 ; Input:  Nothing
 ; Output: Nothing
 ; --------------------------------------------------------------------------
@@ -1095,7 +1094,7 @@ proc update_prac_window_components_from_its_values near
 @@skip_shingyoku:
 
         ; Other boss stages are treated as regular stages for now.
-        mov     [byte ptr current_ui_boss], 0
+        mov     [byte ptr current_ui_boss], UI_REGULAR
         push    (offset regular_stage_linking)
         call    link_components
         add     sp, 2
@@ -1368,6 +1367,7 @@ proc show_practise_menu near
         call    window_insert_component                         ; delayed sp+6
         add     sp, 30                                          ; sp+30
 
+        mov     [byte ptr current_ui_boss], UI_REGULAR
         call    update_prac_window_components_from_its_values
         push    offset practise_menu_window
         call    draw_window
