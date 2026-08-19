@@ -1650,11 +1650,61 @@ int_vector_hooked_num           db '??h is hooked by someone else.$'
 cannot_find_mcb                 db "Can't find the MCB of the previous TSR ", \
                                    "in the MCB chain.$"
 unknown_parameter               db 'Unknown paramter.$'
+memory_used                     db 13, 10, 'Memory used: $'
+memory_used_num_buffer          db 11 dup ('?')
+memory_used2                    db ' bytes.$'
 
 COMMAND_PARAM_LEN_OFFSET        EQU 80h
 COMMAND_PARAM_OFFSET            EQU 81h
 
 include 'hookint.asm'   ; Hook Interrupts
+
+; --------------------------------------------------------------------------
+; Function: print_memory_used
+; Description: Print the ammount of memory used by the TSR.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc print_memory_used near
+        push    di
+
+        ; Print "Memory used: "
+        mov     ah, 09h
+        mov     dx, (offset memory_used)
+        int     21h
+
+        ; DX:AX = ceil((offset end_of_resident + 0x100) / 16) * 16
+        mov     ax, (offset end_of_resident + 10Fh)
+        and     al, 0F0h
+        xor     dx, dx
+
+        ; Print DX:AX as decimal into the string. We want to make sure that
+        ; DS:DI is a '$'-ended ASCII string reading as "xxx bytes.".
+        mov     di, (offset memory_used2 - 1)
+        test    ax, ax
+        jnz     @@not_zero
+        mov     [byte ptr di], '0'
+        jmp     @@end_of_printing_dec
+@@not_zero:
+        mov     cx, 10
+@@decimal_expand_loop:
+        idiv    cx
+        mov     [byte ptr di], dl
+        add     [byte ptr di], '0'
+        dec     di
+        xor     dx, dx
+        test    ax, ax
+        jnz     @@decimal_expand_loop
+@@end_of_printing_dec:
+        inc     di
+
+        ; Print "xxx bytes."
+        mov     dx, di
+        mov     ah, 09h
+        int     21h
+
+        pop     di
+        ret
+endp print_memory_used
 
 ; --------------------------------------------------------------------------
 ; Function: my_main
@@ -1786,11 +1836,6 @@ local @@told_to_uninstall:byte, @@int_no_hooked:word
         jmp     @@return
 @@hook_interrupt_success:
 
-        ; Print 'Successfully installed'
-        mov     dx, (offset successfully_installed)
-        mov     ah, 09h
-        int     21h
-
         ; Release the environment block. We assume the INT 21h/49h call always
         ; success, since the environment MCB will always on the chain, if our
         ; .COM file is loaded by DOS.
@@ -1798,6 +1843,14 @@ local @@told_to_uninstall:byte, @@int_no_hooked:word
         mov     es, ax
         mov     ah, 49h
         int     21h
+
+        ; Print 'Successfully installed'
+        mov     dx, (offset successfully_installed)
+        mov     ah, 09h
+        int     21h
+
+        ; Print 'Memory used: xxx byte'
+        call    print_memory_used
 
         jmp     @@terminate_and_stay_resident
 
