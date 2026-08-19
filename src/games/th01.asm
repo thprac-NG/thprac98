@@ -328,7 +328,7 @@ endp my_1924_0364
 
 ; Shingyoku Warps
 ; ======================
-; Check [URL NEEDED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!]
+; Check https://github.com/H-J-Granger/ReC98/commit/3d6b5d9eb7b87979bd4cd94a481db064bfd1d364/
 ; for the C version of the modification in this section.
 ;
 ; shingyoku_p2_attack {
@@ -466,7 +466,8 @@ endp shingyoku_p2_attack_select
 ; --------------------------------------------------------------------------
 ; Function: hooked_reiiden_2269_08c6
 ; Description: (See the comment above)
-; Input/Output: Nothing
+; Input: Nothing
+; Output (in ZF): whether `boss_phase` is 0.
 ; --------------------------------------------------------------------------
 proc hooked_reiiden_2269_08c6 far
         assume  ds:nothing
