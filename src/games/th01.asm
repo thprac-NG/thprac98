@@ -4,6 +4,8 @@ radix 10
 locals
 p386
 
+include "..\src\asmdefs.asm"
+
 segment cseg para private 'CODE' USE16
 org 100h
         assume  cs:cseg, ds:cseg
@@ -38,6 +40,13 @@ prac_menu_state dw 0
 key_z_up_once   db 0
 arrow_state     db 0    ; stored in bit 2,3,4,5 for up, left, right, down
 space_state     db 0    ; stored in bit 4
+
+INVICIBLE_STATE         = ((offset fx_state) + 1)
+INF_LIFES_STATE         = ((offset fx_state) + 3)
+INF_BOMBS_STATE         = ((offset fx_state) + 5)
+TIME_LOCK_STATE         = ((offset fx_state) + 7)
+INF_CARD_COMBO_STATE    = ((offset fx_state) + 9)
+INF_ITEM_COMBO_STATE    = ((offset fx_state) + 11)
 
 ; These are byte ptrs, and need to check if is both cleared before any DOS call
 ; in a TSR.
@@ -81,18 +90,25 @@ local @@return_val:byte
         ret
 endp on_tick
 
+; --------------------------------------------------------------------------
+; Function: on_game_start
+; Description: Get called every time the game is started.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc on_game_start near
+        ; Clear Yuugenmagan timeout counters (5 bytes starting from
+        ; yuugenmagan_p1_frame_elapsed)
+        xor     ax, ax
+        cwd
+        mov     [dword ptr yuugenmagan_p1_frame_elapsed], eax
+        mov     [byte ptr yuugenmagan_p1_frame_elapsed + 4], al
+        ret
+endp on_game_start
+
 ; ===========================================================================
 ;                                INJECT CODE
 ; ===========================================================================
 
-; NOPs:
-; 1byte: 90 (nop)
-; 2bytes: 89 xx (mov r16, r16). C0 (ax), DB (bx), C9 (cx), D2 (dx),
-;                               E4 (sp), ED (bp), F6 (si), FF (di)
-; 3bytes: 8D xx 00 (lea r16, [r16 + 00h]). 5F (bx), 6E (bp), 74 (si), 7D (di)
-; 4bytes: 8D xx 00 00 (lea r16, [r16 + 0000h]). 9F (bx), AE (bp),
-;                                               B4 (si), BD (di)
-;
 ; REIIDEN.EXE modifications
 ; ==============================================================
 ;
@@ -134,7 +150,7 @@ op_exe          db "OP.EXE", 0
 include "..\src\inject.asm"
 
 invincible_part1_org    db 07Eh, 02Fh
-invincible_part1_pat    db 089h, 0DBh
+invincible_part1_pat    db NOP_2BYTES_BX
 invincible_part1        inject_code_t { \
         filename = offset reiiden_exe, \
         seg = 0B50h, \
@@ -154,7 +170,7 @@ invincible_part2        inject_code_t { \
         patched_mem = offset invincible_part2_pat \
 }
 inf_lives_part1_org     db 026h, 0FEh, 04Fh, 015h, 0FFh, 00Eh, 0E0h, 000h
-inf_lives_part1_pat     db 08Dh, 0B4h, 000h, 000h, 08Dh, 0BDh, 000h, 000h
+inf_lives_part1_pat     db NOP_4BYTES_SI, NOP_4BYTES_DI
 inf_lives_part1         inject_code_t { \
         filename = offset reiiden_exe, \
         seg = 0B50h, \
@@ -164,7 +180,7 @@ inf_lives_part1         inject_code_t { \
         patched_mem = offset inf_lives_part1_pat \
 }
 inf_lives_part2_org     db 09Ah, 095h, 008h, 058h, 028h
-inf_lives_part2_pat     db 090h, 08Dh, 0B4h, 000h, 000h
+inf_lives_part2_pat     db NOP_1BYTE, NOP_4BYTES_SI
 inf_lives_part2_var     db 0, 0, 0, 1, 1
 inf_lives_part2         inject_code_t { \
         filename = offset reiiden_exe, \
@@ -176,7 +192,7 @@ inf_lives_part2         inject_code_t { \
         variable_mem = offset inf_lives_part2_var, \
 }
 inf_bombs_part1_org     db 040h
-inf_bombs_part1_pat     db 090h
+inf_bombs_part1_pat     db NOP_1BYTE
 inf_bombs_part1         inject_code_t { \
         filename = offset reiiden_exe, \
         seg = 1967h, \
@@ -186,7 +202,7 @@ inf_bombs_part1         inject_code_t { \
         patched_mem = offset inf_bombs_part1_pat \
 }
 inf_bombs_part2_org     db 0FEh, 00Eh, 092h, 000h
-inf_bombs_part2_pat     db 08Dh, 09Fh, 000h, 000h
+inf_bombs_part2_pat     db NOP_4BYTES_BX
 inf_bombs_part2         inject_code_t { \
         filename = offset reiiden_exe, \
         seg = 1967h, \
@@ -196,7 +212,7 @@ inf_bombs_part2         inject_code_t { \
         patched_mem = offset inf_bombs_part2_pat, \
 }
 time_lock_org           db 083h, 02Eh, 00Ch, 054h, 002h
-time_lock_pat           db 08Dh, 09Fh, 000h, 000h, 090h
+time_lock_pat           db NOP_4BYTES_BX, NOP_1BYTE
 time_lock               inject_code_t { \
         filename = offset reiiden_exe, \
         seg = 1924h, \
@@ -206,7 +222,7 @@ time_lock               inject_code_t { \
         patched_mem = offset time_lock_pat, \
 }
 inf_card_combo_org      db 0C7h, 006h, 0E4h, 000h, 000h, 000h
-inf_card_combo_pat      db 089h, 0D2h, 08Dh, 09Fh, 000h, 000h
+inf_card_combo_pat      db NOP_2BYTES_DX, NOP_4BYTES_BX
 inf_card_combo          inject_code_t { \
         filename = offset reiiden_exe, \
         seg = 0B50h, \
@@ -216,7 +232,7 @@ inf_card_combo          inject_code_t { \
         patched_mem = offset inf_card_combo_pat, \
 }
 inf_item_combo_org      db 026h, 0C7h, 047h, 049h, 000h, 000h
-inf_item_combo_pat      db 08Dh, 074h, 000h, 08Dh, 07Dh, 000h
+inf_item_combo_pat      db NOP_3BYTES_SI, NOP_3BYTES_DI
 inf_item_combo          inject_code_t { \
         filename = offset reiiden_exe, \
         seg = 17CAh, \
@@ -257,7 +273,7 @@ stage_num_animate_org   db 01Eh, 068h, 059h, 001h, 09Ah, 07Ah, 062h, 000h, \
                            010h, 083h, 0C4h, 00Eh
 stage_num_animate_pat   db 09Ah
                         dw (offset my_0b50_0775), 0
-                        dw 08Dh, 09Fh, 000h, 000h, 083h, 0C4h, 00Ah
+                        dw NOP_4BYTES_BX, 083h, 0C4h, 00Ah
 stage_num_animate_var   db 7 dup(0), 1, 1, 3 dup(0)
 stage_num_animate       inject_code_t { \
         filename = offset reiiden_exe, \
@@ -417,7 +433,7 @@ shingyoku_skip_hp_animation_part2_org   db 0FFh, 006h, 0DFh, 059h, \
                                            0FFh, 006h, 0E1h, 059h
 shingyoku_skip_hp_animation_part2_pat   db 09Ah
                                         dw offset hooked_reiiden_2269_0b13, 0
-                                        db 08Dh, 074h, 000h
+                                        db NOP_3BYTES_SI
 shingyoku_skip_hp_animation_part2       inject_code_t {                 \
         filename = offset reiiden_exe,                                  \
         seg = 2269h,                                                    \
@@ -519,6 +535,254 @@ local @@hud_hp_render_addr:dword
         assume  ds:cseg
 endp hooked_reiiden_2269_0b13
 
+; Yuugenmagan Warps
+; ============================
+; Check https://github.com/H-J-Granger/ReC98/commit/998ba7f8411a9207446811dc0a2a0f131d32f8d0/
+; for the C version of the modification in this section.
+;
+; TODO: The hooks of P2~P4 timelocking can be compressed.
+
+yuugenmagan_timelock_p1_part1_org       db 0FFh, 006h, 02Ah, 05Dh, \
+                                           0FFh, 006h, 064h, 054h
+yuugenmagan_timelock_p1_part1_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_0e9b, 0
+                                        db NOP_3BYTES_SI
+yuugenmagan_timelock_p1_part1           inject_code_t {                 \
+        filename = offset reiiden_exe,                                  \
+        seg = 1B03h,                                                    \
+        off = 0E9Bh,                                                    \
+        len = 8,                                                        \
+        original_mem = offset yuugenmagan_timelock_p1_part1_org,        \
+        patched_mem = offset yuugenmagan_timelock_p1_part1_pat,         \
+}
+yuugenmagan_timelock_p1_part2_org       db 081h, 03Eh, 02Ah, 05Dh, 04Ch, 004h
+yuugenmagan_timelock_p1_part2_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_0feb, 0
+                                        db NOP_1BYTE
+yuugenmagan_timelock_p1_part2           inject_code_t {                 \
+        filename = offset reiiden_exe,                                  \
+        seg = 1B03h,                                                    \
+        off = 0FEBh,                                                    \
+        len = 6,                                                        \
+        original_mem = offset yuugenmagan_timelock_p1_part2_org,        \
+        patched_mem = offset yuugenmagan_timelock_p1_part2_pat,         \
+}
+yuugenmagan_timelock_p2_part1_org       db 0C7h, 006h, 02Ah, 05Dh, 000h, 000h
+yuugenmagan_timelock_p2_part1_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_12ed, 0
+                                        db NOP_1BYTE
+yuugenmagan_timelock_p2_part1           inject_code_t {                 \
+        filename = offset reiiden_exe,                                  \
+        seg = 1B03h,                                                    \
+        off = 12EDh,                                                    \
+        len = 6,                                                        \
+        original_mem = offset yuugenmagan_timelock_p2_part1_org,        \
+        patched_mem = offset yuugenmagan_timelock_p2_part1_pat,         \
+}
+yuugenmagan_timelock_p2_part2_org       db 0A0h, 074h, 054h, 098h, \
+                                           03Dh, 005h, 000h
+yuugenmagan_timelock_p2_part2_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_13a8, 0
+                                        db NOP_2BYTES_SI
+yuugenmagan_timelock_p2_part2           inject_code_t {                 \
+        filename = offset reiiden_exe,                                  \
+        seg = 1B03h,                                                    \
+        off = 13A8h,                                                    \
+        len = 7,                                                        \
+        original_mem = offset yuugenmagan_timelock_p2_part2_org,        \
+        patched_mem = offset yuugenmagan_timelock_p2_part2_pat,         \
+}
+yuugenmagan_timelock_p3_part1_org       db 0C7h, 006h, 02Ah, 05Dh, 000h, 000h
+yuugenmagan_timelock_p3_part1_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_163e, 0
+                                        db NOP_1BYTE
+yuugenmagan_timelock_p3_part1           inject_code_t {                 \
+        filename = offset reiiden_exe,                                  \
+        seg = 1B03h,                                                    \
+        off = 163Eh,                                                    \
+        len = 6,                                                        \
+        original_mem = offset yuugenmagan_timelock_p3_part1_org,        \
+        patched_mem = offset yuugenmagan_timelock_p3_part1_pat,         \
+}
+yuugenmagan_timelock_p3_part2_org       db 0A0h, 074h, 054h, 098h, \
+                                           03Dh, 004h, 000h
+yuugenmagan_timelock_p3_part2_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_16fe, 0
+                                        db NOP_2BYTES_SI
+yuugenmagan_timelock_p3_part2           inject_code_t {                 \
+        filename = offset reiiden_exe,                                  \
+        seg = 1B03h,                                                    \
+        off = 16FEh,                                                    \
+        len = 7,                                                        \
+        original_mem = offset yuugenmagan_timelock_p3_part2_org,        \
+        patched_mem = offset yuugenmagan_timelock_p3_part2_pat,         \
+}
+yuugenmagan_timelock_p4_part1_org       db 0C7h, 006h, 02Ah, 05Dh, 000h, 000h
+yuugenmagan_timelock_p4_part1_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_19fe, 0
+                                        db NOP_1BYTE
+yuugenmagan_timelock_p4_part1           inject_code_t {                 \
+        filename = offset reiiden_exe,                                  \
+        seg = 1B03h,                                                    \
+        off = 19feh,                                                    \
+        len = 6,                                                        \
+        original_mem = offset yuugenmagan_timelock_p4_part1_org,        \
+        patched_mem = offset yuugenmagan_timelock_p4_part1_pat,         \
+}
+yuugenmagan_timelock_p4_part2_org       db 0A0h, 074h, 054h, 098h, \
+                                           03Dh, 004h, 000h
+yuugenmagan_timelock_p4_part2_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_1ab9, 0
+                                        db NOP_2BYTES_SI
+yuugenmagan_timelock_p4_part2           inject_code_t {                 \
+        filename = offset reiiden_exe,                                  \
+        seg = 1B03h,                                                    \
+        off = 1AB9h,                                                    \
+        len = 7,                                                        \
+        original_mem = offset yuugenmagan_timelock_p4_part2_org,        \
+        patched_mem = offset yuugenmagan_timelock_p4_part2_pat,         \
+}
+
+yuugenmagan_p1_frame_elapsed    dw 0
+yuugenmagan_p2_iterations_done  db 0
+yuugenmagan_p3_iterations_done  db 0
+yuugenmagan_p4_iterations_done  db 0
+
+YUUGENMAGAN_PHASE_FRAME_OFFSET          = 5D2Ah
+YUUGENMAGAN_INVINCIBILITY_FRAME_OFFSET  = 5464h
+YUUGENMAGAN_ITERATIONS_DONE_OFFSET      = 5474h
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_0e9b
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_0e9b far
+        assume  ds:nothing
+        cmp     [byte ptr TIME_LOCK_STATE], 1
+        je      @@skip_add_p1_frame
+        inc     [word ptr yuugenmagan_p1_frame_elapsed]
+@@skip_add_p1_frame:
+        ; The hooked instruction
+        inc     [word ptr ds:YUUGENMAGAN_PHASE_FRAME_OFFSET]
+        inc     [word ptr ds:YUUGENMAGAN_INVINCIBILITY_FRAME_OFFSET]
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_0e9b
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_0feb
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in ZF, SF, OF): (ZF==0)&&(SF==OF) if it hasn't been 1100 frames
+;                         with timelock off, (ZF==1)||(SF!=OF) otherwise.
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_0feb far
+        assume  ds:nothing
+        cmp     [word ptr yuugenmagan_p1_frame_elapsed], 1100
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_0feb
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_12ed
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_12ed far
+        assume  ds:nothing
+        cmp     [byte ptr TIME_LOCK_STATE], 1
+        je      @@skip_add_p2_iterations_done
+        inc     [byte ptr yuugenmagan_p2_iterations_done]
+@@skip_add_p2_iterations_done:
+        ; The hooked instruction
+        mov     [word ptr YUUGENMAGAN_PHASE_FRAME_OFFSET], 0
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_12ed
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_13a8
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in SF, OF): SF!=OF if it hasn't been 5 iterations, SF==OF otherwise
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_13a8 far
+        assume  ds:nothing
+        cmp     [byte ptr yuugenmagan_p2_iterations_done], 5
+        ; The side effect of the hooked instruction
+        movzx   ax, [byte ptr YUUGENMAGAN_ITERATIONS_DONE_OFFSET]
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_13a8
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_163e
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_163e far
+        assume  ds:nothing
+        cmp     [byte ptr TIME_LOCK_STATE], 1
+        je      @@skip_add_p3_iterations_done
+        inc     [byte ptr yuugenmagan_p3_iterations_done]
+@@skip_add_p3_iterations_done:
+        ; The hooked instruction
+        mov     [word ptr YUUGENMAGAN_PHASE_FRAME_OFFSET], 0
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_163e
+
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_16fe
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in ZF, SF, OF): (ZF==0)&&(SF==OF) if it hasn't been 5 iterations
+;                         with timelock off, (ZF==1)||(SF!=OF) otherwise.
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_16fe far
+        assume  ds:nothing
+        cmp     [byte ptr yuugenmagan_p3_iterations_done], 4
+        ; The side effect of the hooked instruction
+        movzx   ax, [byte ptr YUUGENMAGAN_ITERATIONS_DONE_OFFSET]
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_16fe
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_19fe
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_19fe far
+        assume  ds:nothing
+        cmp     [byte ptr TIME_LOCK_STATE], 1
+        je      @@skip_add_p4_iterations_done
+        inc     [byte ptr yuugenmagan_p4_iterations_done]
+@@skip_add_p4_iterations_done:
+        ; The hooked instruction
+        mov     [word ptr YUUGENMAGAN_PHASE_FRAME_OFFSET], 0
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_19fe
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_1ab9
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in ZF, SF, OF): (ZF==0)&&(SF==OF) if it hasn't been 5 iterations
+;                         with timelock off, (ZF==1)||(SF!=OF) otherwise.
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_1ab9 far
+        assume  ds:nothing
+        cmp     [byte ptr yuugenmagan_p4_iterations_done], 4
+        ; The side effect of the hooked instruction
+        movzx   ax, [byte ptr YUUGENMAGAN_ITERATIONS_DONE_OFFSET]
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_1ab9
+
 ; OP.EXE modifications
 ; ==============================================================
 ;
@@ -572,9 +836,8 @@ practise_menu_part1     inject_code_t {                         \
 practise_menu_part2_org db 026h, 0C6h, 047h, 014h, 000h, 026h, 0C7h, 047h, \
                            03Fh, 000h, 000h, 0A0h, 093h, 000h, 004h, 002h, \
                            026h, 088h, 047h, 015h
-practise_menu_part2_pat db 08Dh, 0AEh, 000h, 000h, 08Dh, 0B4h, 000h, 000h, \
-                           08Dh, 0BDh, 000h, 000h, 08Dh, 0AEh, 000h, 000h, \
-                           08Dh, 0B4h, 000h, 000h
+practise_menu_part2_pat db NOP_4BYTES_BP, NOP_4BYTES_SI, NOP_4BYTES_SI, \
+                           NOP_4BYTES_BP, NOP_4BYTES_SI
 practise_menu_part2     inject_code_t {                         \
         filename        = offset op_exe,                        \
         seg             = 0A1Ch,                                \
@@ -717,6 +980,8 @@ local @@route:byte, @@saved_df:byte
         mov     [byte ptr es:bx + resident_t.rem_lives], al
 @@end_of_resident_field_setting:
 
+        call    on_game_start
+
         popfd
         pop     ds
         assume  ds:cseg
@@ -851,6 +1116,31 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         add     sp, 6
         push    [word ptr @@saved_psp] 1 \
                 (offset shingyoku_skip_hp_animation_part2)
+        call    inject_one
+        add     sp, 6
+
+        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p1_part1)
+        call    inject_one
+        add     sp, 6
+        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p1_part2)
+        call    inject_one
+        add     sp, 6
+        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p2_part1)
+        call    inject_one
+        add     sp, 6
+        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p2_part2)
+        call    inject_one
+        add     sp, 6
+        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p3_part1)
+        call    inject_one
+        add     sp, 6
+        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p3_part2)
+        call    inject_one
+        add     sp, 6
+        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p4_part1)
+        call    inject_one
+        add     sp, 6
+        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p4_part2)
         call    inject_one
         add     sp, 6
 @@skip_reiiden_exe_patches:
@@ -1803,6 +2093,14 @@ local @@told_to_uninstall:byte, @@int_no_hooked:word
         mov     [word ptr shingyoku_p2_attack_pat + 3], cs
         mov     [word ptr shingyoku_init_pat + 3], cs
         mov     [word ptr shingyoku_skip_hp_animation_part2_pat + 3], cs
+        mov     [word ptr yuugenmagan_timelock_p1_part1_pat + 3], cs
+        mov     [word ptr yuugenmagan_timelock_p1_part2_pat + 3], cs
+        mov     [word ptr yuugenmagan_timelock_p2_part1_pat + 3], cs
+        mov     [word ptr yuugenmagan_timelock_p2_part2_pat + 3], cs
+        mov     [word ptr yuugenmagan_timelock_p3_part1_pat + 3], cs
+        mov     [word ptr yuugenmagan_timelock_p3_part2_pat + 3], cs
+        mov     [word ptr yuugenmagan_timelock_p4_part1_pat + 3], cs
+        mov     [word ptr yuugenmagan_timelock_p4_part2_pat + 3], cs
 
         ; Initialize the Keyboard BIOS
         mov     ah, 03h

@@ -12,8 +12,6 @@ radix 10
 locals
 p386
 
-include "..\src\asmdefs.asm"
-
 ; --------------------------------------------------------------------------
 ; Function: print_str
 ; Description: Prints a ASCIZ string onto the TRAM area. Will break and report
