@@ -1272,15 +1272,21 @@ arg @@component_arr:word
         ret
 endp link_components
 
-enum ui_boss_t  UI_REGULAR, UI_SHINGYOKU, UI_YUUGEN_MAGAN, UI_ELIS, UI_SARIEL, \
+enum ui_boss_t  UI_REGULAR, UI_SHINGYOKU, UI_YUUGENMAGAN, UI_ELIS, UI_SARIEL, \
                 UI_MIMA, UI_KIKURI, UI_KONGARA
 
 current_ui_boss db 0
+prev_phase      db 0
+
+YUUGENMAGAN_INITIAL_HP          = 16
+yuugenmagan_min_hp_in_phases    db 17, 16, 13, 11, 9, 1
+
 regular_stage_linking   dw (offset stage_slider), (offset life_slider), 0FFFFh
 shingyoku_linking       dw (offset stage_slider), (offset phase_slider), \
                            (offset hp_slider), (offset p2_attack), \
                            (offset skip_opening), (offset life_slider), 0FFFFh
-prev_phase      db 0
+yuugenmagan_linking     dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset life_slider), 0FFFFh
 
 ; --------------------------------------------------------------------------
 ; Function: update_prac_window_components_from_its_values
@@ -1335,9 +1341,10 @@ proc update_prac_window_components_from_its_values near
         cmp     [byte ptr section_slider.value], 0
         jne     @@skip_shingyoku
         cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
-        je      @@skip_shingyoku_linking
+        je      @@skip_shingyoku_init
         mov     [byte ptr current_ui_boss], UI_SHINGYOKU
-        ;   Link the UI components that are relevant to Shingyoku
+        ;   Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
         mov     [byte ptr phase_slider.max_value], 2
         mov     [byte ptr skip_opening.value], 0
         mov     [byte ptr p2_attack.value], 0
@@ -1345,11 +1352,12 @@ proc update_prac_window_components_from_its_values near
         mov     [byte ptr p2_attack.max_value], 4
         mov     [word ptr p2_cur_first_attack_str], \
                 (offset p2_attack_shingyoku_1)
+        ;   Link the UI components that are relevant to Shingyoku
         push    (offset shingyoku_linking)
         call    link_components
         add     sp, 2
         mov     [byte ptr prev_phase], 0
-@@skip_shingyoku_linking:
+@@skip_shingyoku_init:
         ;   TODO: Maybe make the following HP handling code into a procedure?
         mov     al, [byte ptr prev_phase]
         cmp     [byte ptr phase_slider.value], al
@@ -1383,6 +1391,38 @@ proc update_prac_window_components_from_its_values near
         mov     [byte ptr shingyoku_do_skip_opening], al
         jmp     @@skip_adding_bosses
 @@skip_shingyoku:
+
+        ; Yuugenmagan
+        cmp     [byte ptr section_slider.value], 1
+        jne     @@skip_yuugenmagan
+        cmp     [byte ptr current_ui_boss], UI_YUUGENMAGAN
+        je      @@skip_yuugenmagan_init
+        mov     [byte ptr current_ui_boss], UI_YUUGENMAGAN
+        ;   Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 5
+        ;   Link the UI components that are relevant to Yuugenmagan
+        push    (offset yuugenmagan_linking)
+        call    link_components
+        add     sp, 2
+        mov     [byte ptr prev_phase], 0
+@@skip_yuugenmagan_init:
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr phase_slider.value], al
+        je      @@skip_yuugenmagan_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     bx, [word ptr phase_slider.value]
+        mov     al, [byte ptr (offset yuugenmagan_min_hp_in_phases) + bx]
+        mov     ah, [byte ptr (offset yuugenmagan_min_hp_in_phases) - 1 + bx]
+        dec     ah
+        mov     [byte ptr hp_slider.min_value], al
+        mov     [byte ptr hp_slider.max_value], YUUGENMAGAN_INITIAL_HP
+        mov     [byte ptr hp_slider.value], ah
+@@skip_yuugenmagan_init_hp:
+        mov     al, [byte ptr phase_slider.value]
+        mov     [byte ptr prev_phase], al
+        jmp     @@skip_adding_bosses
+@@skip_yuugenmagan:
 
         ; Other boss stages are treated as regular stages for now.
         mov     [byte ptr current_ui_boss], UI_REGULAR

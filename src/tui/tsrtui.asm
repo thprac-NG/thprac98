@@ -495,6 +495,7 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         ;                   2 * (value - min) * (width - 2) + 1
         ;            floor( ----------------------------------- ).          (*)
         ;                              2 * (max - min)
+        ; If max==min, the indicator won't be displayed.
         cmp     [bx + ui_slider.bottom_indicator], 0
         je      @@skip_indicator_handling
         movzx   ecx, [byte ptr @@width]
@@ -511,6 +512,8 @@ local @@value_str_off:word, @@return_value:word, @@width:word
         mov     ecx, [bx + ui_slider.max_value]
         sub     ecx, [bx + ui_slider.min_value]
         shl     ecx, 1          ; ecx = 2 * (max - min)
+        test    ecx, ecx
+        jz      @@skip_indicator_handling
         div     ecx             ; edx:eax = (*)
         pop     di              ; offset of the 'value' part on TRAM
         add     di, ax
