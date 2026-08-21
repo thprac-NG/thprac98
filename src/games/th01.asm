@@ -342,6 +342,33 @@ proc my_1924_0364 far
         ret
 endp my_1924_0364
 
+; Variables and procedures shared by multiple boss warps
+boss_init_flag  db 0
+
+; --------------------------------------------------------------------------
+; Function: render_hp
+; Description: Render the HP bar of the boss, according to the value stored in
+;              [hp_slider.value]. We do this by calling `hud_hp_render` with a
+;              parameter func=HUD_HP_FUNC_RERENDER.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc render_hp far
+local @@hud_hp_render_addr:dword
+        assume  ds:nothing
+        pushad
+        mov     [word ptr @@hud_hp_render_addr], HUD_HP_RENDER_OFFSET
+        mov     ax, [cur_psp]
+        add     ax, 10h + HUD_HP_RENDER_SEGMENT
+        mov     [word ptr @@hud_hp_render_addr + 2], ax
+        push    HUD_HP_FUNC_RERENDER
+        push    [word ptr hp_slider.value]
+        call    [dword ptr @@hud_hp_render_addr]
+        add     sp, 4
+        popad
+        ret
+        assume  ds:cseg
+endp render_hp
+
 ; Shingyoku Warps
 ; ======================
 ; Check https://github.com/H-J-Granger/ReC98/commit/3d6b5d9eb7b87979bd4cd94a481db064bfd1d364/
@@ -442,12 +469,13 @@ shingyoku_skip_hp_animation_part2       inject_code_t {                 \
         original_mem = offset shingyoku_skip_hp_animation_part2_org,    \
         patched_mem = offset shingyoku_skip_hp_animation_part2_pat,     \
 }
-shingyoku_init_flag                     db 0
 shingyoku_do_skip_opening               db 0
 shingyoku_do_skip_p1                    db 0
 shingyoku_rerender_hp_flag              db 0
-BOSS_PHASE_OFFSET                       = 133Eh
-BOSS_HP_OFFSET                          = 59E3h
+; offsets of boss_phase and boss_hp from the DS of shingyoku_main. These
+; variable are boss-independent.
+SHINGYOKU_BOSS_PHASE_OFFSET             = 133Eh
+SHINGYOKU_BOSS_HP_OFFSET                = 59E3h
 SHINGYOKU_PHASE_FRAME_OFFSET            = 59DFh
 SHINGYOKU_INVINCIBILITY_FRAME_OFFSET    = 59E1h
 HUD_HP_RENDER_SEGMENT                   = 2188h
@@ -489,15 +517,16 @@ proc hooked_reiiden_2269_08c6 far
         assume  ds:nothing
         cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
         jne     @@skip_handling
-        cmp     [byte ptr shingyoku_init_flag], 1
+        cmp     [byte ptr boss_init_flag], 1
         jne     @@skip_handling
-        mov     [byte ptr shingyoku_init_flag], 0
+        mov     [byte ptr boss_init_flag], 0
         push    ax
         mov     ax, [word ptr hp_slider.value]
-        mov     [ds:BOSS_HP_OFFSET], ax
+        mov     [ds:SHINGYOKU_BOSS_HP_OFFSET], ax
         pop     ax
 @@skip_handling:
-        cmp     [byte ptr ds:BOSS_PHASE_OFFSET], 0  ; The hooked instruction
+        ; The hooked instruction
+        cmp     [byte ptr ds:SHINGYOKU_BOSS_PHASE_OFFSET], 0
         ret
         assume  ds:cseg
 endp hooked_reiiden_2269_08c6
@@ -508,7 +537,6 @@ endp hooked_reiiden_2269_08c6
 ; Input/Output: Nothing
 ; --------------------------------------------------------------------------
 proc hooked_reiiden_2269_0b13 far
-local @@hud_hp_render_addr:dword
         assume  ds:nothing
         cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
         jne     @@skip_handling
@@ -516,17 +544,8 @@ local @@hud_hp_render_addr:dword
         jne     @@skip_handling
         cmp     [byte ptr shingyoku_rerender_hp_flag], 1
         jne     @@skip_handling
-        pushad
         mov     [byte ptr shingyoku_rerender_hp_flag], 0
-        mov     [word ptr @@hud_hp_render_addr], HUD_HP_RENDER_OFFSET
-        mov     ax, [cur_psp]
-        add     ax, 10h + HUD_HP_RENDER_SEGMENT
-        mov     [word ptr @@hud_hp_render_addr + 2], ax
-        push    HUD_HP_FUNC_RERENDER
-        push    [word ptr hp_slider.value]
-        call    [dword ptr @@hud_hp_render_addr]
-        add     sp, 4
-        popad
+        call    render_hp
 @@skip_handling:
         ; The hooked instruction
         inc     [word ptr ds:SHINGYOKU_PHASE_FRAME_OFFSET]
@@ -642,15 +661,42 @@ yuugenmagan_timelock_p4_part2           inject_code_t {                 \
         original_mem = offset yuugenmagan_timelock_p4_part2_org,        \
         patched_mem = offset yuugenmagan_timelock_p4_part2_pat,         \
 }
+yuugenmagan_init_org    db 080h, 03Eh, 02Eh, 05Dh, 000h
+yuugenmagan_init_pat    db 09Ah
+                        dw offset hooked_reiiden_1b03_0a19, 0
+yuugenmagan_init        inject_code_t {                 \
+        filename = offset reiiden_exe,                  \
+        seg = 1B03h,                                    \
+        off = 0A19h,                                    \
+        len = 5,                                        \
+        original_mem = offset yuugenmagan_init_org,     \
+        patched_mem = offset yuugenmagan_init_pat,      \
+}
 
 yuugenmagan_p1_frame_elapsed    dw 0
 yuugenmagan_p2_iterations_done  db 0
 yuugenmagan_p3_iterations_done  db 0
 yuugenmagan_p4_iterations_done  db 0
 
+struc rgb_t
+        red     db ?
+        green   db ?
+        blue    db ?
+ends rgb_t
+; The palette color of the kanji yokoshima(U+90AA) during each stage (P1~P4).
+yuugenmagan_yokoshima_color     rgb_t <13, 13, 5>, <0, 13, 68>, <63, 0, 68>, \
+                                      <0, 0, 68>
+
+YUUGENMAGAN_BOSS_PHASE_OFFSET           = 5D2Eh
+YUUGENMAGAN_BOSS_HP_OFFSET              = 5D28h
 YUUGENMAGAN_PHASE_FRAME_OFFSET          = 5D2Ah
 YUUGENMAGAN_INVINCIBILITY_FRAME_OFFSET  = 5464h
 YUUGENMAGAN_ITERATIONS_DONE_OFFSET      = 5474h
+
+; The offsets of z_Palettes[COL_YOKOSHIMA] and stage_pallete[COL_YOKOSHIMA] in
+; the DS segment of yuugenmagan_main().
+YUUGENMAGAN_Z_PALETTE_YOKOSHIMA_OFFSET          = 071Dh
+YUUGENMAGAN_STAGE_PALETTE_YOKOSHIMA_OFFSET      = 5219h
 
 ; --------------------------------------------------------------------------
 ; Function: hooked_reiiden_1b03_0e9b
@@ -696,7 +742,7 @@ proc hooked_reiiden_1b03_12ed far
         inc     [byte ptr yuugenmagan_p2_iterations_done]
 @@skip_add_p2_iterations_done:
         ; The hooked instruction
-        mov     [word ptr YUUGENMAGAN_PHASE_FRAME_OFFSET], 0
+        mov     [word ptr ds:YUUGENMAGAN_PHASE_FRAME_OFFSET], 0
         ret
         assume  ds:cseg
 endp hooked_reiiden_1b03_12ed
@@ -711,7 +757,7 @@ proc hooked_reiiden_1b03_13a8 far
         assume  ds:nothing
         cmp     [byte ptr yuugenmagan_p2_iterations_done], 5
         ; The side effect of the hooked instruction
-        movzx   ax, [byte ptr YUUGENMAGAN_ITERATIONS_DONE_OFFSET]
+        movzx   ax, [byte ptr ds:YUUGENMAGAN_ITERATIONS_DONE_OFFSET]
         ret
         assume  ds:cseg
 endp hooked_reiiden_1b03_13a8
@@ -728,7 +774,7 @@ proc hooked_reiiden_1b03_163e far
         inc     [byte ptr yuugenmagan_p3_iterations_done]
 @@skip_add_p3_iterations_done:
         ; The hooked instruction
-        mov     [word ptr YUUGENMAGAN_PHASE_FRAME_OFFSET], 0
+        mov     [word ptr ds:YUUGENMAGAN_PHASE_FRAME_OFFSET], 0
         ret
         assume  ds:cseg
 endp hooked_reiiden_1b03_163e
@@ -745,7 +791,7 @@ proc hooked_reiiden_1b03_16fe far
         assume  ds:nothing
         cmp     [byte ptr yuugenmagan_p3_iterations_done], 4
         ; The side effect of the hooked instruction
-        movzx   ax, [byte ptr YUUGENMAGAN_ITERATIONS_DONE_OFFSET]
+        movzx   ax, [byte ptr ds:YUUGENMAGAN_ITERATIONS_DONE_OFFSET]
         ret
         assume  ds:cseg
 endp hooked_reiiden_1b03_16fe
@@ -762,7 +808,7 @@ proc hooked_reiiden_1b03_19fe far
         inc     [byte ptr yuugenmagan_p4_iterations_done]
 @@skip_add_p4_iterations_done:
         ; The hooked instruction
-        mov     [word ptr YUUGENMAGAN_PHASE_FRAME_OFFSET], 0
+        mov     [word ptr ds:YUUGENMAGAN_PHASE_FRAME_OFFSET], 0
         ret
         assume  ds:cseg
 endp hooked_reiiden_1b03_19fe
@@ -778,10 +824,55 @@ proc hooked_reiiden_1b03_1ab9 far
         assume  ds:nothing
         cmp     [byte ptr yuugenmagan_p4_iterations_done], 4
         ; The side effect of the hooked instruction
-        movzx   ax, [byte ptr YUUGENMAGAN_ITERATIONS_DONE_OFFSET]
+        movzx   ax, [byte ptr ds:YUUGENMAGAN_ITERATIONS_DONE_OFFSET]
         ret
         assume  ds:cseg
 endp hooked_reiiden_1b03_1ab9
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_0a19
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in ZF): whether boss_phase is 0.
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_0a19 far
+        assume  ds:nothing
+        cmp     [byte ptr current_ui_boss], UI_YUUGENMAGAN
+        jne     @@skip_handling
+        cmp     [byte ptr boss_init_flag], 1
+        jne     @@skip_handling
+        mov     [byte ptr boss_init_flag], 0
+        push    ax bx
+        mov     ax, [word ptr phase_slider.value]
+        cmp     ax, 1
+        je      @@skip_set_hp_and_phase
+        ; Set boss_phase to the transition phase before the selected phase.
+        ; P2 -> 2, P3 -> 4, P4 -> 6, P5 -> 8.
+        sub     ax, 1
+        shl     ax, 1
+        mov     [ds:YUUGENMAGAN_BOSS_PHASE_OFFSET], ax
+        ; Set the palette color of the kanji yokoshima in the background to the
+        ; background color of the previous stage.
+        mov     ax, [word ptr phase_slider.value]
+        imul    bx, ax, 3
+        mov     ax, [word ptr bx + (offset yuugenmagan_yokoshima_color) - 6]
+        mov     [word ptr ds:YUUGENMAGAN_Z_PALETTE_YOKOSHIMA_OFFSET], ax
+        mov     [word ptr ds:YUUGENMAGAN_STAGE_PALETTE_YOKOSHIMA_OFFSET], ax
+        mov     al, [byte ptr bx + (offset yuugenmagan_yokoshima_color) - 6 + 2]
+        mov     [byte ptr ds:YUUGENMAGAN_Z_PALETTE_YOKOSHIMA_OFFSET + 2], al
+        mov     [byte ptr ds:YUUGENMAGAN_STAGE_PALETTE_YOKOSHIMA_OFFSET + 2], al
+        ; Render HP bar
+        call    render_hp
+        ; Set boss_hp
+        mov     ax, [word ptr hp_slider.value]
+        mov     [ds:YUUGENMAGAN_BOSS_HP_OFFSET], ax
+@@skip_set_hp_and_phase:
+        pop     bx ax
+@@skip_handling:
+        cmp     [byte ptr ds:YUUGENMAGAN_BOSS_PHASE_OFFSET], 0
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_0a19
 
 ; OP.EXE modifications
 ; ==============================================================
@@ -836,7 +927,7 @@ practise_menu_part1     inject_code_t {                         \
 practise_menu_part2_org db 026h, 0C6h, 047h, 014h, 000h, 026h, 0C7h, 047h, \
                            03Fh, 000h, 000h, 0A0h, 093h, 000h, 004h, 002h, \
                            026h, 088h, 047h, 015h
-practise_menu_part2_pat db NOP_4BYTES_BP, NOP_4BYTES_SI, NOP_4BYTES_SI, \
+practise_menu_part2_pat db NOP_4BYTES_BP, NOP_4BYTES_SI, NOP_4BYTES_DI, \
                            NOP_4BYTES_BP, NOP_4BYTES_SI
 practise_menu_part2     inject_code_t {                         \
         filename        = offset op_exe,                        \
@@ -1143,6 +1234,9 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p4_part2)
         call    inject_one
         add     sp, 6
+        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_init)
+        call    inject_one
+        add     sp, 6
 @@skip_reiiden_exe_patches:
 
         push    [dword ptr @@saved_filename_ptr] ds (offset op_exe)
@@ -1337,6 +1431,9 @@ proc update_prac_window_components_from_its_values near
         jmp     @@skip_adding_bosses
 
 @@add_bosses:
+        ; Set the initialize flag
+        mov     [byte ptr boss_init_flag], 1
+
         ; Shingyoku
         cmp     [byte ptr section_slider.value], 0
         jne     @@skip_shingyoku
@@ -1380,7 +1477,6 @@ proc update_prac_window_components_from_its_values near
         sete    bl
         mov     [shingyoku_do_skip_p1], bl
         mov     [shingyoku_rerender_hp_flag], bl
-        mov     [byte ptr shingyoku_init_flag], 1
         ;   Raise the "skip opening" flag if either P1 isn't selected or the
         ;   "Skip Opening Animation" tickbox is ticked.
         cmp     [byte ptr phase_slider.value], 1
@@ -2141,6 +2237,7 @@ local @@told_to_uninstall:byte, @@int_no_hooked:word
         mov     [word ptr yuugenmagan_timelock_p3_part2_pat + 3], cs
         mov     [word ptr yuugenmagan_timelock_p4_part1_pat + 3], cs
         mov     [word ptr yuugenmagan_timelock_p4_part2_pat + 3], cs
+        mov     [word ptr yuugenmagan_init_pat + 3], cs
 
         ; Initialize the Keyboard BIOS
         mov     ah, 03h
