@@ -613,6 +613,11 @@ endp draw_tickbox
 ; --------------------------------------------------------------------------
 ; Function: draw_background_shadow
 ; Description: Draw a shadow color on every VRAM plane in a rectangular region.
+;              Pattern (X for black, O for transparent):
+;                                         XOXX
+;                                         XXXX
+;                                         XXXO
+;                                         XXXX
 ; Input:  Argument 1 (word): The X coordinate of the top left corner / 8.
 ;         Argument 2 (word): The Y coordinate of the top left corner.
 ;         Argument 3 (word): The width of the region / 8.
@@ -621,7 +626,6 @@ endp draw_tickbox
 ; --------------------------------------------------------------------------
 proc draw_background_shadow near
 arg @@top_left_x:word, @@top_left_y:word, @@width:word, @@height:word
-local @@vram_seg_arr:dword
         push    si di
 
         xor     di, di
@@ -641,11 +645,15 @@ local @@vram_seg_arr:dword
 @@draw_a_line_loop:
         cmp     cx, [@@width]
         je      @@draw_a_line_loop_break
-        mov     al, 0AAh
+        mov     al, 44h
+        test    si, 02h
+        jz      @@skip_11h_line
+        mov     al, 11h
+@@skip_11h_line:
         test    si, 01h
-        jz      @@L1
+        jz      @@skip_pure_black_line
         mov     al, 000h
-@@L1:
+@@skip_pure_black_line:
         and     [byte ptr es:bx], al
         inc     bx
         inc     cx
