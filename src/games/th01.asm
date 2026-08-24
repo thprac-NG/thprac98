@@ -935,7 +935,7 @@ proc hooked_reiiden_1b03_0a19 far
         ; P2 -> 2, P3 -> 4, P4 -> 6, P5 -> 8.
         sub     ax, 1
         shl     ax, 1
-        mov     [ds:YUUGENMAGAN_BOSS_PHASE_OFFSET], ax
+        mov     [byte ptr ds:YUUGENMAGAN_BOSS_PHASE_OFFSET], al
         ; Set the palette color of the kanji yokoshima in the background to the
         ; background color of the previous stage.
         mov     ax, [word ptr phase_slider.value]
