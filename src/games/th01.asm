@@ -559,6 +559,91 @@ endp hooked_reiiden_2269_0b13
 ; Check https://github.com/H-J-Granger/ReC98/commit/998ba7f8411a9207446811dc0a2a0f131d32f8d0/
 ; for the C version of the modification in this section.
 ;
+; yuugenmagan_timelock_p1_part1 {
+;   1B03:0E9B | FF 06 2A 56 FF 06 64 54 -> 9A yy yy xx xx 8D 74 00
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_0e9b).
+; Original assembly: (expanded from the inline function phase.frame_common)
+;   1B03:0E9B | FF 06 2A 56       inc    [word ptr boss_phase_frame]
+;   1B03:0E9F | FF 06 64 54       inc    [word ptr invincibility_frame]
+; Modified assembly:
+;   1B03:0E9B | 9A yy yy xx xx    callf  hooked_reiiden_1b03_0e9b
+;   1B03:0EA0 | 8D 74 00          lea    si, [si + 00h]  ; effectively nop
+;
+; yuugenmagan_timelock_p1_part2 {
+;   1B03:0FEB | 81 3E 2A 5D 4C 04 -> 9A yy yy xx xx 90
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_0feb).
+; Original assembly:
+;   1B03:0E9F | 81 3E 2A 5D 4C 04 cmp    [word ptr invincibility_frame], 1100
+; Modified assembly:
+;   1B03:0E9F | 9A yy yy xx xx    callf  hooked_reiiden_1b03_0feb
+;   1B03:0EA4 | 90                nop
+;
+; yuugenmagan_timelock_p2_part1 {
+;   1B03:12ED | C7 06 2A 5D 00 00 -> 9A yy yy xx xx 90
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_12ed).
+; Original assembly: (expanded from the macro pattern_missile_pairs_from_south)
+;   1B03:12ED | C7 06 2A 5D 00 00 mov    [word ptr boss_phase_frame], 0
+; Modified assembly:
+;   1B03:12ED | 9A yy yy xx xx    callf  hooked_reiiden_1b03_12ed
+;   1B03:12D2 | 90                nop
+;
+; yuugenmagan_timelock_p2_part2 {
+;   1B03:13A8 | A0 74 54 98 3D 05 00 -> 9A yy yy xx xx 89 F6
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_13a8).
+; Original assembly:
+;   1B03:13A8 | A0 74 54          mov    al, [u3.iterations_done]
+;   1B03:13AB | 98                cbw
+;   1B03:13AC | 3D 05 00          cmp    ax, 5
+; Modified assembly:
+;   1B03:13A8 | 9A yy yy xx xx    callf  hooked_reiiden_1b03_13a8
+;   1B03:13AD | 89 F6             mov    si, si  ; effectively nop
+;
+; yuugenmagan_timelock_p3_part1 {
+;   1B03:163E | C7 06 2A 5D 00 00 -> 9A yy yy xx xx 90
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_163e).
+; Original assembly: (expanded from the macro pattern_missile_pairs_from_south)
+;   1B03:163E | C7 06 2A 5D 00 00 mov    [word ptr boss_phase_frame], 0
+; Modified assembly:
+;   1B03:163E | 9A yy yy xx xx    callf  hooked_reiiden_1b03_163e
+;   1B03:1643 | 90                nop
+;
+; yuugenmagan_timelock_p3_part2 {
+;   1B03:16FE | A0 74 54 98 3D 04 00 -> 9A yy yy xx xx 89 F6
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_16fe).
+; Original assembly:
+;   1B03:16FE | A0 74 54          mov    al, [u3.iterations_done]
+;   1B03:1701 | 98                cbw
+;   1B03:1702 | 3D 05 00          cmp    ax, 4
+; Modified assembly:
+;   1B03:16FE | 9A yy yy xx xx    callf  hooked_reiiden_1b03_16fe
+;   1B03:1703 | 89 F6             mov    si, si  ; effectively nop
+;
+; yuugenmagan_timelock_p4_part1 {
+;   1B03:19FE | C7 06 2A 5D 00 00 -> 9A yy yy xx xx 90
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_19fe).
+; Original assembly: (expanded from the macro pattern_missile_pairs_from_south)
+;   1B03:19FE | C7 06 2A 5D 00 00 mov    [word ptr boss_phase_frame], 0
+; Modified assembly:
+;   1B03:19FE | 9A yy yy xx xx    callf  hooked_reiiden_1b03_19fe
+;   1B03:1A03 | 90                nop
+;
+; yuugenmagan_timelock_p4_part2 {
+;   1B03:1AB9 | A0 74 54 98 3D 04 00 -> 9A yy yy xx xx 89 F6
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_1ab9).
+; Original assembly:
+;   1B03:1AB9 | A0 74 54          mov    al, [u3.iterations_done]
+;   1B03:1ABC | 98                cbw
+;   1B03:1ABD | 3D 05 00          cmp    ax, 4
+; Modified assembly:
+;   1B03:1AB9 | 9A yy yy xx xx    callf  hooked_reiiden_1b03_1ab9
+;   1B03:1ABE | 89 F6             mov    si, si  ; effectively nop
+;
+; yuugenmagan_timelock_init {
+;   1B03:0A19 | 80 3E 2E 5D 00 -> 9A yy yy xx xx
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_0a19).
+; Original assembly: cmp    [byte ptr boss_phase], 0
+; Modified assembly: callf  hooked_reiiden_1b03_0a19
+;
 ; TODO: The hooks of P2~P4 timelocking can be compressed.
 
 yuugenmagan_timelock_p1_part1_org       db 0FFh, 006h, 02Ah, 05Dh, \
