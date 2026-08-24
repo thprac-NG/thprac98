@@ -482,7 +482,6 @@ HUD_HP_RENDER_SEGMENT                   = 2188h
 HUD_HP_RENDER_OFFSET                    = 009Ch
 HUD_HP_FUNC_RERENDER                    = 0FFFFh
 
-
 ; --------------------------------------------------------------------------
 ; Function: shingyoku_p2_attack_select
 ; Description: Select the attack of the Phase 2 of Shingyoku, according to
@@ -557,6 +556,7 @@ endp hooked_reiiden_2269_0b13
 ; Yuugenmagan Warps
 ; ============================
 ; Check https://github.com/H-J-Granger/ReC98/commit/998ba7f8411a9207446811dc0a2a0f131d32f8d0/
+; and https://github.com/H-J-Granger/ReC98/commit/137ab477533bddecbd11534d80f80d7e769a8c84/
 ; for the C version of the modification in this section.
 ;
 ; yuugenmagan_timelock_p1_part1 {
@@ -954,10 +954,15 @@ proc hooked_reiiden_1b03_0a19 far
 @@skip_set_hp_and_phase:
         pop     bx ax
 @@skip_handling:
+        ; The hooked instruction
         cmp     [byte ptr ds:YUUGENMAGAN_BOSS_PHASE_OFFSET], 0
         ret
         assume  ds:cseg
 endp hooked_reiiden_1b03_0a19
+
+; Elis Warps
+; ============================
+elis_do_skip_opening    db 0
 
 ; OP.EXE modifications
 ; ==============================================================
@@ -1459,6 +1464,7 @@ prev_phase      db 0
 
 YUUGENMAGAN_INITIAL_HP          = 16
 yuugenmagan_min_hp_in_phases    db 17, 16, 13, 11, 9, 1
+elis_min_hp_in_phases           db 15, 10, 6, 1
 
 regular_stage_linking   dw (offset stage_slider), (offset life_slider), 0FFFFh
 shingyoku_linking       dw (offset stage_slider), (offset phase_slider), \
@@ -1466,6 +1472,11 @@ shingyoku_linking       dw (offset stage_slider), (offset phase_slider), \
                            (offset skip_opening), (offset life_slider), 0FFFFh
 yuugenmagan_linking     dw (offset stage_slider), (offset phase_slider), \
                            (offset hp_slider), (offset life_slider), 0FFFFh
+elis_linking            dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset p1_attack), \
+                           (offset p2_attack), (offset p3_attack), \
+                           (offset p4_attack), (offset skip_opening), \
+                           (offset life_slider), 0FFFFh
 
 ; --------------------------------------------------------------------------
 ; Function: update_prac_window_components_from_its_values
@@ -1479,6 +1490,13 @@ yuugenmagan_linking     dw (offset stage_slider), (offset phase_slider), \
 ; Output: Nothing
 ; --------------------------------------------------------------------------
 proc update_prac_window_components_from_its_values near
+        ; Set the values of a phase slider.
+macro set_phase_attack_value phase_index, attack_count
+        mov     [byte ptr p&phase_index&_attack.value], 0
+        mov     [byte ptr p&phase_index&_attack.min_value], 0
+        mov     [byte ptr p&phase_index&_attack.max_value], &attack_count
+endm
+
         ; Dealing with the game mode slider. AL: whether the game mode is
         ; 'Original', AH: whether the window only contains the game mode slider.
         cmp     [byte ptr playing_mode_slider.value], 0
@@ -1529,9 +1547,7 @@ proc update_prac_window_components_from_its_values near
         mov     [byte ptr phase_slider.value], 1
         mov     [byte ptr phase_slider.max_value], 2
         mov     [byte ptr skip_opening.value], 0
-        mov     [byte ptr p2_attack.value], 0
-        mov     [byte ptr p2_attack.min_value], 0
-        mov     [byte ptr p2_attack.max_value], 4
+        set_phase_attack_value 2, 4
         mov     [word ptr p2_cur_first_attack_str], \
                 (offset p2_attack_shingyoku_1)
         ;   Link the UI components that are relevant to Shingyoku
@@ -1604,6 +1620,56 @@ proc update_prac_window_components_from_its_values near
         mov     [byte ptr prev_phase], al
         jmp     @@skip_adding_bosses
 @@skip_yuugenmagan:
+
+        ; Elis
+        cmp     [byte ptr section_slider.value], 3
+        jne     @@skip_elis
+        cmp     [byte ptr current_ui_boss], UI_ELIS
+        je      @@skip_elis_init
+        mov     [byte ptr current_ui_boss], UI_ELIS
+        ;   Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 3
+        mov     [word ptr p1_cur_first_attack_str], (offset p1_attack_elis_1)
+        mov     [word ptr p2_cur_first_attack_str], (offset p2_attack_elis_1)
+        mov     [word ptr p3_cur_first_attack_str], (offset p3b_attack_elis_1)
+        mov     [word ptr p4_cur_first_attack_str], (offset p3g_attack_elis_1)
+        mov     [word ptr p3_attack.label_off], (offset p3_bat_attack_label)
+        mov     [word ptr p4_attack.label_off], (offset p3_girl_attack_label)
+        set_phase_attack_value 1, 4
+        set_phase_attack_value 2, 4
+        set_phase_attack_value 3, 4
+        set_phase_attack_value 4, 3
+        ;   Link the UI components that are relevant to Elis
+        push    (offset elis_linking)
+        call    link_components
+        add     sp, 2
+        mov     [byte ptr prev_phase], 0
+@@skip_elis_init:
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr phase_slider.value], al
+        je      @@skip_elis_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     bx, [word ptr phase_slider.value]
+        mov     al, [byte ptr (offset elis_min_hp_in_phases) + bx]
+        mov     ah, [byte ptr (offset yuugenmagan_min_hp_in_phases) - 1 + bx]
+        dec     ah
+        mov     [byte ptr hp_slider.min_value], al
+        mov     [byte ptr hp_slider.max_value], ah
+        mov     [byte ptr hp_slider.value], ah
+@@skip_elis_init_hp:
+        mov     al, [byte ptr phase_slider.value]
+        mov     [byte ptr prev_phase], al
+        ;   Raise the "skip opening" flag if either P1 isn't selected or the
+        ;   "Skip Opening Animation" tickbox is ticked.
+        cmp     [byte ptr phase_slider.value], 1
+        setne   al
+        cmp     [skip_opening.value], 1
+        sete    ah
+        or      al, ah
+        mov     [byte ptr elis_do_skip_opening], al
+        jmp     @@skip_adding_bosses
+@@skip_elis:
 
         ; Other boss stages are treated as regular stages for now.
         mov     [byte ptr current_ui_boss], UI_REGULAR
@@ -1905,9 +1971,9 @@ include "..\src\tui\tsrtui.asm"
 
 practise_menu_window    ui_window {     \
         top_left_x              = 40,   \
-        top_left_y              = 12,   \
-        width                   = 36,   \
-        height                  = 11,   \
+        top_left_y              = 10,    \
+        width                   = 38,   \
+        height                  = 14,   \
         default_slider_width    = 22    \
 }
 
@@ -2027,11 +2093,29 @@ skip_opening    ui_tickbox {                            \
 }
 
 vanilla_attack          db 'Vanilla', 0
-p2_attack_shingyoku_1   db '1', 0
-p2_attack_shingyoku_2   db '2', 0
-p2_attack_shingyoku_3   db '3', 0
-p2_attack_shingyoku_4   db '4', 0
+p2_attack_shingyoku_1   db 'SG P2 1', 0
+p2_attack_shingyoku_2   db 'SG P2 2', 0
+p2_attack_shingyoku_3   db 'SG P2 3', 0
+p2_attack_shingyoku_4   db 'SG P2 4', 0
+p1_attack_elis_1        db 'EL P1 1', 0
+p1_attack_elis_2        db 'EL P1 2', 0
+p1_attack_elis_3        db 'EL P1 3', 0
+p1_attack_elis_4        db 'EL P1 4', 0
+p2_attack_elis_1        db 'EL P2 1', 0
+p2_attack_elis_2        db 'EL P2 2', 0
+p2_attack_elis_3        db 'EL P2 3', 0
+p2_attack_elis_4        db 'EL P2 4', 0
+p3b_attack_elis_1       db 'EL P3B 1', 0
+p3b_attack_elis_2       db 'EL P3B 2', 0
+p3b_attack_elis_3       db 'EL P3B 3', 0
+p3b_attack_elis_4       db 'EL P3B 4', 0
+p3g_attack_elis_1       db 'EL P3G 1', 0
+p3g_attack_elis_2       db 'EL P3G 2', 0
+p3g_attack_elis_3       db 'EL P3G 3', 0
+p1_cur_first_attack_str dw (offset p1_attack_elis_1)
 p2_cur_first_attack_str dw (offset p2_attack_shingyoku_1)
+p3_cur_first_attack_str dw (offset p3b_attack_elis_1)
+p4_cur_first_attack_str dw (offset p3g_attack_elis_1)
 ; Returns 'Vanilla' if [@@val] is 0, the ([@@val]-1)-th string starting from
 ; @@first_str otherwise.
 proc attack_text_func near
@@ -2066,6 +2150,13 @@ local @@last_str:word, @@remain:word
         pop     si
         ret
 endp attack_text_func
+proc p1_text_func near
+arg @@in_lo:word, @@in_hi:word
+        push    [word ptr p1_cur_first_attack_str] [word ptr @@in_lo]
+        call    attack_text_func
+        add     sp, 4
+        ret
+endp p1_text_func
 proc p2_text_func near
 arg @@in_lo:word, @@in_hi:word
         push    [word ptr p2_cur_first_attack_str] [word ptr @@in_lo]
@@ -2073,10 +2164,44 @@ arg @@in_lo:word, @@in_hi:word
         add     sp, 4
         ret
 endp p2_text_func
+proc p3_text_func near
+arg @@in_lo:word, @@in_hi:word
+        push    [word ptr p3_cur_first_attack_str] [word ptr @@in_lo]
+        call    attack_text_func
+        add     sp, 4
+        ret
+endp p3_text_func
+proc p4_text_func near
+arg @@in_lo:word, @@in_hi:word
+        push    [word ptr p4_cur_first_attack_str] [word ptr @@in_lo]
+        call    attack_text_func
+        add     sp, 4
+        ret
+endp p4_text_func
+p1_attack_label         db 'P1 Atk', 0
+p1_attack       ui_slider {                             \
+        label_off       = offset p1_attack_label,       \
+        text_func_off   = offset cseg:p1_text_func,     \
+        window_off      = offset practise_menu_window   \
+}
 p2_attack_label         db 'P2 Atk', 0
-p2_attack       ui_slider {                             \
+p2_attack       ui_slider  {                            \
         label_off       = offset p2_attack_label,       \
         text_func_off   = offset cseg:p2_text_func,     \
+        window_off      = offset practise_menu_window   \
+}
+p3_attack_label         db 'P3 Atk', 0
+p3_bat_attack_label     db 'P3 (bat)', 0
+p3_attack       ui_slider  {                            \
+        label_off       = offset p3_attack_label,       \
+        text_func_off   = offset cseg:p3_text_func,     \
+        window_off      = offset practise_menu_window   \
+}
+p4_attack_label         db 'P4 Atk', 0
+p3_girl_attack_label    db 'P3 (girl)', 0
+p4_attack       ui_slider  {                            \
+        label_off       = offset p4_attack_label,       \
+        text_func_off   = offset cseg:p4_text_func,     \
         window_off      = offset practise_menu_window   \
 }
 
