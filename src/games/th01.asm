@@ -829,6 +829,9 @@ endp hooked_reiiden_1b03_0a19
 
 ; Elis Warps
 ; ============================
+; Check https://github.com/H-J-Granger/ReC98/commit/788916dee0fa685702a1507320367f6960fe464e
+; for the C version of the modification in this section.
+;
 ; elis_skip_opening_part1 {
 ;   24E3:2E3C | C7 06 D3 5D 00 00 -> E9 F3 01 8D 74 00
 ; }
@@ -1037,7 +1040,7 @@ endp elis_p2_attack_select
 ; Function: elis_p3b_attack_select
 ; Description: (See the comment above)
 ; Input: Nothing
-; Output (in AX % 4): The chosen attack number.
+; Output (in AX % 4 + 1): The chosen attack number.
 ; --------------------------------------------------------------------------
 proc elis_p3b_attack_select far
         assume  ds:nothing
@@ -1060,7 +1063,7 @@ endp elis_p3b_attack_select
 ; Function: elis_p3g_attack_select
 ; Description: (See the comment above)
 ; Input: Nothing
-; Output (in AX % 3): The chosen attack number.
+; Output (in AX % 3 + 1): The chosen attack number.
 ; --------------------------------------------------------------------------
 proc elis_p3g_attack_select far
         assume  ds:nothing
@@ -1078,6 +1081,11 @@ proc elis_p3g_attack_select far
         ret
         assume  ds:cseg
 endp elis_p3g_attack_select
+
+; Elis Warps
+; ============================
+
+sariel_do_skip_opening db 0
 
 ; OP.EXE modifications
 ; ==============================================================
@@ -1535,6 +1543,7 @@ prev_phase      db 0
 YUUGENMAGAN_INITIAL_HP          = 16
 yuugenmagan_min_hp_in_phases    db 17, 16, 13, 11, 9, 1
 elis_min_hp_in_phases           db 15, 10, 6, 1
+sariel_init_hp_in_phases        db 18, 6
 
 regular_stage_linking   dw (offset stage_slider), (offset life_slider), 0FFFFh
 shingyoku_linking       dw (offset stage_slider), (offset phase_slider), \
@@ -1543,6 +1552,13 @@ shingyoku_linking       dw (offset stage_slider), (offset phase_slider), \
 yuugenmagan_linking     dw (offset stage_slider), (offset phase_slider), \
                            (offset hp_slider), (offset life_slider), 0FFFFh
 elis_linking            dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset p1_attack), \
+                           (offset p2_attack), (offset p3_attack), \
+                           (offset p4_attack), (offset skip_opening), \
+                           (offset life_slider), 0FFFFh
+sariel_linking          dw (offset stage_slider), \
+                           (offset sariel_phase_slider), \
+                           (offset phase_slider), (offset lock_form), \
                            (offset hp_slider), (offset p1_attack), \
                            (offset p2_attack), (offset p3_attack), \
                            (offset p4_attack), (offset skip_opening), \
@@ -1606,6 +1622,12 @@ endm
 @@add_bosses:
         ; Set the initialize flag
         mov     [byte ptr boss_init_flag], 1
+        ; Set the default values of the UI components among bosses
+        mov     [word ptr phase_slider.label_off], (offset phase_slider_label)
+        mov     [word ptr p1_attack.label_off], (offset p1_attack_label)
+        mov     [word ptr p2_attack.label_off], (offset p2_attack_label)
+        mov     [word ptr p3_attack.label_off], (offset p3_attack_label)
+        mov     [word ptr p4_attack.label_off], (offset p4_attack_label)
 
         ; Shingyoku
         cmp     [byte ptr section_slider.value], 0
@@ -1694,6 +1716,9 @@ endm
         ; Elis
         cmp     [byte ptr section_slider.value], 3
         jne     @@skip_elis
+        ;   Initialize special UI labels
+        mov     [word ptr p3_attack.label_off], (offset p3_bat_attack_label)
+        mov     [word ptr p4_attack.label_off], (offset p3_girl_attack_label)
         cmp     [byte ptr current_ui_boss], UI_ELIS
         je      @@skip_elis_init
         mov     [byte ptr current_ui_boss], UI_ELIS
@@ -1704,8 +1729,6 @@ endm
         mov     [word ptr p2_cur_first_attack_str], (offset p2_attack_elis_1)
         mov     [word ptr p3_cur_first_attack_str], (offset p3b_attack_elis_1)
         mov     [word ptr p4_cur_first_attack_str], (offset p3g_attack_elis_1)
-        mov     [word ptr p3_attack.label_off], (offset p3_bat_attack_label)
-        mov     [word ptr p4_attack.label_off], (offset p3_girl_attack_label)
         set_phase_attack_value 1, 4
         set_phase_attack_value 2, 4
         set_phase_attack_value 3, 4
@@ -1740,6 +1763,63 @@ endm
         mov     [byte ptr elis_do_skip_opening], al
         jmp     @@skip_adding_bosses
 @@skip_elis:
+
+        ; Sariel
+        cmp     [byte ptr section_slider.value], 5
+        jne     @@skip_sariel
+        ;   Initialize special UI labels
+        mov     [word ptr phase_slider.label_off], (offset form_slider_label)
+        mov     [word ptr p1_attack.label_off], (offset form_1_attack_label)
+        mov     [word ptr p2_attack.label_off], (offset form_2_attack_label)
+        mov     [word ptr p3_attack.label_off], (offset form_3_attack_label)
+        mov     [word ptr p4_attack.label_off], (offset form_4_attack_label)
+        cmp     [byte ptr current_ui_boss], UI_SARIEL
+        je      @@skip_sariel_init
+        mov     [byte ptr current_ui_boss], UI_SARIEL
+        ;   Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 4
+        mov     [word ptr p1_cur_first_attack_str], (offset f1_attack_sariel_1)
+        mov     [word ptr p2_cur_first_attack_str], (offset f2_attack_sariel_1)
+        mov     [word ptr p3_cur_first_attack_str], (offset f3_attack_sariel_1)
+        mov     [word ptr p4_cur_first_attack_str], (offset f4_attack_sariel_1)
+        set_phase_attack_value 1, 4
+        set_phase_attack_value 2, 2
+        set_phase_attack_value 3, 6
+        set_phase_attack_value 4, 3
+        ;   Link the UI components that are relevant to Sariel
+        push    (offset sariel_linking)
+        call    link_components
+        add     sp, 2
+        mov     [byte ptr prev_phase], 0
+@@skip_sariel_init:
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr sariel_phase_slider.value], al
+        je      @@skip_sariel_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     bx, [word ptr sariel_phase_slider.value]
+        mov     al, [byte ptr bx + (offset sariel_init_hp_in_phases) - 1]
+        mov     [byte ptr hp_slider.value], al
+        mov     [byte ptr hp_slider.max_value], al
+        mov     [byte ptr hp_slider.min_value], 1
+@@skip_sariel_init_hp:
+        mov     al, [byte ptr sariel_phase_slider.value]
+        mov     [byte ptr prev_phase], al
+        ;   Raise the "skip opening" flag if either:
+        ;     1. Regular Phase isn't selected,
+        ;     2. Form 1 isn't selected, or
+        ;     3. "Skip Opening Animation" tickbox is ticked.
+        cmp     [byte ptr sariel_phase_slider.value], 0
+        setne   al
+        cmp     [skip_opening.value], 1
+        sete    ah
+        or      al, ah
+        cmp     [byte ptr phase_slider.value], 1
+        setne   ah
+        or      al, ah
+        mov     [byte ptr sariel_do_skip_opening], al
+        jmp     @@skip_adding_bosses
+@@skip_sariel:
 
         ; Other boss stages are treated as regular stages for now.
         mov     [byte ptr current_ui_boss], UI_REGULAR
@@ -2041,9 +2121,9 @@ include "..\src\tui\tsrtui.asm"
 
 practise_menu_window    ui_window {     \
         top_left_x              = 40,   \
-        top_left_y              = 10,    \
+        top_left_y              = 9,    \
         width                   = 38,   \
-        height                  = 14,   \
+        height                  = 16,   \
         default_slider_width    = 22    \
 }
 
@@ -2087,8 +2167,8 @@ arg @@in_lo:word, @@in_hi:word
         mov     ax, [bx + (offset section_str_arr)]
         ret
 endp section_text_func
-section_label      db 'Section', 0
-section_slider    ui_slider {                                   \
+section_label   db 'Section', 0
+section_slider  ui_slider {                                   \
         value           = 0,                                    \
         min_value       = 0,                                    \
         max_value       = 6,                                    \
@@ -2138,6 +2218,7 @@ bomb_slider     ui_slider {                             \
         text_func_off   = offset cseg:dword_to_dec,     \
         window_off      = offset practise_menu_window   \
 }
+form_slider_label       db 'Form', 0
 phase_slider_label      db 'Phase', 0
 phase_slider    ui_slider {                             \
         value           = 1,                            \
@@ -2146,6 +2227,25 @@ phase_slider    ui_slider {                             \
         label_off       = offset phase_slider_label,    \
         text_func_off   = offset cseg:dword_to_dec,     \
         window_off      = offset practise_menu_window   \
+}
+sariel_regular_phase_text       db 'Regular', 0
+sariel_hidden_phase_text        db 'Hidden', 0
+proc sariel_phase_text_func near
+arg @@in_lo:word, @@in_hi:word
+        mov     ax, (offset sariel_regular_phase_text)
+        cmp     [word ptr @@in_lo], 2
+        jne     @@skip_set_hidden
+        mov     ax, (offset sariel_hidden_phase_text)
+@@skip_set_hidden:
+        ret
+endp sariel_phase_text_func
+sariel_phase_slider     ui_slider {                             \
+        value           = 1,                                    \
+        min_value       = 1,                                    \
+        max_value       = 2,                                    \
+        label_off       = offset phase_slider_label,            \
+        text_func_off   = offset cseg:sariel_phase_text_func,   \
+        window_off      = offset practise_menu_window           \
 }
 hp_slider_label         db 'HP', 0
 hp_slider       ui_slider {                             \
@@ -2159,6 +2259,11 @@ hp_slider       ui_slider {                             \
 skip_opening_label      db 'Skip Opening Animation', 0
 skip_opening    ui_tickbox {                            \
         label_off       = offset skip_opening_label,    \
+        window_off      = offset practise_menu_window   \
+}
+lock_form_label         db 'Lock Form', 0
+lock_form       ui_tickbox {                            \
+        label_off       = offset lock_form_label,       \
         window_off      = offset practise_menu_window   \
 }
 
@@ -2182,6 +2287,21 @@ p3b_attack_elis_4       db 'EL P3B 4', 0
 p3g_attack_elis_1       db 'EL P3G 1', 0
 p3g_attack_elis_2       db 'EL P3G 2', 0
 p3g_attack_elis_3       db 'EL P3G 3', 0
+f1_attack_sariel_1      db 'SR F1 1', 0
+f1_attack_sariel_2      db 'SR F1 2', 0
+f1_attack_sariel_3      db 'SR F1 3', 0
+f1_attack_sariel_4      db 'SR F1 4', 0
+f2_attack_sariel_1      db 'SR F2 1', 0
+f2_attack_sariel_2      db 'SR F2 2', 0
+f3_attack_sariel_1      db 'SR F3 1', 0
+f3_attack_sariel_2      db 'SR F3 2', 0
+f3_attack_sariel_3      db 'SR F3 3', 0
+f3_attack_sariel_4      db 'SR F3 4', 0
+f3_attack_sariel_5      db 'SR F3 5', 0
+f3_attack_sariel_6      db 'SR F3 6', 0
+f4_attack_sariel_1      db 'SR F4 1', 0
+f4_attack_sariel_2      db 'SR F4 2', 0
+f4_attack_sariel_3      db 'SR F4 3', 0
 p1_cur_first_attack_str dw (offset p1_attack_elis_1)
 p2_cur_first_attack_str dw (offset p2_attack_shingyoku_1)
 p3_cur_first_attack_str dw (offset p3b_attack_elis_1)
@@ -2249,12 +2369,14 @@ arg @@in_lo:word, @@in_hi:word
         ret
 endp p4_text_func
 p1_attack_label         db 'P1 Atk', 0
+form_1_attack_label     db 'F1 Atk', 0
 p1_attack       ui_slider {                             \
         label_off       = offset p1_attack_label,       \
         text_func_off   = offset cseg:p1_text_func,     \
         window_off      = offset practise_menu_window   \
 }
 p2_attack_label         db 'P2 Atk', 0
+form_2_attack_label     db 'F2 Atk', 0
 p2_attack       ui_slider  {                            \
         label_off       = offset p2_attack_label,       \
         text_func_off   = offset cseg:p2_text_func,     \
@@ -2262,6 +2384,7 @@ p2_attack       ui_slider  {                            \
 }
 p3_attack_label         db 'P3 Atk', 0
 p3_bat_attack_label     db 'P3 (bat)', 0
+form_3_attack_label     db 'F3 Atk', 0
 p3_attack       ui_slider  {                            \
         label_off       = offset p3_attack_label,       \
         text_func_off   = offset cseg:p3_text_func,     \
@@ -2269,6 +2392,7 @@ p3_attack       ui_slider  {                            \
 }
 p4_attack_label         db 'P4 Atk', 0
 p3_girl_attack_label    db 'P3 (girl)', 0
+form_4_attack_label     db 'F4 Atk', 0
 p4_attack       ui_slider  {                            \
         label_off       = offset p4_attack_label,       \
         text_func_off   = offset cseg:p4_text_func,     \
