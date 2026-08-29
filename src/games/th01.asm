@@ -829,10 +829,66 @@ endp hooked_reiiden_1b03_0a19
 
 ; Elis Warps
 ; ============================
-elis_do_skip_opening    db 0
+; elis_skip_opening_part1 {
+;   24E3:2E3C | C7 06 D3 5D 00 00 -> E9 F3 01 8D 74 00
+; }
+; Original assembly:
+;   24E3:2E3C | C7 06 D3 5D 00 00 mov    [word ptr hit.invincibility_frame], 0
+; Modified assembly:
+;   24E3:2E3C | E9 F4 01          jmp    24E3:3033  ; skip the entire loop
+;   24E3:2E3F | 8D 74 00          lea    si, [si + 00h]  ; effectively nop
+;
+; elis_skip_opening_part2 {
+;   24E3:3033 | C7 06 D3 5D 00 00 C7 46 FC 00 00 ->
+;             | C7 06 D3 5D FF 00 C7 46 FC 01 00
+; }
+; Original assembly:
+;   24E3:3033 | C7 06 D3 5D 00 00 mov    [word ptr hit.invincibility_frame], 0
+;   24E3:3039 | C7 46 FC 00 00    mov    [word ptr bp - trails_offscreen], 0
+; Modified assembly:
+;   24E3:3033 | C7 06 D3 5D FF 00 mov    [word ptr hit.invincibility_frame], 127
+;   24E3:3039 | C7 46 FC 01 00    mov    [word ptr bp - trails_offscreen], 1
+; Note: The 127 here is (KEYFRAME_SLIGHT_RIPPLE - 1).
+
+; elis_init {
+;   24E3:3391 | C7 06 D7 5D 01 00 -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is (offset elis_init_proc).
+; Original assembly:
+;   24E3:3391 | C7 06 D7 5D 01 00 mov    [word ptr phase.cur.pattern], 1
+; Modified assembly:
+;   24E3:3391 | 9A yy yy xx xx    callf  elis_init_proc
+;   24E3:3396 | 90                nop
+;
+; elis_p1_attack {
+;   24E3:0F89 | 9A 08 16 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (offset elis_p1_attack_select).
+; Original assembly: callf irand
+; Modified assembly: callf elis_p1_attack_select
+;
+; elis_p2_attack {
+;   24E3:1AA9 | 9A 08 16 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (offset elis_p2_attack_select).
+; Original assembly: callf irand
+; Modified assembly: callf elis_p2_attack_select
+;
+; elis_p3b_attack {
+;   24E3:2D7E | 9A 08 16 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (offset elis_p3b_attack_select).
+; Original assembly: callf irand
+; Modified assembly: callf elis_p3b_attack_select
+;
+; elis_p3g_attack {
+;   24E3:2CB9 | 9A 08 16 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (offset elis_p3g_attack_select).
+; Original assembly: callf irand
+; Modified assembly: callf elis_p3g_attack_select
 
 elis_skip_opening_part1_org     db 0C7h, 006h, 0D3h, 05Dh, 000h, 000h
-elis_skip_opening_part1_pat     db 02Eh, 0E9h, 0F3h, 001h, NOP_2BYTES_SI
+elis_skip_opening_part1_pat     db 0E9h, 0F4h, 001h, NOP_3BYTES_SI
 inject_def elis_skip_opening_part1, 0, reiiden, 24E3h, 2E3Ch, 6
 
 elis_skip_opening_part2_org     db 0C7h, 006h, 0D3h, 05Dh, 000h, 000h, \
@@ -872,12 +928,20 @@ elis_p3g_attack_var             db 0, 0, 0, 1, 1
 inject_def elis_p3g_attack, 1, reiiden, 24E3h, 2CB9h, 5
 
 ELIS_FORM_OFFSET                        = 13ACh
+ELIS_PHASE_CUR_PATTERN_OFFSET           = 5DD7h
 elis_boss_phase_val_of_each_stages      db 1, 3, 4
 
-; I/O: None
+elis_do_skip_opening    db 0
+
+; --------------------------------------------------------------------------
+; Function: elis_init_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
 proc elis_init_proc far
 local @@cbossentity_unput_8:dword
         assume  ds:nothing
+        mov     [word ptr ds:ELIS_PHASE_CUR_PATTERN_OFFSET], 1
         cmp     [byte ptr current_ui_boss], UI_ELIS
         jne     @@skip_handling
         pushad
@@ -917,6 +981,12 @@ local @@cbossentity_unput_8:dword
         assume  ds:cseg
 endp elis_init_proc
 
+; --------------------------------------------------------------------------
+; Function: elis_p1_attack_select
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in AX % 4): The chosen attack number.
+; --------------------------------------------------------------------------
 proc elis_p1_attack_select far
         assume  ds:nothing
         push    bx
@@ -937,6 +1007,12 @@ proc elis_p1_attack_select far
         assume  ds:cseg
 endp elis_p1_attack_select
 
+; --------------------------------------------------------------------------
+; Function: elis_p2_attack_select
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in AX % 4): The chosen attack number.
+; --------------------------------------------------------------------------
 proc elis_p2_attack_select far
         assume  ds:nothing
         push    bx
@@ -957,6 +1033,12 @@ proc elis_p2_attack_select far
         assume  ds:cseg
 endp elis_p2_attack_select
 
+; --------------------------------------------------------------------------
+; Function: elis_p3b_attack_select
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in AX % 4): The chosen attack number.
+; --------------------------------------------------------------------------
 proc elis_p3b_attack_select far
         assume  ds:nothing
         push    bx
@@ -974,6 +1056,12 @@ proc elis_p3b_attack_select far
         assume  ds:cseg
 endp elis_p3b_attack_select
 
+; --------------------------------------------------------------------------
+; Function: elis_p3g_attack_select
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in AX % 3): The chosen attack number.
+; --------------------------------------------------------------------------
 proc elis_p3g_attack_select far
         assume  ds:nothing
         push    bx
@@ -999,8 +1087,8 @@ endp elis_p3g_attack_select
 ;             |          ^^ ^^ (*1)
 ; }, where "xxxx" is cseg, and "yyyy" is
 ; (offset hooked_resident_create_and_stuff_set).
-; Original assembly: call resident_create_and_stuff_set
-; Modified assembly: call hooked_resident_create_and_stuff_set
+; Original assembly: callf resident_create_and_stuff_set
+; Modified assembly: callf hooked_resident_create_and_stuff_set
 ; Check https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L343-L349
 ; for the C version of the original code.
 ;
