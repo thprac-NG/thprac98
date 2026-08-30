@@ -11,6 +11,8 @@
 ; Procedures:
 ;       void near inject_one(inject_code_t near* inject_code, bool16 to_inject,
 ;                            void __seg* psp_seg);
+;       void near inject_multiple(inject_code_t near* near* inject_codes,
+;                                 bool16 to_inject, void __seg* psp_seg);
 
 must_match      db -1
 
@@ -110,5 +112,35 @@ local @@must_match:byte
         pop     di si
         ret
 endp inject_one
+
+; --------------------------------------------------------------------------
+; Function: inject_multiple
+; Description: Inject multiple codes into the current process.
+; Input:  Argument 1 (word): offset to an array of inject_code_t structures,
+;                            ending with 0FFFFh
+;         Argument 2 (word): 1 means to inject, 0 means to restore
+;         Argument 3 (word): the PSP segment of the current program
+; Output: None
+; --------------------------------------------------------------------------
+proc inject_multiple
+arg @@inject_codes:word, @@flag:word, @@cur_psp:word
+        push    si
+
+        mov     si, [@@inject_codes]
+@@main_loop:
+        cmp     [word ptr si], 0FFFFh
+        je      @@skip_main_loop
+        ; push    [dword ptr @@flag]      ; equivantly, push [@@cur_psp] [@@flag]
+        push    [word ptr @@cur_psp] [word ptr @@flag]
+        push    [word ptr si]
+        call    inject_one
+        add     sp, 6
+        add     si, 2
+        jmp     @@main_loop
+@@skip_main_loop:
+
+        pop     si
+        ret
+endp inject_multiple
 
 popstate

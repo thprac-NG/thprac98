@@ -1125,8 +1125,7 @@ sariel_do_skip_opening db 0
 
 practise_menu_part1_org db 09Ah, 00Ch, 000h, 000h, 000h
 practise_menu_part1_pat db 09Ah
-                        dw offset cseg:hooked_resident_create_and_stuff_set
-                        db 000h, 000h
+                        dw offset cseg:hooked_resident_create_and_stuff_set, 0
 practise_menu_part1_var db 0, 0, 0, 1, 1
 inject_def practise_menu_part1, 1, op, 0A1Ch, 0612h, 5
 
@@ -1226,6 +1225,32 @@ endp hooked_resident_create_and_stuff_set
 
 inject_failed   db 0
 
+invincible_codes        dw (offset invincible_part1), (invincible_part2), 0FFFFh
+inf_lives_codes         dw (offset inf_lives_part1), (inf_lives_part2), 0FFFFh
+inf_bombs_codes         dw (offset inf_bombs_part1), (inf_bombs_part2), 0FFFFh
+elis_skip_opening       dw (offset elis_skip_opening_part1), \
+                           (offset elis_skip_opening_part2), 0FFFFh
+reiiden_unconditionals  dw (offset stage_num_animate), \
+                           (offset harry_up_animate)
+                        dw (offset shingyoku_p2_attack), \
+                           (offset shingyoku_init), \
+                           (offset shingyoku_skip_hp_animation_part2)
+                        dw (offset yuugenmagan_timelock_p1_part1), \
+                           (offset yuugenmagan_timelock_p1_part2), \
+                           (offset yuugenmagan_timelock_p2_part1), \
+                           (offset yuugenmagan_timelock_p2_part2), \
+                           (offset yuugenmagan_timelock_p3_part1), \
+                           (offset yuugenmagan_timelock_p3_part2), \
+                           (offset yuugenmagan_timelock_p4_part1), \
+                           (offset yuugenmagan_timelock_p4_part2), \
+                           (offset yuugenmagan_init)
+                        dw (offset elis_init), \
+                           (offset elis_p1_attack), (offset elis_p2_attack), \
+                           (offset elis_p3g_attack), (offset elis_p3b_attack)
+                        dw 0FFFFh
+op_unconditionals       dw (offset practise_menu_part1), \
+                           (offset practise_menu_part2), 0FFFFh
+
 ; --------------------------------------------------------------------------
 ; Function: inject
 ; Description: Check the filename of the current program, and inject the
@@ -1235,6 +1260,8 @@ inject_failed   db 0
 proc inject near
 arg @@updated:word
 local @@saved_psp:word, @@saved_filename_ptr:dword
+        push    si di
+
         mov     ax, [@@updated]
         or      al, [inject_failed]
         test    ax, ax
@@ -1277,6 +1304,8 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         test    cl, cl
         jnz     @@scan_for_backslash_loop
         inc     dx  ; the filename of the executing program
+
+        mov     si, [@@saved_psp]
         mov     [word ptr @@saved_filename_ptr], dx
         mov     [word ptr @@saved_filename_ptr + 2], es
         push    es dx ds (offset reiiden_exe)
@@ -1286,125 +1315,41 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         jnz     @@skip_reiiden_exe_patches
 
         movzx   ax, [byte ptr fx_state + 1]
-        push    [word ptr @@saved_psp] ax (offset invincible_part1)
-        call    inject_one
-        add     sp, 6
-        movzx   ax, [byte ptr fx_state + 1]
-        push    [word ptr @@saved_psp] ax (offset invincible_part2)
-        call    inject_one
-        add     sp, 6
-
+        push    si ax (offset invincible_codes)
+        call    inject_multiple                 ; delayed sp+6
         movzx   ax, [byte ptr fx_state + 3]
-        push    [word ptr @@saved_psp] ax (offset inf_lives_part1)
-        call    inject_one
-        add     sp, 6
-        movzx   ax, [byte ptr fx_state + 3]
-        push    [word ptr @@saved_psp] ax (offset inf_lives_part2)
-        call    inject_one
-        add     sp, 6
-
+        push    si ax (offset inf_lives_codes)
+        call    inject_multiple                 ; delayed sp+6
         movzx   ax, [byte ptr fx_state + 5]
-        push    [word ptr @@saved_psp] ax (offset inf_bombs_part1)
-        call    inject_one
-        add     sp, 6
-        movzx   ax, [byte ptr fx_state + 5]
-        push    [word ptr @@saved_psp] ax (offset inf_bombs_part2)
-        call    inject_one
-        add     sp, 6
+        push    si ax (offset inf_bombs_codes)
+        call    inject_multiple                 ; delayed sp+6
+        add     sp, 18                          ; sp+18
 
         movzx   ax, [byte ptr fx_state + 7]
-        push    [word ptr @@saved_psp] ax (offset time_lock)
-        call    inject_one
-        add     sp, 6
-
+        push    si ax (offset time_lock)
+        call    inject_one                      ; delayed sp+6
         movzx   ax, [byte ptr fx_state + 9]
-        push    [word ptr @@saved_psp] ax (offset inf_card_combo)
-        call    inject_one
-        add     sp, 6
-
+        push    si ax (offset inf_card_combo)
+        call    inject_one                      ; delayed sp+6
         movzx   ax, [byte ptr fx_state + 11]
-        push    [word ptr @@saved_psp] ax (offset inf_item_combo)
-        call    inject_one
-        add     sp, 6
+        push    si ax (offset inf_item_combo)
+        call    inject_one                      ; delayed sp+6
+        add     sp, 18                          ; sp+18
 
-        push    [word ptr @@saved_psp] 1 (offset stage_num_animate)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset harry_up_animate)
-        call    inject_one
-        add     sp, 6
-
-        push    [word ptr @@saved_psp] 1 (offset shingyoku_p2_attack)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset shingyoku_init)
-        call    inject_one
-        add     sp, 6
         movzx   ax, [shingyoku_do_skip_opening]
-        push    [word ptr @@saved_psp] ax (offset shingyoku_skip_opening)
-        call    inject_one
-        add     sp, 6
+        push    si ax (offset shingyoku_skip_opening)
+        call    inject_one                      ; delayed sp+6
         movzx   ax, [shingyoku_do_skip_p1]
-        push    [word ptr @@saved_psp] ax \
-                (offset shingyoku_skip_hp_animation_part1)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 \
-                (offset shingyoku_skip_hp_animation_part2)
-        call    inject_one
-        add     sp, 6
-
-        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p1_part1)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p1_part2)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p2_part1)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p2_part2)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p3_part1)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p3_part2)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p4_part1)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_timelock_p4_part2)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset yuugenmagan_init)
-        call    inject_one
-        add     sp, 6
-
+        push    si ax (offset shingyoku_skip_hp_animation_part1)
+        call    inject_one                      ; delayed sp+6
+        ;
         movzx   ax, [elis_do_skip_opening]
-        push    [word ptr @@saved_psp] ax (offset elis_skip_opening_part1)
-        call    inject_one
-        add     sp, 6
-        movzx   ax, [elis_do_skip_opening]
-        push    [word ptr @@saved_psp] ax (offset elis_skip_opening_part2)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset elis_init)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset elis_p1_attack)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset elis_p2_attack)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset elis_p3g_attack)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset elis_p3b_attack)
-        call    inject_one
-        add     sp, 6
+        push    si ax (offset elis_skip_opening)
+        call    inject_multiple                 ; delayed sp+6
+        ;
+        push    si 1 (offset reiiden_unconditionals)
+        call    inject_multiple                 ; delayed sp+6
+        add     sp, 24                          ; sp+24
 @@skip_reiiden_exe_patches:
 
         push    [dword ptr @@saved_filename_ptr] ds (offset op_exe)
@@ -1413,14 +1358,13 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         test    ax, ax
         jnz     @@skip_op_exe_patches
 
-        push    [word ptr @@saved_psp] 1 (offset practise_menu_part1)
-        call    inject_one
-        add     sp, 6
-        push    [word ptr @@saved_psp] 1 (offset practise_menu_part2)
-        call    inject_one
+        push    si 1 (offset op_unconditionals)
+        call    inject_multiple
         add     sp, 6
 @@skip_op_exe_patches:
+
 @@return:
+        pop     di si
         ret
 endp inject
 
@@ -2168,7 +2112,7 @@ arg @@in_lo:word, @@in_hi:word
         ret
 endp section_text_func
 section_label   db 'Section', 0
-section_slider  ui_slider {                                   \
+section_slider  ui_slider {                                     \
         value           = 0,                                    \
         min_value       = 0,                                    \
         max_value       = 6,                                    \
@@ -2484,6 +2428,27 @@ memory_used                     db 13, 10, 'Memory used: $'
 memory_used_num_buffer          db 11 dup ('?')
 memory_used2                    db ' bytes.$'
 
+patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
+                           (offset harry_up_animate_pat + 3), \
+                           (offset practise_menu_part1_pat + 3)
+                        dw (offset shingyoku_p2_attack_pat + 3), \
+                           (offset shingyoku_init_pat + 3), \
+                           (offset shingyoku_skip_hp_animation_part2_pat + 3)
+                        dw (offset yuugenmagan_timelock_p1_part1_pat + 3), \
+                           (offset yuugenmagan_timelock_p1_part2_pat + 3), \
+                           (offset yuugenmagan_timelock_p2_part1_pat + 3), \
+                           (offset yuugenmagan_timelock_p2_part2_pat + 3), \
+                           (offset yuugenmagan_timelock_p3_part1_pat + 3), \
+                           (offset yuugenmagan_timelock_p3_part2_pat + 3), \
+                           (offset yuugenmagan_timelock_p4_part1_pat + 3), \
+                           (offset yuugenmagan_timelock_p4_part2_pat + 3), \
+                           (offset yuugenmagan_init_pat + 3)
+                        dw (offset elis_init_pat + 3), \
+                           (offset elis_p1_attack_pat + 3), \
+                           (offset elis_p2_attack_pat + 3), \
+                           (offset elis_p3b_attack_pat + 3), \
+                           (offset elis_p3g_attack_pat + 3), 0FFFFh
+
 COMMAND_PARAM_LEN_OFFSET        EQU 80h
 COMMAND_PARAM_OFFSET            EQU 81h
 
@@ -2627,26 +2592,15 @@ local @@told_to_uninstall:byte, @@int_no_hooked:word
         pop     ds              ; Restore DS (branch 2)
 
         ; Set up some injected code that can only be determined in the runtime
-        mov     [word ptr stage_num_animate_pat + 3], cs
-        mov     [word ptr harry_up_animate_pat + 3], cs
-        mov     [word ptr practise_menu_part1_pat + 3], cs
-        mov     [word ptr shingyoku_p2_attack_pat + 3], cs
-        mov     [word ptr shingyoku_init_pat + 3], cs
-        mov     [word ptr shingyoku_skip_hp_animation_part2_pat + 3], cs
-        mov     [word ptr yuugenmagan_timelock_p1_part1_pat + 3], cs
-        mov     [word ptr yuugenmagan_timelock_p1_part2_pat + 3], cs
-        mov     [word ptr yuugenmagan_timelock_p2_part1_pat + 3], cs
-        mov     [word ptr yuugenmagan_timelock_p2_part2_pat + 3], cs
-        mov     [word ptr yuugenmagan_timelock_p3_part1_pat + 3], cs
-        mov     [word ptr yuugenmagan_timelock_p3_part2_pat + 3], cs
-        mov     [word ptr yuugenmagan_timelock_p4_part1_pat + 3], cs
-        mov     [word ptr yuugenmagan_timelock_p4_part2_pat + 3], cs
-        mov     [word ptr yuugenmagan_init_pat + 3], cs
-        mov     [word ptr elis_init_pat + 3], cs
-        mov     [word ptr elis_p1_attack_pat + 3], cs
-        mov     [word ptr elis_p2_attack_pat + 3], cs
-        mov     [word ptr elis_p3b_attack_pat + 3], cs
-        mov     [word ptr elis_p3g_attack_pat + 3], cs
+        mov     bx, (offset patch_cs_positions)
+@@set_cs_loop:
+        cmp     [word ptr bx], 0FFFFh
+        je      @@skip_set_cs_loop
+        mov     si, [bx]
+        mov     [si], cs
+        add     bx, 2
+        jmp     @@set_cs_loop
+@@skip_set_cs_loop:
 
         ; Initialize the Keyboard BIOS
         mov     ah, 03h
