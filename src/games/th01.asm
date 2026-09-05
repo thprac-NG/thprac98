@@ -113,7 +113,7 @@ endp on_game_start
 ; For some reason, Shingyoku doesn't use these variables.
 BOSS_PHASE_OFFSET               = 5D2Eh
 BOSS_HP_OFFSET                  = 5D28h
-PHASE_FRAME_OFFSET              = 5D2Ah
+BOSS_PHASE_FRAME_OFFSET         = 5D2Ah
 INVINCIBILITY_FRAME_OFFSET      = 5464h
 
 ; The offsets of z_Palettes[COL_YOKOSHIMA] and stage_pallete[COL_YOKOSHIMA].
@@ -123,6 +123,15 @@ STAGE_PALETTE_YOKOSHIMA_OFFSET  = 5219h
 CBOSSENTITY_UNPUT_8_SEGMENT     = 155Fh
 CBOSSENTITY_UNPUT_8_OFFSET      = 0B3Eh
 BOSS_ENTITY_0_OFFSET            = 4E8Ah
+
+GRP_PUT_PALLETE_SHOW_SEGMENT    = 106Fh
+GRP_PUT_PALLETE_SHOW_OFFSET     = 04BEh
+GRAPH_ACCESSPAGE_FUNC_SEGMENT   = 0E92h
+GRAPH_ACCESSPAGE_FUNC_OFFSET    = 011Eh
+IRAND_SEGMENT                   = 0000h
+IRAND_OFFSET                    = 1608h
+TEXT_FILLCA_SEGMENT             = 0000h
+TEXT_FILLCA_OFFSET              = 0C7Ch
 
 ; REIIDEN.EXE modifications
 ; ==============================================================
@@ -662,7 +671,7 @@ proc hooked_reiiden_1b03_0e9b far
         inc     [word ptr yuugenmagan_p1_frame_elapsed]
 @@skip_add_p1_frame:
         ; The hooked instruction
-        inc     [word ptr ds:PHASE_FRAME_OFFSET]
+        inc     [word ptr ds:BOSS_PHASE_FRAME_OFFSET]
         inc     [word ptr ds:INVINCIBILITY_FRAME_OFFSET]
         ret
         assume  ds:cseg
@@ -694,7 +703,7 @@ proc hooked_reiiden_1b03_12ed far
         inc     [byte ptr yuugenmagan_p2_iterations_done]
 @@skip_add_p2_iterations_done:
         ; The hooked instruction
-        mov     [word ptr ds:PHASE_FRAME_OFFSET], 0
+        mov     [word ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
         ret
         assume  ds:cseg
 endp hooked_reiiden_1b03_12ed
@@ -726,7 +735,7 @@ proc hooked_reiiden_1b03_163e far
         inc     [byte ptr yuugenmagan_p3_iterations_done]
 @@skip_add_p3_iterations_done:
         ; The hooked instruction
-        mov     [word ptr ds:PHASE_FRAME_OFFSET], 0
+        mov     [word ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
         ret
         assume  ds:cseg
 endp hooked_reiiden_1b03_163e
@@ -760,7 +769,7 @@ proc hooked_reiiden_1b03_19fe far
         inc     [byte ptr yuugenmagan_p4_iterations_done]
 @@skip_add_p4_iterations_done:
         ; The hooked instruction
-        mov     [word ptr ds:PHASE_FRAME_OFFSET], 0
+        mov     [word ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
         ret
         assume  ds:cseg
 endp hooked_reiiden_1b03_19fe
@@ -1082,10 +1091,445 @@ proc elis_p3g_attack_select far
         assume  ds:cseg
 endp elis_p3g_attack_select
 
-; Elis Warps
+; Sariel Warps
 ; ============================
 
-sariel_do_skip_opening db 0
+sariel_skip_opening_part1_org   db 01Eh, 068h, 041h, 015h, \
+                                   09Ah, 0BEh, 004h, 000h, 000h
+sariel_skip_opening_part1_pat   db 09Ah
+                                dw (offset sariel_draw_background), 0
+                                db 0EBh, 012h, NOP_2BYTES_SI
+sariel_skip_opening_part1_var   db 7 dup (0), 1, 1
+inject_def sariel_skip_opening_part1, 1, reiiden, 2865h, 0062h, 9
+
+sariel_skip_opening_part2_org   db 083h, 0C4h, 016h
+sariel_skip_opening_part2_pat   db 083h, 0C4h, 00Ch
+inject_def sariel_skip_opening_part2, 0, reiiden, 2865h, 009Bh, 3
+
+sariel_skip_opening_part3_org   db 0EBh, 019h
+sariel_skip_opening_part3_pat   db 0EBh, 046h
+inject_def sariel_skip_opening_part3, 0, reiiden, 2865h, 00B1h, 2
+
+; This portion of the opening animation isn't skipped (unless we're warping to
+; the hidden stage), since
+;   (a) a relatively brief opening animation should be tolerable,
+;   (b) the run will immediately start otherwise, which can be too fast for
+;       players to react, and
+;   (c) the disturbance of it in vanilla game won't be recreated then.
+sariel_skip_opening_part4_org   db 0FFh, 006h, 02Ah, 05Dh
+sariel_skip_opening_part4_pat   db 0E9h, 0AFh, 001h, 090h
+inject_def sariel_skip_opening_part4, 0, reiiden, 2865h, 3AFEh, 4
+
+sariel_init_org         db 09Ah, 008h, 016h, 000h, 000h, 0BBh, 006h, 000h
+sariel_init_pat         db 09Ah
+                        dw (offset sariel_init_proc), 0
+                        db 0EBh, 014h
+sariel_init_var         db 0, 0, 0, 1, 1, 0, 0, 0
+inject_def sariel_init, 1, reiiden, 2865h, 3CC1h, 8
+
+sariel_skip_fake_death_part1_org        db 0C7h, 006h, 02Ah, 05Dh, 000h, 000h
+sariel_skip_fake_death_part1_pat        db 0C7h, 006h, 02Ah, 05Dh, 0C8h, 000h
+inject_def sariel_skip_fake_death_part1, 0, reiiden, 2865h, 41F0h, 6
+
+sariel_skip_fake_death_part2_org        db 01Eh, 068h, 0E8h, 03Fh
+sariel_skip_fake_death_part2_pat        db 0EBh, 010h, NOP_2BYTES_SI
+inject_def sariel_skip_fake_death_part2, 0, reiiden, 2865h, 438Fh, 4
+
+; sariel_skip_fake_death_part3_org        db 09Ah, 04Eh, 000h, 000h, 000h
+; sariel_skip_fake_death_part3_pat        db 09Ah
+;                                         dw (offset reiiden_0b50_2598), 0
+; sariel_skip_fake_death_part3_var        db 0, 0, 0, 1, 1
+; inject_def sariel_skip_fake_death_part3, 1, reiiden, 0B50h, 2598h, 5
+
+; Yes, sp+4, not +0Eh, since we've already patched the sp+16h to sp+0Ch above.
+sariel_skip_fake_death_part3_org        db 01Eh, 068h, 059h, 015h, \
+                                           09Ah, 0F9h, 000h, 000h, 000h
+sariel_skip_fake_death_part3_pat        db 083h, 0C4h, 004h, 0EBh, 015h, \
+                                           NOP_4BYTES_SI
+sariel_skip_fake_death_part3_var        db 7 dup (0), 1, 1
+inject_def sariel_skip_fake_death_part3, 1, reiiden, 2865h, 0089h, 9
+
+sariel_hidden_stage_warp_part1_org      db 0C7h, 006h, 028h, 05Dh, 006h, 000h
+sariel_hidden_stage_warp_part1_pat      db NOP_3BYTES_SI, NOP_3BYTES_DI
+inject_def sariel_hidden_stage_warp_part1, 0, reiiden, 2865h, 442Ah, 6
+
+sariel_lock_form_1_org  db 00Fh, 08Ch, 044h, 009h
+sariel_lock_form_1_pat  db 0E9h, 045h, 009h, NOP_1BYTE
+inject_def sariel_lock_form_1, 0, reiiden, 2865h, 3E36h, 4
+
+sariel_lock_form_2_org  db 00Fh, 08Ch, 051h, 008h
+sariel_lock_form_2_pat  db 0E9h, 052h, 008h, NOP_1BYTE
+inject_def sariel_lock_form_2, 0, reiiden, 2865h, 3F29h, 4
+
+sariel_lock_form_3_org  db 00Fh, 08Ch, 035h, 007h
+sariel_lock_form_3_pat  db 0E9h, 036h, 007h, NOP_1BYTE
+inject_def sariel_lock_form_3, 0, reiiden, 2865h, 4045h, 4
+
+sariel_lock_form_4_org  db 00Fh, 08Ch, 000h, 006h
+sariel_lock_form_4_pat  db 0E9h, 001h, 006h, NOP_1BYTE
+inject_def sariel_lock_form_4, 0, reiiden, 2865h, 417Ah, 4
+
+; Pointless due to sariel_hook_form_3_attack.
+sariel_fix_form_3_quirk_org     db 0B8h, 00Ah, 000h
+sariel_fix_form_3_quirk_pat     db 0B8h, 000h, 000h
+inject_def sariel_fix_form_3_quirk, 0, reiiden, 2865h, 3FEFh, 3
+
+sariel_set_form_1_first_attack_org      db 0C7h, 006h, 0F5h, 014h, 000h, 000h
+sariel_set_form_1_first_attack_pat      db 09Ah
+                                        dw (offset sariel_form_1_first_atk), 0
+                                        db NOP_1BYTE
+inject_def sariel_set_form_1_first_attack, 0, reiiden, 2865h, 3CB5h, 6
+
+sariel_set_form_2_to_4_first_attack_org db 0C7h, 006h, 0F5h, 014h, 000h, 000h
+sariel_set_form_2_to_4_first_attack_pat db 09Ah
+                                        dw (offset sariel_form_2_to_4_first_atk)
+                                        dw 0
+                                        db NOP_1BYTE
+inject_def sariel_set_form_2_to_4_first_attack, 0, reiiden, 2865h, 4192h, 6
+
+sariel_hook_form_1_attack_org   db 083h, 03Eh, 0F5h, 014h, 002h, 075h, 004h
+sariel_hook_form_1_attack_pat   db 09Ah
+                                dw (offset sariel_select_form_1_attack), 0
+                                db 0EBh, 00Bh
+inject_def sariel_hook_form_1_attack 0, reiiden, 2865h, 3DDAh, 7
+
+sariel_hook_form_2_attack_org   db 02Bh, 006h, 0F5h, 014h, 0A3h, 0F5h, 014h
+sariel_hook_form_2_attack_pat   db 09Ah
+                                dw (offset sariel_select_form_2_attack), 0
+                                db NOP_2BYTES_SI
+inject_def sariel_hook_form_2_attack 0, reiiden, 2865h, 3ED8h, 7
+
+sariel_hook_form_3_attack_org   db 083h, 03Eh, 0F5h, 014h, 005h, 075h, 005h
+sariel_hook_form_3_attack_pat   db 09Ah
+                                dw (offset sariel_select_form_3_attack), 0
+                                db 0EBh, 00Ch
+inject_def sariel_hook_form_3_attack 0, reiiden, 2865h, 3FE8h, 7
+
+sariel_hook_form_4_attack_org   db 083h, 03Eh, 0F5h, 014h, 002h, 075h, 004h
+sariel_hook_form_4_attack_pat   db 09Ah
+                                dw (offset sariel_select_form_4_attack), 0
+                                db 0EBh, 00Bh
+inject_def sariel_hook_form_4_attack 0, reiiden, 2865h, 411Eh, 7
+
+sariel_do_skip_opening          db 0
+sariel_do_skip_opening_part4    db 0
+sariel_do_skip_fake_death       db 0
+sariel_max_attack_in_phases     db 6, 5, 4, 5
+SARIEL_PHASE_FORM1_DEFEATED     = 99
+
+sariel_get_first_atk_jump_table dw (offset sariel_get_first_atk_case_1), \
+                                   (offset sariel_get_first_atk_case_2), \
+                                   (offset sariel_get_first_atk_case_3), \
+                                   (offset sariel_get_first_atk_case_4)
+
+SARIEL_BOSS6_L_GRP_OFFSET               = 1541h
+SARIEL_BOSS6_H_GRP_OFFSET               = 154Dh
+SARIEL_BOSS6_A5_GRP_OFFSET              = 161Ch
+SARIEL_BG_IMAGES_OFFSET                 = 140Bh
+SARIEL_INITIAL_HP_RENDERED_OFFSET       = 6A97h
+SARIEL_PATTERNS_UNTIL_NEXT_OFFSET       = 14F9h
+SARIEL_PATTERN_CUR_OFFSET               = 14F5h
+
+; --------------------------------------------------------------------------
+; Function: sariel_draw_background
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc sariel_draw_background far
+local @@grp_put_pallete_show:dword, @@graph_accesspage_func:dword, \
+@@page_0_pallete:word, @@page_1_pallete:word
+        assume  ds:nothing
+
+        ; Set the offsets of the filenames of the pallete files of two pages
+        mov     ax, SARIEL_BOSS6_A5_GRP_OFFSET
+        mov     [word ptr @@page_0_pallete], ax
+        mov     [word ptr @@page_1_pallete], ax
+        cmp     [byte ptr sariel_do_skip_fake_death], 1
+        je      @@skip_set_regular_phase_background
+        mov     bx, [word ptr phase_slider.value]
+        shl     bx, 2
+        mov     ax, [word ptr ds:bx + SARIEL_BG_IMAGES_OFFSET - 4]
+        mov     [word ptr @@page_0_pallete], ax
+        mov     [word ptr @@page_1_pallete], ax
+@@skip_set_regular_phase_background:
+
+        ; Set the address of the procedures
+        mov     bx, [cur_psp]
+        lea     ax, [bx + GRP_PUT_PALLETE_SHOW_SEGMENT + 10h]
+        mov     [word ptr @@grp_put_pallete_show], GRP_PUT_PALLETE_SHOW_OFFSET
+        mov     [word ptr @@grp_put_pallete_show + 2], ax
+        lea     ax, [bx + GRAPH_ACCESSPAGE_FUNC_SEGMENT + 10h]
+        mov     [word ptr @@graph_accesspage_func], GRAPH_ACCESSPAGE_FUNC_OFFSET
+        mov     [word ptr @@graph_accesspage_func + 2], ax
+
+        ; Call the procedures
+        push    ds [word ptr @@page_0_pallete]
+        call    [dword ptr @@grp_put_pallete_show]      ; delayed sp+4
+        push    1
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        push    ds [word ptr @@page_1_pallete]
+        call    [dword ptr @@grp_put_pallete_show]      ; delayed sp+4
+        add     sp, 10                                  ; sp+10
+
+        ret
+        assume  ds:cseg
+endp sariel_draw_background
+
+; --------------------------------------------------------------------------
+; Function: sariel_init_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc sariel_init_proc far
+local @@irand:dword
+        assume  ds:nothing
+
+        mov     ax, [cur_psp]
+        add     ax, 10h + IRAND_SEGMENT
+        mov     [word ptr @@irand], IRAND_OFFSET
+        mov     [word ptr @@irand + 2], ax
+
+        cmp     [byte ptr sariel_phase_slider.value], 2
+        je      @@warp_to_hidden_phase
+
+        mov     ax, [word ptr phase_slider.value]
+        shl     ax, 1
+        dec     ax
+        mov     [byte ptr ds:BOSS_PHASE_OFFSET], al
+        call    [dword ptr @@irand]
+        cwd
+        mov     bx, [word ptr phase_slider.value]
+        movzx   bx, [byte ptr bx + (offset sariel_max_attack_in_phases) - 1]
+        idiv    bx
+        inc     dx
+        mov     [word ptr ds:SARIEL_PATTERNS_UNTIL_NEXT_OFFSET], dx
+        mov     [word ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
+        mov     [byte ptr ds:SARIEL_INITIAL_HP_RENDERED_OFFSET], 0
+        mov     ax, [word ptr hp_slider.value]
+        mov     [word ptr ds:BOSS_HP_OFFSET], ax
+
+        push    [word ptr phase_slider.value]
+        call    far sariel_get_first_atk
+        add     sp, 2
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        cmp     [byte ptr phase_slider.value], 1
+        je      @@skip_render_hp
+        call    render_hp
+@@skip_render_hp:
+        jmp     @@return
+
+@@warp_to_hidden_phase:
+        mov     [byte ptr BOSS_PHASE_OFFSET], SARIEL_PHASE_FORM1_DEFEATED
+        mov     ax, [word ptr hp_slider.value]
+        mov     [word ptr ds:BOSS_HP_OFFSET], ax
+
+@@return:
+        ret
+        assume  ds:cseg
+endp sariel_init_proc
+
+; Unused
+proc reiiden_0b50_2598 far
+local @@text_fillca:dword
+        assume  ds:nothing
+        pushfd
+        pushad
+
+        mov     ax, [cur_psp]
+        add     ax, 10h + TEXT_FILLCA_SEGMENT
+        mov     [word ptr @@text_fillca], TEXT_FILLCA_OFFSET
+        mov     [word ptr @@text_fillca + 2], ax
+
+        ; push    TEXT_BLACK or TEXT_REVERSE_MASK
+        push    TEXT_WHITE
+        push    ' '
+        call    [dword ptr @@text_fillca]
+        ; Callee has already cleaned the stack
+
+        popad
+        popfd
+        ret
+        assume  ds:cseg
+endp reiiden_0b50_2598
+
+; Get the first attack of the selected phase according to the settings.
+proc sariel_get_first_atk far
+arg @@cur_phase:word
+        assume  ds:nothing
+        push    bx
+
+        xor     ax, ax
+        mov     bx, [@@cur_phase]
+        shl     bx, 1
+        jmp     [word ptr bx - 2 + (offset sariel_get_first_atk_jump_table)]
+
+sariel_get_first_atk_case_1:
+        cmp     [byte ptr p1_attack.value], 0
+        je      @@return
+        mov     ax, [word ptr p1_attack.value]
+        dec     ax
+        jmp     @@return
+
+sariel_get_first_atk_case_2:
+        cmp     [byte ptr p2_attack.value], 0
+        je      @@return
+        mov     ax, [word ptr p2_attack.value]
+        dec     ax
+        jmp     @@return
+
+sariel_get_first_atk_case_3:
+        cmp     [byte ptr p3_attack.value], 0
+        je      @@return
+        ; First atk: 1->0, 2->1, 3->3.
+        mov     ax, [word ptr p3_attack.value]
+        cmp     ax, 3
+        je      @@case_3_ax_is_3
+        dec     ax
+@@case_3_ax_is_3:
+        jmp     @@return
+
+sariel_get_first_atk_case_4:
+        cmp     [byte ptr p4_attack.value], 0
+        je      @@return
+        mov     ax, [word ptr p4_attack.value]
+        dec     ax
+
+@@return:
+        pop     bx
+        ret
+        assume  ds:cseg
+endp sariel_get_first_atk
+
+proc sariel_form_1_first_atk far
+        assume  ds:nothing
+        push    ax
+
+        push    1
+        call    far sariel_get_first_atk
+        add     sp, 2
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        pop     ax
+        ret
+        assume  ds:cseg
+endp sariel_form_1_first_atk
+
+proc sariel_form_2_to_4_first_atk far
+        assume  ds:nothing
+        push    ax
+
+        ; In-game phase -> our phase: 1->1, 3->2, 5->3, 7->4
+        mov     ax, [word ptr ds:BOSS_PHASE_OFFSET]
+        inc     ax
+        shr     ax, 1
+        push    ax
+        call    far sariel_get_first_atk
+        add     sp, 2
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        pop     ax
+        ret
+        assume  ds:cseg
+endp sariel_form_2_to_4_first_atk
+
+proc sariel_select_form_1_attack far
+        assume  ds:nothing
+
+        mov     ax, [ds:SARIEL_PATTERN_CUR_OFFSET]
+        cmp     [byte ptr p1_attack.value], 0
+        jne     @@fixed_attack
+        ; Vanilla behaviour: 0->1, 1->2, 2->0
+        cmp     ax, 2
+        jne     @@ax_is_not_2
+        xor     ax, ax
+        jmp     @@set_pattern_cur
+@@ax_is_not_2:
+        inc     ax
+        jmp     @@set_pattern_cur
+@@fixed_attack:
+        ; Fixed attack: Don't change
+@@set_pattern_cur:
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        ret
+        assume  ds:cseg
+endp sariel_select_form_1_attack
+
+proc sariel_select_form_2_attack far
+        assume  ds:nothing
+
+        mov     ax, [ds:SARIEL_PATTERN_CUR_OFFSET]
+        cmp     [byte ptr p2_attack.value], 0
+        jne     @@fixed_attack
+        ; Vanilla behaviour: 0->1, 1->0
+        mov     bx, 1
+        sub     bx, ax
+        xchg    ax, bx
+        jmp     @@set_pattern_cur
+@@fixed_attack:
+        ; Fixed attack: Don't change
+@@set_pattern_cur:
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        ret
+        assume  ds:cseg
+endp sariel_select_form_2_attack
+
+proc sariel_select_form_3_attack far
+        assume  ds:nothing
+
+        mov     ax, [ds:SARIEL_PATTERN_CUR_OFFSET]
+        cmp     [byte ptr p3_attack.value], 0
+        jne     @@fixed_attack
+        ; Vanilla behaviour: 0->1, 1->2, ..., 4->5, 5->10 (??)
+        ; The 5->10 will never happen in the original game, but will cause issue
+        ; when we "lock form". Thus, we change it to 5->0.
+        cmp     ax, 5
+        jnz     @@ax_is_not_5
+        xor     ax, ax
+        jmp     @@set_pattern_cur
+@@ax_is_not_5:
+        inc     ax
+        jmp     @@set_pattern_cur
+@@fixed_attack:
+        ; Fixed attack=2: Switch between 1 and 2.
+        ; Fixed attack=1/3: Don't change the value.
+        cmp     [byte ptr p3_attack.value], 2
+        jne     @@set_pattern_cur
+        mov     bx, 3
+        sub     bx, ax
+        xchg    ax, bx
+
+@@set_pattern_cur:
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        ret
+        assume  ds:cseg
+endp sariel_select_form_3_attack
+
+proc sariel_select_form_4_attack far
+        assume  ds:nothing
+
+        mov     ax, [ds:SARIEL_PATTERN_CUR_OFFSET]
+        cmp     [byte ptr p4_attack.value], 0
+        jne     @@fixed_attack
+        ; Vanilla behaviour: 0->1, 1->2, 2->0
+        cmp     ax, 2
+        jne     @@ax_is_not_2
+        xor     ax, ax
+        jmp     @@set_pattern_cur
+@@ax_is_not_2:
+        inc     ax
+        jmp     @@set_pattern_cur
+@@fixed_attack:
+        ; Fixed attack: Don't change
+@@set_pattern_cur:
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        ret
+        assume  ds:cseg
+endp sariel_select_form_4_attack
 
 ; OP.EXE modifications
 ; ==============================================================
@@ -1165,12 +1609,13 @@ local @@route:byte, @@saved_df:byte
 
         push    [dword ptr @@rand] [@@credit_lives_extra] [@@rem_bombs]
         push    [@@bgm_mode] [@@rank]
-        call    [dword ptr cs:practise_menu_part1_org + 1]
+        call    [dword ptr practise_menu_part1_org + 1]
         add     sp, 0Ch
 
         ; Meet the assumptions of the .COM procedures
         mov     ax, cs
         mov     ds, ax
+        assume  ds:cseg
         cld
 
         call    show_practise_menu
@@ -1193,7 +1638,7 @@ local @@route:byte, @@saved_df:byte
         mov     es, ax
         les     bx, [dword ptr es:RESSTUFF_CPP_RESIDENT_OFF]
 
-        cmp     [word ptr cs:playing_mode_slider.value], 0
+        cmp     [word ptr playing_mode_slider.value], 0
         je      @@original_mode
         mov     al, [@@route]
         mov     [byte ptr es:bx + resident_t.route], al
@@ -1218,9 +1663,10 @@ local @@route:byte, @@saved_df:byte
 
         popfd
         pop     ds
-        assume  ds:cseg
+        assume  ds:nothing
         popad
         ret
+        assume  ds:cseg
 endp hooked_resident_create_and_stuff_set
 
 inject_failed   db 0
@@ -1230,6 +1676,16 @@ inf_lives_codes         dw (offset inf_lives_part1), (inf_lives_part2), 0FFFFh
 inf_bombs_codes         dw (offset inf_bombs_part1), (inf_bombs_part2), 0FFFFh
 elis_skip_opening       dw (offset elis_skip_opening_part1), \
                            (offset elis_skip_opening_part2), 0FFFFh
+sariel_skip_opening     dw (offset sariel_skip_opening_part1), \
+                           (offset sariel_skip_opening_part2), \
+                           (offset sariel_skip_opening_part3), 0FFFFh
+sariel_skip_fake_death  dw (offset sariel_skip_fake_death_part1), \
+                           (offset sariel_skip_fake_death_part2), \
+                           (offset sariel_skip_fake_death_part3), 0FFFFh
+sariel_lock_form        dw (offset sariel_lock_form_1), \
+                           (offset sariel_lock_form_2), \
+                           (offset sariel_lock_form_3), \
+                           (offset sariel_lock_form_4), 0FFFFh
 reiiden_unconditionals  dw (offset stage_num_animate), \
                            (offset harry_up_animate)
                         dw (offset shingyoku_p2_attack), \
@@ -1247,7 +1703,15 @@ reiiden_unconditionals  dw (offset stage_num_animate), \
                         dw (offset elis_init), \
                            (offset elis_p1_attack), (offset elis_p2_attack), \
                            (offset elis_p3g_attack), (offset elis_p3b_attack)
-                        dw 0FFFFh
+                        dw (offset sariel_init), \
+                           (offset sariel_hidden_stage_warp_part1), \
+                           (offset sariel_set_form_1_first_attack), \
+                           (offset sariel_set_form_2_to_4_first_attack), \
+                           (offset sariel_hook_form_1_attack), \
+                           (offset sariel_hook_form_2_attack), \
+                           (offset sariel_hook_form_3_attack), \
+                           (offset sariel_hook_form_4_attack), 0FFFFh
+
 op_unconditionals       dw (offset practise_menu_part1), \
                            (offset practise_menu_part2), 0FFFFh
 
@@ -1342,14 +1806,26 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         movzx   ax, [shingyoku_do_skip_p1]
         push    si ax (offset shingyoku_skip_hp_animation_part1)
         call    inject_one                      ; delayed sp+6
-        ;
         movzx   ax, [elis_do_skip_opening]
         push    si ax (offset elis_skip_opening)
         call    inject_multiple                 ; delayed sp+6
-        ;
+        add     sp, 18                          ; sp+18
+
+        movzx   ax, [sariel_do_skip_opening]
+        push    si ax (offset sariel_skip_opening)
+        call    inject_multiple                 ; delayed sp+6
+        movzx   ax, [sariel_do_skip_opening_part4]
+        push    si ax (offset sariel_skip_opening_part4)
+        call    inject_one                      ; delayed sp+6
+        movzx   ax, [lock_form.value]
+        push    si ax (offset sariel_lock_form)
+        call    inject_multiple                 ; delayed sp+6
+        movzx   ax, [sariel_do_skip_fake_death]
+        push    si ax (offset sariel_skip_fake_death)
+        call    inject_multiple                 ; delayed sp+6
         push    si 1 (offset reiiden_unconditionals)
         call    inject_multiple                 ; delayed sp+6
-        add     sp, 24                          ; sp+24
+        add     sp, 30                          ; sp+30
 @@skip_reiiden_exe_patches:
 
         push    [dword ptr @@saved_filename_ptr] ds (offset op_exe)
@@ -1727,9 +2203,9 @@ endm
         mov     [word ptr p2_cur_first_attack_str], (offset f2_attack_sariel_1)
         mov     [word ptr p3_cur_first_attack_str], (offset f3_attack_sariel_1)
         mov     [word ptr p4_cur_first_attack_str], (offset f4_attack_sariel_1)
-        set_phase_attack_value 1, 4
+        set_phase_attack_value 1, 3
         set_phase_attack_value 2, 2
-        set_phase_attack_value 3, 6
+        set_phase_attack_value 3, 3
         set_phase_attack_value 4, 3
         ;   Link the UI components that are relevant to Sariel
         push    (offset sariel_linking)
@@ -1753,15 +2229,21 @@ endm
         ;     1. Regular Phase isn't selected,
         ;     2. Form 1 isn't selected, or
         ;     3. "Skip Opening Animation" tickbox is ticked.
-        cmp     [byte ptr sariel_phase_slider.value], 0
+        cmp     [byte ptr sariel_phase_slider.value], 1
         setne   al
-        cmp     [skip_opening.value], 1
-        sete    ah
-        or      al, ah
+        or      al, [skip_opening.value]
         cmp     [byte ptr phase_slider.value], 1
         setne   ah
         or      al, ah
         mov     [byte ptr sariel_do_skip_opening], al
+        ;   Raise the "skip fake death" flag if Hidden Phase is selected and
+        ;   the "Skip Opening Animation" tickbox is ticked. Raise the "skip
+        ;   Opening Part4" flag only if the Hidden Phase is selected.
+        cmp     [byte ptr sariel_phase_slider.value], 2
+        sete    al
+        mov     [byte ptr sariel_do_skip_opening_part4], al
+        and     al, [skip_opening.value]
+        mov     [byte ptr sariel_do_skip_fake_death], al
         jmp     @@skip_adding_bosses
 @@skip_sariel:
 
@@ -2234,15 +2716,11 @@ p3g_attack_elis_3       db 'EL P3G 3', 0
 f1_attack_sariel_1      db 'SR F1 1', 0
 f1_attack_sariel_2      db 'SR F1 2', 0
 f1_attack_sariel_3      db 'SR F1 3', 0
-f1_attack_sariel_4      db 'SR F1 4', 0
 f2_attack_sariel_1      db 'SR F2 1', 0
 f2_attack_sariel_2      db 'SR F2 2', 0
 f3_attack_sariel_1      db 'SR F3 1', 0
 f3_attack_sariel_2      db 'SR F3 2', 0
 f3_attack_sariel_3      db 'SR F3 3', 0
-f3_attack_sariel_4      db 'SR F3 4', 0
-f3_attack_sariel_5      db 'SR F3 5', 0
-f3_attack_sariel_6      db 'SR F3 6', 0
 f4_attack_sariel_1      db 'SR F4 1', 0
 f4_attack_sariel_2      db 'SR F4 2', 0
 f4_attack_sariel_3      db 'SR F4 3', 0
@@ -2447,10 +2925,20 @@ patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
                            (offset elis_p1_attack_pat + 3), \
                            (offset elis_p2_attack_pat + 3), \
                            (offset elis_p3b_attack_pat + 3), \
-                           (offset elis_p3g_attack_pat + 3), 0FFFFh
+                           (offset elis_p3g_attack_pat + 3)
+                        dw (offset sariel_skip_opening_part1_pat + 3), \
+                           (offset sariel_init_pat + 3), \
+                           (offset sariel_set_form_1_first_attack_pat + 3), \
+                           (offset sariel_set_form_2_to_4_first_attack_pat + \
+                                   3), \
+                           (offset sariel_hook_form_1_attack_pat + 3), \
+                           (offset sariel_hook_form_2_attack_pat + 3), \
+                           (offset sariel_hook_form_3_attack_pat + 3), \
+                           (offset sariel_hook_form_4_attack_pat + 3), \
+                           0FFFFh
 
-COMMAND_PARAM_LEN_OFFSET        EQU 80h
-COMMAND_PARAM_OFFSET            EQU 81h
+COMMAND_PARAM_LEN_OFFSET        = 80h
+COMMAND_PARAM_OFFSET            = 81h
 
 include 'hookint.asm'   ; Hook Interrupts
 
