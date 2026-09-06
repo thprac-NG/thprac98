@@ -1964,6 +1964,7 @@ YUUGENMAGAN_INITIAL_HP          = 16
 yuugenmagan_min_hp_in_phases    db 17, 16, 13, 11, 9, 1
 elis_min_hp_in_phases           db 15, 10, 6, 1
 sariel_init_hp_in_phases        db 18, 6
+mima_min_hp_in_phases           db 13, 7, 1
 
 regular_stage_linking   dw (offset stage_slider), (offset life_slider), 0FFFFh
 shingyoku_linking       dw (offset stage_slider), (offset phase_slider), \
@@ -1983,6 +1984,9 @@ sariel_linking          dw (offset stage_slider), \
                            (offset p2_attack), (offset p3_attack), \
                            (offset p4_attack), (offset skip_opening), \
                            (offset life_slider), 0FFFFh
+mima_linking            dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset p1_attack), \
+                           (offset p2_attack), (offset life_slider), 0FFFFh
 
 ; --------------------------------------------------------------------------
 ; Function: update_prac_window_components_from_its_values
@@ -2246,6 +2250,43 @@ endm
         mov     [byte ptr sariel_do_skip_fake_death], al
         jmp     @@skip_adding_bosses
 @@skip_sariel:
+
+        ; Mima
+        cmp     [byte ptr section_slider.value], 2
+        jne     @@skip_mima
+        ;   Initialize special UI labels
+        cmp     [byte ptr current_ui_boss], UI_MIMA
+        je      @@skip_mima_init
+        mov     [byte ptr current_ui_boss], UI_MIMA
+        ;   Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 2
+        mov     [word ptr p1_cur_first_attack_str], (offset p1_attack_mima_1)
+        mov     [word ptr p2_cur_first_attack_str], (offset p2_attack_mima_1)
+        set_phase_attack_value 1, 4
+        set_phase_attack_value 2, 4
+        ;   Link the UI components that are relevant to Elis
+        push    (offset mima_linking)
+        call    link_components
+        add     sp, 2
+        mov     [byte ptr prev_phase], 0
+@@skip_mima_init:
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr phase_slider.value], al
+        je      @@skip_mima_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     bx, [word ptr phase_slider.value]
+        mov     al, [byte ptr (offset mima_min_hp_in_phases) + bx]
+        mov     ah, [byte ptr (offset mima_min_hp_in_phases) - 1 + bx]
+        dec     ah
+        mov     [byte ptr hp_slider.min_value], al
+        mov     [byte ptr hp_slider.max_value], ah
+        mov     [byte ptr hp_slider.value], ah
+@@skip_mima_init_hp:
+        mov     al, [byte ptr phase_slider.value]
+        mov     [byte ptr prev_phase], al
+        jmp     @@skip_adding_bosses
+@@skip_mima:
 
         ; Other boss stages are treated as regular stages for now.
         mov     [byte ptr current_ui_boss], UI_REGULAR
@@ -2724,6 +2765,14 @@ f3_attack_sariel_3      db 'SR F3 3', 0
 f4_attack_sariel_1      db 'SR F4 1', 0
 f4_attack_sariel_2      db 'SR F4 2', 0
 f4_attack_sariel_3      db 'SR F4 3', 0
+p1_attack_mima_1        db 'MM P1 1', 0
+p1_attack_mima_2        db 'MM P1 2', 0
+p1_attack_mima_3        db 'MM P1 3', 0
+p1_attack_mima_4        db 'MM P1 4', 0
+p2_attack_mima_1        db 'MM P2 1', 0
+p2_attack_mima_2        db 'MM P2 2', 0
+p2_attack_mima_3        db 'MM P2 3', 0
+p2_attack_mima_4        db 'MM P2 4', 0
 p1_cur_first_attack_str dw (offset p1_attack_elis_1)
 p2_cur_first_attack_str dw (offset p2_attack_shingyoku_1)
 p3_cur_first_attack_str dw (offset p3b_attack_elis_1)
