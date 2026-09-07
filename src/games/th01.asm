@@ -898,6 +898,9 @@ endp hooked_reiiden_1b03_0a19
 ; } where "xxxx" is cseg, and "yyyy" is (offset elis_p3g_attack_select).
 ; Original assembly: callf irand
 ; Modified assembly: callf elis_p3g_attack_select
+;
+; -----------------------
+; (*1) This is an absolute call, the segment address might differ.
 
 elis_skip_opening_part1_org     db 0C7h, 006h, 0D3h, 05Dh, 000h, 000h
 elis_skip_opening_part1_pat     db 0E9h, 0F4h, 001h, NOP_3BYTES_SI
@@ -1093,6 +1096,184 @@ endp elis_p3g_attack_select
 
 ; Sariel Warps
 ; ============================
+;
+; sariel_skip_opening_part1 {
+;   2865:0062 | 1E 68 41 15 9A BE 04 6F 20 -> 9A yy yy xx xx EB 12 89 F6
+;             |                      ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_draw_background).
+; sariel_skip_opening_part2 {
+;   2865:009B | 83 C4 16 -> 83 C4 0C
+; }
+; sariel_skip_fake_death_part3 {
+;   2865:0089 | 1E 68 59 15 9A F9 00 45 22 -> 83 C4 04 EB 15 8D B4 00 00
+;             |                      ^^ ^^ (*1)
+; }
+; The modifications of the two patches:
+; - 2865:0062 | 1E                push   ds
+; - 2865:0063 | 68 41 15          push   1541h  ; pointer to "boss6_l.grp"
+; - 2865:0066 | 9A BE 04 6F 20    callf  grp_put_palette_show     ; delayed sp+4
+; + 2865:0062 | 9A yy yy xx xx    callf  sariel_draw_background
+; + 2865:0067 | EB 12             jmp    2865:007B
+; + 2865:0069 | 89 F6             mov    si, si  ; effectively nop
+;   2865:006B | 6A 01             push   1
+;   2865:006D | 9A 1E 01 92 1E    callf  graph_accesspage_func    ; delayed sp+2
+;   2865:0072 | 1E                push   ds
+;   2865:0073 | 68 4D 15          push   154Dh  ; pointer to "boss6_h.grp"
+;   2865:0076 | 9A BE 04 6F 20    callf  grp_put_palette_show     ; delayed sp+4
+;   2865:007B | 6A 00             push   0
+;   2865:007D | 9A 1E 01 92 1E    callf  graph_accesspage_func    ; delayed sp+2
+;   2865:0082 | 6A 04             push   BOSS_STAGE
+;   2865:0084 | 9A 8E 05 39 30    callf  stageobjs_init_and_render ; dela.. sp+2
+; - 2865:0089 | 1E                push   ds
+; - 2865:008A | 68 59 15          push   1559h  ; pointer to "TENSI.MDT"
+; - 2865:008D | 9A F9 00 45 22    callf  mdrv2_bgm_load           ; delayed sp+4
+; + 2865:0089 | 83 C4 04          add    sp, 04h                          ; sp+4
+; + 2865:008C | EB 15             jmp    2865:00A3
+; + 2865:008E | 8D B4 00 00       lea    si, [si + 0000h]  ; effectively nop
+;   2865:0092 | 1E                push   ds
+;   2865:0093 | 68 63 15          push   1563h  ; pointer to SE_FN=="zigoku.mde"
+;   2865:0096 | 9A 09 01 45 22    callf  mdrv2_se_load            ; delayed sp+4
+; - 2865:009B | 83 C4 16          add    sp, 16h                         ; sp+20
+; + 2865:009B | 83 C4 0C          add    sp, 0Ch                         ; sp+12
+;   2865:009E | 9A 19 01 45 22    callf  mdrv2_bgm_play
+;   2865:00A3 | ...
+;
+; sariel_skip_opening_part3 {
+;   2865:00B1 | EB 19 -> EB 46
+; }
+; Original assembly: jmp 2865:00CC  ; the "guarded do" jump
+; Modified assembly: jmp 2865:00F9  ; skip the entire loop
+;
+; sariel_skip_opening_part4 {
+;   2865:3AFE | FF 06 2A 5D -> E9 AF 01 90
+; }
+; Original assembly:
+;   2865:3AFE | FF 06 2A 5D       inc    [word ptr boss_phase_frame]
+; Modified assembly:
+;   2865:3AFE | FF 06 2A          jmp    2865:3CB0  ; jump to the init part
+;   2865:3B01 | 90                nop
+;
+; sariel_init {
+;   2865:3CC1 | 9A 08 16 00 10 BB 06 00 -> 9A yy yy xx xx EB 14 90
+;             |          ^^ ^^
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_init_proc).
+; The modifications of the patch:
+; - 2865:3CC1 | 9A 08 16 00 10    callf  irand
+; - 2865:3CC6 | BB 06 00          mov    bx, 6
+; + 2865:3CC1 | 9A yy yy xx xx    callf  sariel_init_proc
+; + 2865:3CC6 | EB 14             jmp    2865:3CDC
+; + 2865:3CC8 | 90                nop
+;   2865:3CC9 | 99                cwd
+;   2865:3CCA | F7 FB             idiv   bx
+;   2865:3CCC | 42                inc    dx
+;   2865:3CCD | 89 16 F9 14       mov    [phase.patterns_until_next], dx
+;   2865:3CD1 | C7 06 2A 5D 00 00 mov    [word ptr boss_phase_frame], 0
+;   2865:3CD7 | C6 06 97 6A 00    mov    [byte ptr initial_hp_rendered], 0
+;   2865:3CDC | ...
+;
+; sariel_skip_fake_death_part1 {
+;   2865:41F0 | C7 06 2A 5D 00 00 -> C7 06 2A 5D C8 00
+; }
+; Original assembly: mov [word ptr boss_phase_frame], 0
+; Modified assembly: mov [word ptr boss_phase_frame], 200
+;
+; sariel_skip_fake_death_part2 {
+;   2865:41F0 | 1E 68 E8 3F -> EB 10 89 F6
+; }
+; The modifications of the patch:
+; - 2865:438F | 1E                push    ds
+; - 2865:4390 | 68 E8 3F          push    offset grp_palette
+; + 2865:438F | EB 10             jmp     2865:43A1
+; + 2865:4391 | 89 F6             mov     si, si  ; effectively nop
+;   2865:4393 | 1E                push    ds
+;   2865:4394 | 68 F0 06          push    offset z_Palettes
+;   2865:4397 | 6A 00             push    0
+;   2865:4399 | 9A 64 03 73 21    callf   pagetrans_diagonal_8x8_with_palette
+;   2865:439E | 83 C4 0A          add     sp, 0Ah
+;   2865:43A1 | ...
+;
+; sariel_hidden_stage_warp {
+;   2865:442A | C7 06 28 5D 06 00 -> 8D 74 00 8D 7D 00
+; }
+; Original assembly:
+;   2865:442A | C7 06 28 5D 06 00 mov    [word ptr boss_hp], 6
+; Modified assembly (effectively nop):
+;   2865:442A | 8D 74 00          lea    si, [si + 00h]
+;   2865:442D | 8D 7D 00          lea    di, [di + 00h]
+;
+; sariel_lock_form_1 {
+;   2865:3E36 | 0F 8C 44 09 -> E9 45 09 90
+; }
+; sariel_lock_form_2 {
+;   2865:3F29 | 0F 8C 51 08 -> E9 52 08 90
+; }
+; sariel_lock_form_3 {
+;   2865:4045 | 0F 8C 35 07 -> E9 36 07 90
+; }
+; sariel_lock_form_4 {
+;   2865:417A | 0F 8C 00 06 -> E9 01 06 90
+; }
+; The modifications of these patch (take form_1 as an example, the assembly of
+; the other three is exactly the same):
+;   2865:3E2F | A1 F7 14          mov    ax, [phase.patterns_until_next]
+;   2865:3E32 | 3B 06 F9 14       cmp    ax, [phase.u1.patterns_done]
+; - 2865:3E36 | 0F 8C 44 09       jl     2865:477E  ; return if finish
+; + 2865:3E36 | E9 45 09          jmp    2865:477E  ; always return
+; + 2865:3E39 | 90                nop
+;
+; sariel_set_form_1_first_attack {
+;   2865:3CB5 | C7 06 F5 14 00 00 -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_set_form_1_first_attack).
+; Original assembly:
+;   2865:3CB5 | C7 06 F5 14 00 00 mov    [word ptr pattern_cur], 0
+; Modified assembly:
+;   2865:3CB5 | 9A yy yy xx xx    callf  sariel_set_form_1_first_attack
+;   2865:3CBA | 90                nop
+;
+; sariel_set_form_2_to_4_first_attack {
+;   2865:4192 | C7 06 F5 14 00 00 -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is
+; (offset sariel_set_form_2_to_4_first_attack).
+; Original assembly:
+;   2865:4192 | C7 06 F5 14 00 00 mov    [word ptr pattern_cur], 0
+; Modified assembly:
+;   2865:4192 | 9A yy yy xx xx    callf  sariel_set_form_2_to_4_first_attack
+;   2865:4197 | 90                nop
+;
+; sariel_hook_form_1_attack {
+;   2865:3DDA | 83 3E F5 14 02 75 04 -> 9A yy yy xx xx EB 0B
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_hook_form_1_attack).
+; sariel_hook_form_3_attack {
+;   2865:3FE8 | 83 3E F5 14 02 75 04 -> 9A yy yy xx xx EB 0B
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_hook_form_3_attack).
+; sariel_hook_form_4_attack {
+;   2865:411E | 83 3E F5 14 02 75 04 -> 9A yy yy xx xx EB 0B
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_hook_form_4_attack).
+; The modification of these patch: (take form_1 as an example, the assembly of
+; the other two is almost the same):
+; - 2865:3DDA | 83 3E F5 14 02    cmp    pattern_cur, 2  ; 5 in form_3
+; - 2865:3DDF | 75 04             jnz    2865:3DE5
+; + 2865:3DDA | 9A yy yy xx xx    callf  sariel_select_form_1_attack
+; + 2865:3DDF | EB 0B             jmp    2865:3DEC
+;   2865:3DE1 | 33 C0             xor    ax, ax  ; mov ax, 10  in form_3
+;   2865:3DE3 | EB 04             jmp    2865:3DE9
+;   2865:3DE5 | A1 F5 14          mov    ax, pattern_cur
+;   2865:3DE8 | 40                inc    ax
+;   2865:3DE9 | A3 F5 14          mov    pattern_cur, ax
+;   2865:3DEC | ...
+;
+; sariel_hook_form_2_attack {
+;   2865:3ED8 | 2B 06 F5 14 A3 F5 14 -> 9A yy yy xx xx 89 F6
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_hook_form_2_attack).
+; The modification of the patch:
+;   2865:3ED5 | B8 01 00          mov    ax, 1
+; - 2865:3ED8 | 2B 06 F5 14       sub    ax, [word ptr pattern_cur]
+; - 2865:3EDC | A3 F5 14          inc    [word ptr u1.patterns_done]
+; + 2865:3ED8 | 9A yy yy xx xx    callf  sariel_hook_form_2_attack
+; + 2865:3EDD | 89 F6             mov    si, si
+;
+; -----------------------
+; (*1) This is an absolute call, the segment address might differ.
 
 sariel_skip_opening_part1_org   db 01Eh, 068h, 041h, 015h, \
                                    09Ah, 0BEh, 004h, 000h, 000h
@@ -1117,13 +1298,13 @@ inject_def sariel_skip_opening_part3, 0, reiiden, 2865h, 00B1h, 2
 ;       players to react, and
 ;   (c) the disturbance of it in vanilla game won't be recreated then.
 sariel_skip_opening_part4_org   db 0FFh, 006h, 02Ah, 05Dh
-sariel_skip_opening_part4_pat   db 0E9h, 0AFh, 001h, 090h
+sariel_skip_opening_part4_pat   db 0E9h, 0AFh, 001h, NOP_1BYTE
 inject_def sariel_skip_opening_part4, 0, reiiden, 2865h, 3AFEh, 4
 
 sariel_init_org         db 09Ah, 008h, 016h, 000h, 000h, 0BBh, 006h, 000h
 sariel_init_pat         db 09Ah
                         dw (offset sariel_init_proc), 0
-                        db 0EBh, 014h
+                        db 0EBh, 014h, NOP_1BYTE
 sariel_init_var         db 0, 0, 0, 1, 1, 0, 0, 0
 inject_def sariel_init, 1, reiiden, 2865h, 3CC1h, 8
 
@@ -1135,12 +1316,6 @@ sariel_skip_fake_death_part2_org        db 01Eh, 068h, 0E8h, 03Fh
 sariel_skip_fake_death_part2_pat        db 0EBh, 010h, NOP_2BYTES_SI
 inject_def sariel_skip_fake_death_part2, 0, reiiden, 2865h, 438Fh, 4
 
-; sariel_skip_fake_death_part3_org        db 09Ah, 04Eh, 000h, 000h, 000h
-; sariel_skip_fake_death_part3_pat        db 09Ah
-;                                         dw (offset reiiden_0b50_2598), 0
-; sariel_skip_fake_death_part3_var        db 0, 0, 0, 1, 1
-; inject_def sariel_skip_fake_death_part3, 1, reiiden, 0B50h, 2598h, 5
-
 ; Yes, sp+4, not +0Eh, since we've already patched the sp+16h to sp+0Ch above.
 sariel_skip_fake_death_part3_org        db 01Eh, 068h, 059h, 015h, \
                                            09Ah, 0F9h, 000h, 000h, 000h
@@ -1149,9 +1324,9 @@ sariel_skip_fake_death_part3_pat        db 083h, 0C4h, 004h, 0EBh, 015h, \
 sariel_skip_fake_death_part3_var        db 7 dup (0), 1, 1
 inject_def sariel_skip_fake_death_part3, 1, reiiden, 2865h, 0089h, 9
 
-sariel_hidden_stage_warp_part1_org      db 0C7h, 006h, 028h, 05Dh, 006h, 000h
-sariel_hidden_stage_warp_part1_pat      db NOP_3BYTES_SI, NOP_3BYTES_DI
-inject_def sariel_hidden_stage_warp_part1, 0, reiiden, 2865h, 442Ah, 6
+sariel_hidden_stage_warp_org            db 0C7h, 006h, 028h, 05Dh, 006h, 000h
+sariel_hidden_stage_warp_pat            db NOP_3BYTES_SI, NOP_3BYTES_DI
+inject_def sariel_hidden_stage_warp, 0, reiiden, 2865h, 442Ah, 6
 
 sariel_lock_form_1_org  db 00Fh, 08Ch, 044h, 009h
 sariel_lock_form_1_pat  db 0E9h, 045h, 009h, NOP_1BYTE
@@ -1168,11 +1343,6 @@ inject_def sariel_lock_form_3, 0, reiiden, 2865h, 4045h, 4
 sariel_lock_form_4_org  db 00Fh, 08Ch, 000h, 006h
 sariel_lock_form_4_pat  db 0E9h, 001h, 006h, NOP_1BYTE
 inject_def sariel_lock_form_4, 0, reiiden, 2865h, 417Ah, 4
-
-; Pointless due to sariel_hook_form_3_attack.
-sariel_fix_form_3_quirk_org     db 0B8h, 00Ah, 000h
-sariel_fix_form_3_quirk_pat     db 0B8h, 000h, 000h
-inject_def sariel_fix_form_3_quirk, 0, reiiden, 2865h, 3FEFh, 3
 
 sariel_set_form_1_first_attack_org      db 0C7h, 006h, 0F5h, 014h, 000h, 000h
 sariel_set_form_1_first_attack_pat      db 09Ah
@@ -1328,30 +1498,6 @@ local @@irand:dword
         ret
         assume  ds:cseg
 endp sariel_init_proc
-
-; Unused
-proc reiiden_0b50_2598 far
-local @@text_fillca:dword
-        assume  ds:nothing
-        pushfd
-        pushad
-
-        mov     ax, [cur_psp]
-        add     ax, 10h + TEXT_FILLCA_SEGMENT
-        mov     [word ptr @@text_fillca], TEXT_FILLCA_OFFSET
-        mov     [word ptr @@text_fillca + 2], ax
-
-        ; push    TEXT_BLACK or TEXT_REVERSE_MASK
-        push    TEXT_WHITE
-        push    ' '
-        call    [dword ptr @@text_fillca]
-        ; Callee has already cleaned the stack
-
-        popad
-        popfd
-        ret
-        assume  ds:cseg
-endp reiiden_0b50_2598
 
 ; Get the first attack of the selected phase according to the settings.
 proc sariel_get_first_atk far
@@ -1704,7 +1850,7 @@ reiiden_unconditionals  dw (offset stage_num_animate), \
                            (offset elis_p1_attack), (offset elis_p2_attack), \
                            (offset elis_p3g_attack), (offset elis_p3b_attack)
                         dw (offset sariel_init), \
-                           (offset sariel_hidden_stage_warp_part1), \
+                           (offset sariel_hidden_stage_warp), \
                            (offset sariel_set_form_1_first_attack), \
                            (offset sariel_set_form_2_to_4_first_attack), \
                            (offset sariel_hook_form_1_attack), \
