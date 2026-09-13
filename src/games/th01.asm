@@ -2320,10 +2320,13 @@ current_ui_boss db 0
 prev_phase      db 0
 
 YUUGENMAGAN_INITIAL_HP          = 16
+KIKURI_INITIAL_HP               = 14
 yuugenmagan_min_hp_in_phases    db 17, 16, 13, 11, 9, 1
 elis_min_hp_in_phases           db 15, 10, 6, 1
 sariel_init_hp_in_phases        db 18, 6
 mima_min_hp_in_phases           db 13, 7, 1
+kikuri_min_hp_in_phases         db 11, 7, 7, 1
+kikuri_default_hp_in_phases     db 14, 10, 10, 6
 
 regular_stage_linking   dw (offset stage_slider), (offset life_slider), 0FFFFh
 shingyoku_linking       dw (offset stage_slider), (offset phase_slider), \
@@ -2631,7 +2634,7 @@ maintain_mima_specific_ui:
         mov     [word ptr p2_cur_first_attack_str], (offset p2_attack_mima_1)
         set_phase_attack_value 1, 4
         set_phase_attack_value 2, 4
-        ;   Link the UI components that are relevant to Elis
+        ;   Link the UI components that are relevant to Mima
         push    (offset mima_linking)
         call    link_components
         add     sp, 2
@@ -2655,36 +2658,34 @@ maintain_mima_specific_ui:
 
         ; Kikuri
 maintain_kikuri_specific_ui:
-;         ;   Initialize special UI labels
-;         cmp     [byte ptr current_ui_boss], UI_KIKURI
-;         je      @@skip_mima_init
-;         mov     [byte ptr current_ui_boss], UI_KIKURI
-;         ;     Initialize UI values
-;         mov     [byte ptr phase_slider.value], 1
-;         mov     [byte ptr phase_slider.max_value], 4
-;         mov     [word ptr p4_cur_first_attack_str], (offset p4_attack_kikuri_1)
-;         set_phase_attack_value 1, 4
-;         set_phase_attack_value 2, 4
-;         ;     Link the UI components that are relevant to Elis
-;         push    (offset mima_linking)
-;         call    link_components
-;         add     sp, 2
-;         mov     [byte ptr prev_phase], 0
-; @@skip_mima_init:
-;         mov     al, [byte ptr prev_phase]
-;         cmp     [byte ptr phase_slider.value], al
-;         je      @@skip_mima_init_hp
-;         ;   Set the parameters of the HP slider according to the phase selected
-;         mov     bx, [word ptr phase_slider.value]
-;         mov     al, [byte ptr (offset mima_min_hp_in_phases) + bx]
-;         mov     ah, [byte ptr (offset mima_min_hp_in_phases) - 1 + bx]
-;         dec     ah
-;         mov     [byte ptr hp_slider.min_value], al
-;         mov     [byte ptr hp_slider.max_value], ah
-;         mov     [byte ptr hp_slider.value], ah
-; @@skip_mima_init_hp:
-;         mov     al, [byte ptr phase_slider.value]
-;         mov     [byte ptr prev_phase], al
+        ;   Initialize special UI labels
+        cmp     [byte ptr current_ui_boss], UI_KIKURI
+        je      @@skip_kikuri_init
+        mov     [byte ptr current_ui_boss], UI_KIKURI
+        ;     Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 4
+        mov     [word ptr p4_cur_first_attack_str], (offset p4_attack_kikuri_1)
+        set_phase_attack_value 4, 4
+        ;     Link the UI components that are relevant to Kikuri
+        push    (offset kikuri_linking)
+        call    link_components
+        add     sp, 2
+        mov     [byte ptr prev_phase], 0
+@@skip_kikuri_init:
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr phase_slider.value], al
+        je      @@skip_kikuri_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     bx, [word ptr phase_slider.value]
+        mov     al, [byte ptr (offset kikuri_min_hp_in_phases) - 1 + bx]
+        mov     ah, [byte ptr (offset kikuri_default_hp_in_phases) - 1 + bx]
+        mov     [byte ptr hp_slider.min_value], al
+        mov     [byte ptr hp_slider.max_value], KIKURI_INITIAL_HP
+        mov     [byte ptr hp_slider.value], ah
+@@skip_kikuri_init_hp:
+        mov     al, [byte ptr phase_slider.value]
+        mov     [byte ptr prev_phase], al
         jmp     @@skip_adding_bosses
 
         ; Kongara
