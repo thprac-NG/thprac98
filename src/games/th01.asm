@@ -1096,6 +1096,8 @@ endp elis_p3g_attack_select
 
 ; Sariel Warps
 ; ============================
+; Check https://github.com/H-J-Granger/ReC98/commit/ad24150b06e323d7aeea9ed29ad08966b5b2927d
+; for the C version of the modification in this section.
 ;
 ; sariel_skip_opening_part1 {
 ;   2865:0062 | 1E 68 41 15 9A BE 04 6F 20 -> 9A yy yy xx xx EB 12 89 F6
@@ -1499,7 +1501,13 @@ local @@irand:dword
         assume  ds:cseg
 endp sariel_init_proc
 
-; Get the first attack of the selected phase according to the settings.
+; --------------------------------------------------------------------------
+; Function: sariel_get_first_atk
+; Description: Get the first attack of the selected phase according to the
+;              practise settings.
+; Input: Argument 1 (word): The current phase.
+; Output (in AX): The first attack number.
+; --------------------------------------------------------------------------
 proc sariel_get_first_atk far
 arg @@cur_phase:word
         assume  ds:nothing
@@ -1547,6 +1555,11 @@ sariel_get_first_atk_case_4:
         assume  ds:cseg
 endp sariel_get_first_atk
 
+; --------------------------------------------------------------------------
+; Function: sariel_form_1_first_atk
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
 proc sariel_form_1_first_atk far
         assume  ds:nothing
         push    ax
@@ -1561,12 +1574,17 @@ proc sariel_form_1_first_atk far
         assume  ds:cseg
 endp sariel_form_1_first_atk
 
+; --------------------------------------------------------------------------
+; Function: sariel_form_2_to_4_first_atk
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
 proc sariel_form_2_to_4_first_atk far
         assume  ds:nothing
         push    ax
 
         ; In-game phase -> our phase: 1->1, 3->2, 5->3, 7->4
-        mov     ax, [word ptr ds:BOSS_PHASE_OFFSET]
+        movzx   ax, [ds:BOSS_PHASE_OFFSET]
         inc     ax
         shr     ax, 1
         push    ax
@@ -1579,6 +1597,11 @@ proc sariel_form_2_to_4_first_atk far
         assume  ds:cseg
 endp sariel_form_2_to_4_first_atk
 
+; --------------------------------------------------------------------------
+; Function: sariel_select_form_1_attack
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
 proc sariel_select_form_1_attack far
         assume  ds:nothing
 
@@ -1602,6 +1625,11 @@ proc sariel_select_form_1_attack far
         assume  ds:cseg
 endp sariel_select_form_1_attack
 
+; --------------------------------------------------------------------------
+; Function: sariel_select_form_2_attack
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
 proc sariel_select_form_2_attack far
         assume  ds:nothing
 
@@ -1622,6 +1650,11 @@ proc sariel_select_form_2_attack far
         assume  ds:cseg
 endp sariel_select_form_2_attack
 
+; --------------------------------------------------------------------------
+; Function: sariel_select_form_3_attack
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
 proc sariel_select_form_3_attack far
         assume  ds:nothing
 
@@ -1654,6 +1687,11 @@ proc sariel_select_form_3_attack far
         assume  ds:cseg
 endp sariel_select_form_3_attack
 
+; --------------------------------------------------------------------------
+; Function: sariel_select_form_4_attack
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
 proc sariel_select_form_4_attack far
         assume  ds:nothing
 
@@ -1676,6 +1714,149 @@ proc sariel_select_form_4_attack far
         ret
         assume  ds:cseg
 endp sariel_select_form_4_attack
+
+; Mima Warps
+; ============================
+
+mima_init_org   db 0C7h, 006h, 0D8h, 054h, 000h, 000h
+mima_init_pat   db 09Ah
+                dw (offset mima_init_proc), 0
+                db NOP_1BYTE
+inject_def mima_init 0, reiiden, 1E33h, 17CBh, 6
+
+mima_lock_phase_1_org   db 083h, 03Eh, 0D8h, 054h, 003h, 075h, 004h
+mima_lock_phase_1_pat   db 09Ah
+                        dw (offset mima_select_form_1_atk), 0
+                        db 0EBh, 00Ah
+inject_def mima_lock_phase_1 0, reiiden, 1E33h, 185Dh, 7
+
+mima_lock_phase_2_org   db 083h, 03Eh, 0D8h, 054h, 003h, 075h, 004h
+mima_lock_phase_2_pat   db 09Ah
+                        dw (offset mima_select_form_2_atk), 0
+                        db 0EBh, 00Ah
+inject_def mima_lock_phase_2 0, reiiden, 1E33h, 19A3h, 7
+
+mima_set_phase2_first_atk_org   db 0C7h, 006h, 0D8h, 054h, 000h, 000h
+mima_set_phase2_first_atk_pat   db 09Ah
+                                dw (offset mima_set_phase2_first_atk_proc), 0
+                                db NOP_1BYTE
+inject_def mima_set_phase2_first_atk 0, reiiden, 1E33h, 195Ch, 6
+
+MIMA_PATTERN_CUR_OFFSET = 54D8h
+
+; --------------------------------------------------------------------------
+; Function: mima_init_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc mima_init_proc far
+        assume  ds:nothing
+        push    ax bx cx
+
+        mov     ax, [word ptr phase_slider.value]
+        shl     ax, 1
+        dec     ax
+        mov     [ds:BOSS_PHASE_OFFSET], al
+        mov     bx, offset p1_attack
+        cmp     ax, 3
+        jne     @@skip_set_p2_attack
+        mov     bx, offset p2_attack
+@@skip_set_p2_attack:
+        xor     cx, cx
+        mov     ax, [word ptr cs:bx + ui_slider.value]
+        test    ax, ax
+        jz      @@skip_set_first_atk
+        dec     ax
+        mov     cx, ax
+@@skip_set_first_atk:
+        mov     [ds:MIMA_PATTERN_CUR_OFFSET], cx
+        mov     ax, [word ptr hp_slider.value]
+        mov     [ds:BOSS_HP_OFFSET], ax
+
+        cmp     [byte ptr phase_slider.value], 1
+        je      @@skip_render_hp
+        call    render_hp
+@@skip_render_hp:
+
+        pop     cx bx ax
+        ret
+        assume  ds:cseg
+endp mima_init_proc
+
+; --------------------------------------------------------------------------
+; Function: mima_select_form_1_atk
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc mima_select_form_1_atk far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr p1_attack.value]
+        test    ax, ax
+        jz      @@skip_updating_ax
+        mov     ax, [ds:MIMA_PATTERN_CUR_OFFSET]
+        xor     cx, cx
+        cmp     ax, 3
+        je      @@skip_setting_cx_as_ax_plus_1
+        mov     cx, ax
+        inc     cx
+@@skip_setting_cx_as_ax_plus_1:
+        mov     [ds:MIMA_PATTERN_CUR_OFFSET], ax
+@@skip_updating_ax:
+
+        pop     ax
+        ret
+        assume  ds:cseg
+endp mima_select_form_1_atk
+
+; --------------------------------------------------------------------------
+; Function: mima_select_form_2_atk
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc mima_select_form_2_atk far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr p2_attack.value]
+        test    ax, ax
+        jz      @@skip_updating_ax
+        mov     ax, [ds:MIMA_PATTERN_CUR_OFFSET]
+        xor     cx, cx
+        cmp     ax, 3
+        je      @@skip_setting_cx_as_ax_plus_1
+        mov     cx, ax
+        inc     cx
+@@skip_setting_cx_as_ax_plus_1:
+        mov     [ds:MIMA_PATTERN_CUR_OFFSET], ax
+@@skip_updating_ax:
+
+        pop     ax
+        ret
+        assume  ds:cseg
+endp mima_select_form_2_atk
+
+; --------------------------------------------------------------------------
+; Function: mima_set_phase2_first_atk_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc mima_set_phase2_first_atk_proc far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr p2_attack.value]
+        test    ax, ax
+        jz      @@skip_setting_ax
+        dec     ax
+@@skip_setting_ax:
+        mov     [ds:MIMA_PATTERN_CUR_OFFSET], ax
+
+        pop     ax
+        ret
+        assume  ds:cseg
+endp mima_set_phase2_first_atk_proc
 
 ; OP.EXE modifications
 ; ==============================================================
@@ -1856,7 +2037,10 @@ reiiden_unconditionals  dw (offset stage_num_animate), \
                            (offset sariel_hook_form_1_attack), \
                            (offset sariel_hook_form_2_attack), \
                            (offset sariel_hook_form_3_attack), \
-                           (offset sariel_hook_form_4_attack), 0FFFFh
+                           (offset sariel_hook_form_4_attack)
+                        dw (offset mima_init), (offset mima_lock_phase_1), \
+                           (offset mima_lock_phase_2), \
+                           (offset mima_set_phase2_first_atk), 0FFFFh
 
 op_unconditionals       dw (offset practise_menu_part1), \
                            (offset practise_menu_part2), 0FFFFh
@@ -3129,8 +3313,11 @@ patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
                            (offset sariel_hook_form_1_attack_pat + 3), \
                            (offset sariel_hook_form_2_attack_pat + 3), \
                            (offset sariel_hook_form_3_attack_pat + 3), \
-                           (offset sariel_hook_form_4_attack_pat + 3), \
-                           0FFFFh
+                           (offset sariel_hook_form_4_attack_pat + 3)
+                        dw (offset mima_init_pat + 3), \
+                           (offset mima_lock_phase_1_pat + 3), \
+                           (offset mima_lock_phase_2_pat + 3), \
+                           (offset mima_set_phase2_first_atk_pat + 3), 0FFFFh
 
 COMMAND_PARAM_LEN_OFFSET        = 80h
 COMMAND_PARAM_OFFSET            = 81h
