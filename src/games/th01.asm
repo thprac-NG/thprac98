@@ -1717,6 +1717,35 @@ endp sariel_select_form_4_attack
 
 ; Mima Warps
 ; ============================
+; Check https://github.com/H-J-Granger/ReC98/commit/a439c47ee95a8514bbcc127e8db7cbfbced00409
+; for the C version of the modification in this section.
+;
+; mima_init {
+;   1E33:17CB | C7 06 D8 54 00 00 -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is (offset mima_init_proc).
+;
+; mima_lock_phase_1 {
+;   1E33:185D | 83 3E D8 54 03 75 04 -> 9A yy yy xx xx EB 0A
+; } where "xxxx" is cseg, and "yyyy" is (offset mima_select_form_1_atk).
+; mima_lock_phase_2 {
+;   1E33:19A3 | 83 3E D8 54 03 75 04 -> 9A yy yy xx xx EB 0A
+; } where "xxxx" is cseg, and "yyyy" is (offset mima_select_form_2_atk).
+; The modifications of these patch (almost identical, take mima_lock_phase_1 as
+; an example):
+; - 1E33:185D | 83 3E D8 54 03    cmp    word_49E78, 3
+; - 1E33:1862 | 75 04             jnz    short loc_2FB98
+; + 1E33:185D | 9A yy yy xx xx    callf  mima_select_form_1_atk
+; + 1E33:1862 | EB 0B             jmp    1E33:186F
+;   1E33:1864 | 33 C0             xor    ax, ax
+;   1E33:1866 | EB 04             jmp    short loc_2FB9C
+;   1E33:1868 | A1 D8 54          mov    ax, word_49E78
+;   1E33:186B | 40                inc    ax
+;   1E33:186C | A3 D8 54          mov    word_49E78, ax
+;   1E33:186F | ...
+;
+; mima_set_phase2_first_atk {
+;   1E33:195C | C7 06 D8 54 00 00 -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is (offset mima_set_phase2_first_atk_proc).
 
 mima_init_org   db 0C7h, 006h, 0D8h, 054h, 000h, 000h
 mima_init_pat   db 09Ah
