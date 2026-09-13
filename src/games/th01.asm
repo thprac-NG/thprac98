@@ -1727,14 +1727,14 @@ inject_def mima_init 0, reiiden, 1E33h, 17CBh, 6
 mima_lock_phase_1_org   db 083h, 03Eh, 0D8h, 054h, 003h, 075h, 004h
 mima_lock_phase_1_pat   db 09Ah
                         dw (offset mima_select_form_1_atk), 0
-                        db 0EBh, 00Ah
+                        db 0EBh, 00Bh
 inject_def mima_lock_phase_1 0, reiiden, 1E33h, 185Dh, 7
 
 mima_lock_phase_2_org   db 083h, 03Eh, 0D8h, 054h, 003h, 075h, 004h
 mima_lock_phase_2_pat   db 09Ah
                         dw (offset mima_select_form_2_atk), 0
-                        db 0EBh, 00Ah
-inject_def mima_lock_phase_2 0, reiiden, 1E33h, 19A3h, 7
+                        db 0EBh, 00Bh
+inject_def mima_lock_phase_2 0, reiiden, 1E33h, 19B5h, 7
 
 mima_set_phase2_first_atk_org   db 0C7h, 006h, 0D8h, 054h, 000h, 000h
 mima_set_phase2_first_atk_pat   db 09Ah
@@ -1790,11 +1790,11 @@ endp mima_init_proc
 ; --------------------------------------------------------------------------
 proc mima_select_form_1_atk far
         assume  ds:nothing
-        push    ax
+        push    ax cx
 
         mov     ax, [word ptr p1_attack.value]
         test    ax, ax
-        jz      @@skip_updating_ax
+        jnz     @@skip_updating_mima_pattern_cur
         mov     ax, [ds:MIMA_PATTERN_CUR_OFFSET]
         xor     cx, cx
         cmp     ax, 3
@@ -1803,9 +1803,9 @@ proc mima_select_form_1_atk far
         inc     cx
 @@skip_setting_cx_as_ax_plus_1:
         mov     [ds:MIMA_PATTERN_CUR_OFFSET], ax
-@@skip_updating_ax:
+@@skip_updating_mima_pattern_cur:
 
-        pop     ax
+        pop     cx ax
         ret
         assume  ds:cseg
 endp mima_select_form_1_atk
@@ -1821,7 +1821,7 @@ proc mima_select_form_2_atk far
 
         mov     ax, [word ptr p2_attack.value]
         test    ax, ax
-        jz      @@skip_updating_ax
+        jnz     @@skip_updating_mima_pattern_cur
         mov     ax, [ds:MIMA_PATTERN_CUR_OFFSET]
         xor     cx, cx
         cmp     ax, 3
@@ -1830,7 +1830,7 @@ proc mima_select_form_2_atk far
         inc     cx
 @@skip_setting_cx_as_ax_plus_1:
         mov     [ds:MIMA_PATTERN_CUR_OFFSET], ax
-@@skip_updating_ax:
+@@skip_updating_mima_pattern_cur:
 
         pop     ax
         ret
@@ -2317,6 +2317,18 @@ sariel_linking          dw (offset stage_slider), \
 mima_linking            dw (offset stage_slider), (offset phase_slider), \
                            (offset hp_slider), (offset p1_attack), \
                            (offset p2_attack), (offset life_slider), 0FFFFh
+kikuri_linking          dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset p4_attack), \
+                           (offset skip_opening), (offset life_slider), 0FFFFh
+
+maintain_boss_specific_ui_jumptable     \
+        dw (offset maintain_shingyoku_specific_ui), \
+           (offset maintain_yuugenmagan_specific_ui), \
+           (offset maintain_mima_specific_ui), \
+           (offset maintain_elis_specific_ui), \
+           (offset maintain_kikuri_specific_ui), \
+           (offset maintain_sariel_specific_ui), \
+           (offset maintain_kongara_specific_ui)
 
 ; --------------------------------------------------------------------------
 ; Function: update_prac_window_components_from_its_values
@@ -2383,9 +2395,12 @@ endm
         mov     [word ptr p3_attack.label_off], (offset p3_attack_label)
         mov     [word ptr p4_attack.label_off], (offset p4_attack_label)
 
+        mov     bx, [word ptr section_slider.value]
+        shl     bx, 1
+        jmp     [word ptr bx + (offset maintain_boss_specific_ui_jumptable)]
+
         ; Shingyoku
-        cmp     [byte ptr section_slider.value], 0
-        jne     @@skip_shingyoku
+maintain_shingyoku_specific_ui:
         cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
         je      @@skip_shingyoku_init
         mov     [byte ptr current_ui_boss], UI_SHINGYOKU
@@ -2433,11 +2448,9 @@ endm
         or      al, ah
         mov     [byte ptr shingyoku_do_skip_opening], al
         jmp     @@skip_adding_bosses
-@@skip_shingyoku:
 
         ; Yuugenmagan
-        cmp     [byte ptr section_slider.value], 1
-        jne     @@skip_yuugenmagan
+maintain_yuugenmagan_specific_ui:
         cmp     [byte ptr current_ui_boss], UI_YUUGENMAGAN
         je      @@skip_yuugenmagan_init
         mov     [byte ptr current_ui_boss], UI_YUUGENMAGAN
@@ -2465,11 +2478,9 @@ endm
         mov     al, [byte ptr phase_slider.value]
         mov     [byte ptr prev_phase], al
         jmp     @@skip_adding_bosses
-@@skip_yuugenmagan:
 
         ; Elis
-        cmp     [byte ptr section_slider.value], 3
-        jne     @@skip_elis
+maintain_elis_specific_ui:
         ;   Initialize special UI labels
         mov     [word ptr p3_attack.label_off], (offset p3_bat_attack_label)
         mov     [word ptr p4_attack.label_off], (offset p3_girl_attack_label)
@@ -2516,11 +2527,9 @@ endm
         or      al, ah
         mov     [byte ptr elis_do_skip_opening], al
         jmp     @@skip_adding_bosses
-@@skip_elis:
 
         ; Sariel
-        cmp     [byte ptr section_slider.value], 5
-        jne     @@skip_sariel
+maintain_sariel_specific_ui:
         ;   Initialize special UI labels
         mov     [word ptr phase_slider.label_off], (offset form_slider_label)
         mov     [word ptr p1_attack.label_off], (offset form_1_attack_label)
@@ -2579,11 +2588,9 @@ endm
         and     al, [skip_opening.value]
         mov     [byte ptr sariel_do_skip_fake_death], al
         jmp     @@skip_adding_bosses
-@@skip_sariel:
 
         ; Mima
-        cmp     [byte ptr section_slider.value], 2
-        jne     @@skip_mima
+maintain_mima_specific_ui:
         ;   Initialize special UI labels
         cmp     [byte ptr current_ui_boss], UI_MIMA
         je      @@skip_mima_init
@@ -2616,9 +2623,44 @@ endm
         mov     al, [byte ptr phase_slider.value]
         mov     [byte ptr prev_phase], al
         jmp     @@skip_adding_bosses
-@@skip_mima:
 
-        ; Other boss stages are treated as regular stages for now.
+        ; Kikuri
+maintain_kikuri_specific_ui:
+;         ;   Initialize special UI labels
+;         cmp     [byte ptr current_ui_boss], UI_KIKURI
+;         je      @@skip_mima_init
+;         mov     [byte ptr current_ui_boss], UI_KIKURI
+;         ;     Initialize UI values
+;         mov     [byte ptr phase_slider.value], 1
+;         mov     [byte ptr phase_slider.max_value], 4
+;         mov     [word ptr p4_cur_first_attack_str], (offset p4_attack_kikuri_1)
+;         set_phase_attack_value 1, 4
+;         set_phase_attack_value 2, 4
+;         ;     Link the UI components that are relevant to Elis
+;         push    (offset mima_linking)
+;         call    link_components
+;         add     sp, 2
+;         mov     [byte ptr prev_phase], 0
+; @@skip_mima_init:
+;         mov     al, [byte ptr prev_phase]
+;         cmp     [byte ptr phase_slider.value], al
+;         je      @@skip_mima_init_hp
+;         ;   Set the parameters of the HP slider according to the phase selected
+;         mov     bx, [word ptr phase_slider.value]
+;         mov     al, [byte ptr (offset mima_min_hp_in_phases) + bx]
+;         mov     ah, [byte ptr (offset mima_min_hp_in_phases) - 1 + bx]
+;         dec     ah
+;         mov     [byte ptr hp_slider.min_value], al
+;         mov     [byte ptr hp_slider.max_value], ah
+;         mov     [byte ptr hp_slider.value], ah
+; @@skip_mima_init_hp:
+;         mov     al, [byte ptr phase_slider.value]
+;         mov     [byte ptr prev_phase], al
+        jmp     @@skip_adding_bosses
+
+        ; Kongara
+maintain_kongara_specific_ui:
+        ; Kongara's stage is treated as regular stages for now.
         mov     [byte ptr current_ui_boss], UI_REGULAR
         push    (offset regular_stage_linking)
         call    link_components
@@ -3103,6 +3145,10 @@ p2_attack_mima_1        db 'MM P2 1', 0
 p2_attack_mima_2        db 'MM P2 2', 0
 p2_attack_mima_3        db 'MM P2 3', 0
 p2_attack_mima_4        db 'MM P2 4', 0
+p4_attack_kikuri_1      db 'KK P4 1', 0
+p4_attack_kikuri_2      db 'KK P4 2', 0
+p4_attack_kikuri_3      db 'KK P4 3', 0
+p4_attack_kikuri_4      db 'KK P4 4', 0
 p1_cur_first_attack_str dw (offset p1_attack_elis_1)
 p2_cur_first_attack_str dw (offset p2_attack_shingyoku_1)
 p3_cur_first_attack_str dw (offset p3b_attack_elis_1)
