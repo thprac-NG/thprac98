@@ -1909,24 +1909,8 @@ endp mima_set_phase2_first_atk_proc
 
 ; Kikuri Warps
 ; ============================
-; Check https://github.com/H-J-Granger/ReC98/commit/a439c47ee95a8514bbcc127e8db7cbfbced00409
+; Check https://github.com/H-J-Granger/ReC98/commit/8e8d7823cad3bb362e87a3764071e3e137d7b369
 ; for the C version of the modification in this section.
-;
-
-; - 1E33:185D | 83 3E D8 54 03    cmp    word_49E78, 3
-; - 1E33:1862 | 75 04             jnz    short loc_2FB98
-; + 1E33:185D | 9A yy yy xx xx    callf  mima_select_form_1_atk
-; + 1E33:1862 | EB 0B             jmp    1E33:186F
-;   1E33:1864 | 33 C0             xor    ax, ax
-;   1E33:1866 | EB 04             jmp    short loc_2FB9C
-;   1E33:1868 | A1 D8 54          mov    ax, word_49E78
-;   1E33:186B | 40                inc    ax
-;   1E33:186C | A3 D8 54          mov    word_49E78, ax
-;   1E33:186F | ...
-
-; mima_init {
-;   1E33:17CB | C7 06 D8 54 00 00 -> 9A yy yy xx xx 90
-; } where "xxxx" is cseg, and "yyyy" is (offset mima_init_proc).
 ;
 ; kikuri_inc_p1_iterations_done {
 ;   232A:18D7 | 83 3E 2A 5D 00 75 04 -> 9A yy yy xx xx EB 04
@@ -2004,7 +1988,7 @@ endp mima_set_phase2_first_atk_proc
 ;   232A:14FD | BB 03 00          mov     bx, 3
 ; Modified assembly:
 ;   232A:14F6 | 9A yy yy xx xx    callf   kikuri_skip_opening_proc
-;   232A:14FB | E9 D6 02          jmp     232A:17D4   ; skip the two loops
+;   232A:14FB | E9 D6 02          jmp     232A:17D4   ; jump to stage 2 init
 ;   232A:14FE | 89 F6             mov     si, si      ; effectively nop
 ;
 ; kikuri_init {
@@ -2300,7 +2284,7 @@ proc kikuri_init_proc far
         movzx   bx, [byte ptr cs:phase_slider.value]
         mov     al, [cs:bx + (offset kikuri_internal_phases) - 1]
         mov     [ds:KIKURI_PHASE_OFFSET], al
-        cmp     al, 4
+        cmp     al, 6
         jne     @@skip_setting_phase_4_pattern
         mov     al, [byte ptr cs:p4_attack.value]
         test    al, al
