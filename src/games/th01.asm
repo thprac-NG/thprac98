@@ -103,6 +103,9 @@ proc on_game_start near
         cwd
         mov     [dword ptr yuugenmagan_p1_frame_elapsed], eax
         mov     [byte ptr yuugenmagan_p1_frame_elapsed + 4], al
+        ; Clear Kikuri timeout counters (4 bytes starting from
+        ; kikuri_p1_iterations_done)
+        mov     [dword ptr kikuri_p1_iterations_done], eax
         ret
 endp on_game_start
 
@@ -115,6 +118,9 @@ BOSS_PHASE_OFFSET               = 5D2Eh
 BOSS_HP_OFFSET                  = 5D28h
 BOSS_PHASE_FRAME_OFFSET         = 5D2Ah
 INVINCIBILITY_FRAME_OFFSET      = 5464h
+PLAYER_LEFT_OFFSET              = 2286h
+ORB_CUR_LEFT_OFFSET             = 2288h
+ORB_CUR_TOP_OFFSET              = 228Ah
 
 ; The offsets of z_Palettes[COL_YOKOSHIMA] and stage_pallete[COL_YOKOSHIMA].
 Z_PALETTE_YOKOSHIMA_OFFSET      = 071Dh
@@ -128,6 +134,10 @@ GRP_PUT_PALLETE_SHOW_SEGMENT    = 106Fh
 GRP_PUT_PALLETE_SHOW_OFFSET     = 04BEh
 GRAPH_ACCESSPAGE_FUNC_SEGMENT   = 0E92h
 GRAPH_ACCESSPAGE_FUNC_OFFSET    = 011Eh
+GRAPH_COPY_ACCESSED_PAGE_TO_OTHER_SEGMENT = 0E92h
+GRAPH_COPY_ACCESSED_PAGE_TO_OTHER_OFFSET  = 0360h
+PTN_PUT_8_SEGMENT               = 1967h
+PTN_PUT_8_OFFSET                = 0171h
 IRAND_SEGMENT                   = 0000h
 IRAND_OFFSET                    = 1608h
 TEXT_FILLCA_SEGMENT             = 0000h
@@ -1723,6 +1733,11 @@ endp sariel_select_form_4_attack
 ; mima_init {
 ;   1E33:17CB | C7 06 D8 54 00 00 -> 9A yy yy xx xx 90
 ; } where "xxxx" is cseg, and "yyyy" is (offset mima_init_proc).
+; Original assembly:
+;   1E33:17CB | C7 06 F5 14 00 00 mov    [word ptr hit.invisible], 0
+; Modified assembly:
+;   1E33:17CB | 9A yy yy xx xx    callf  mima_init_proc
+;   1E33:17D0 | 90                nop
 ;
 ; mima_lock_phase_1 {
 ;   1E33:185D | 83 3E D8 54 03 75 04 -> 9A yy yy xx xx EB 0A
@@ -1730,8 +1745,8 @@ endp sariel_select_form_4_attack
 ; mima_lock_phase_2 {
 ;   1E33:19A3 | 83 3E D8 54 03 75 04 -> 9A yy yy xx xx EB 0A
 ; } where "xxxx" is cseg, and "yyyy" is (offset mima_select_form_2_atk).
-; The modifications of these patch (almost identical, take mima_lock_phase_1 as
-; an example):
+; The modifications of these patches (almost identical, take mima_lock_phase_1
+; as an example):
 ; - 1E33:185D | 83 3E D8 54 03    cmp    word_49E78, 3
 ; - 1E33:1862 | 75 04             jnz    short loc_2FB98
 ; + 1E33:185D | 9A yy yy xx xx    callf  mima_select_form_1_atk
@@ -1745,7 +1760,12 @@ endp sariel_select_form_4_attack
 ;
 ; mima_set_phase2_first_atk {
 ;   1E33:195C | C7 06 D8 54 00 00 -> 9A yy yy xx xx 90
-; } where "xxxx" is cseg, and "yyyy" is (offset mima_set_phase2_first_atk_proc).
+; } where "xxxx" is cseg, and "yyyy" is (offset mima_set_phase2_first_atk_proc)
+; Original assembly:
+;   1E33:195C | C7 06 D8 54 00 00 mov    [word ptr pattern_cur], 0
+; Modified assembly:
+;   1E33:195C | 9A yy yy xx xx    callf  mima_set_phase2_first_atk_proc
+;   1E33:1961 | 90                nop.
 
 mima_init_org   db 0C7h, 006h, 0D8h, 054h, 000h, 000h
 mima_init_pat   db 09Ah
@@ -1887,6 +1907,439 @@ proc mima_set_phase2_first_atk_proc far
         assume  ds:cseg
 endp mima_set_phase2_first_atk_proc
 
+; Kikuri Warps
+; ============================
+; Check https://github.com/H-J-Granger/ReC98/commit/a439c47ee95a8514bbcc127e8db7cbfbced00409
+; for the C version of the modification in this section.
+;
+
+; - 1E33:185D | 83 3E D8 54 03    cmp    word_49E78, 3
+; - 1E33:1862 | 75 04             jnz    short loc_2FB98
+; + 1E33:185D | 9A yy yy xx xx    callf  mima_select_form_1_atk
+; + 1E33:1862 | EB 0B             jmp    1E33:186F
+;   1E33:1864 | 33 C0             xor    ax, ax
+;   1E33:1866 | EB 04             jmp    short loc_2FB9C
+;   1E33:1868 | A1 D8 54          mov    ax, word_49E78
+;   1E33:186B | 40                inc    ax
+;   1E33:186C | A3 D8 54          mov    word_49E78, ax
+;   1E33:186F | ...
+
+; mima_init {
+;   1E33:17CB | C7 06 D8 54 00 00 -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is (offset mima_init_proc).
+;
+; kikuri_inc_p1_iterations_done {
+;   232A:18D7 | 83 3E 2A 5D 00 75 04 -> 9A yy yy xx xx EB 04
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kikuri_inc_p1_iterations_done_proc).
+; kikuri_inc_p4_iterations_done {
+;   232A:1AA1 | 83 3E 2A 5D 00 75 04 -> 9A yy yy xx xx EB 04
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kikuri_inc_p4_iterations_done_proc).
+; The modifications of these patches (almost identical, take
+; kikuri_inc_p1_iterations_done as an example):
+; - 232A:18D7 | 83 3E 2A 5D 00    cmp     [byte ptr boss_phase_frame], 0
+; - 232A:18DC | 75 04             jnz     232A:18E2
+; + 232A:18D7 | 9A yy yy xx xx    callf   kikuri_inc_p1_iterations_done_proc
+; + 232A:18DC | EB 04             jmp     232A:18E2
+;   232A:18DE | FF 06 76 13       inc     [byte ptr kikuri_patterns_done]
+;   232A:18E2 | ...
+;
+; kikuri_chk_p1_iterations_done {
+;   232A:18F2 | 83 3E 76 13 06 -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kikuri_chk_p1_iterations_done_proc).
+; Original assembly: cmp [byte ptr kikuri_patterns_done], 6
+; Modified assembly: callf kikuri_chk_p1_iterations_done_proc
+;
+; kikuri_chk_p4_iterations_done {
+;   232A:18F2 | 83 3E 76 13 1D -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kikuri_chk_p4_iterations_done_proc).
+; Original assembly: cmp [byte ptr kikuri_patterns_done], 29
+; Modified assembly: callf kikuri_chk_p4_iterations_done_proc
+;
+; kikuri_inc_p3_frame {
+;   232A:19EA | FF 06 2A 5D FF 06 22 5D -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is (offset kikuri_inc_p3_frame_proc).
+; Original assembly:
+;   232A:19EA | FF 06 2A 5D       inc     [word ptr boss_phase_frame]
+;   232A:19EE | FF 06 76 13       inc     [word ptr hit.invincibility_frame]
+; Modified assembly:
+;   232A:19EA | 9A yy yy xx xx    callf   kikuri_inc_p3_frame_proc
+;   232A:19EF | 8D 74 00          lea     si, [si + 00h]  ; effectively nop
+;
+; kikuri_chk_p3_frame {
+;   232A:1A36 | 81 3E 2A 5D 40 06 -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is (offset kikuri_chk_p3_frame_proc).
+; Original assembly:
+;   232A:1A36 | 81 3E 2A 5D 40 06 cmp [byte ptr kikuri_patterns_done], 1600
+; Modified assembly:
+;   232A:1A36 | 9A yy yy xx xx    callf kikuri_inc_p3_frame_proc
+;   232A:1A3B | 90                nop
+;
+; kikuri_lock_p4_attack_part1 {
+;   232A:19D2 | C7 06 74 13 00 00 -> 8D 74 00 8D 7D 00
+; }
+; Original assembly:
+;   232A:19D2 | C7 06 74 13 00 00 mov   [word ptr phase.u1.phase_6_pattern], 0
+; Modified assembly:
+;   232A:19D2 | 8D 74 00          lea   si, [si + 00h]
+;   232A:19D5 | 8D 7D 00          lea   di, [di + 00h]
+;
+; kikuri_lock_p4_attack_part2 {
+;   232A:1AA1 | 83 3E 2A 5D 00 -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kikuri_lock_p4_attack_part2_proc).
+; Original assembly: cmp [byte ptr boss_phase_frame], 0
+; Modified assembly: callf kikuri_lock_p4_attack_part2_proc
+;
+; kikuri_skip_opening {
+;   232A:14F6 | FF 06 2A 5D A1 2A 5D BB 03 00 ->
+;             | 9A yy yy xx xx E9 D6 02 89 F6
+; } where "xxxx" is cseg, and "yyyy" is (offset kikuri_skip_opening_proc).
+; Original assembly:
+;   232A:14F6 | FF 06 2A 5D       inc     boss_phase_frame
+;   232A:14FA | A1 2A 5D          mov     ax, boss_phase_frame
+;   232A:14FD | BB 03 00          mov     bx, 3
+; Modified assembly:
+;   232A:14F6 | 9A yy yy xx xx    callf   kikuri_skip_opening_proc
+;   232A:14FB | E9 D6 02          jmp     232A:17D4   ; skip the two loops
+;   232A:14FE | 89 F6             mov     si, si      ; effectively nop
+;
+; kikuri_init {
+;   232A:17E9 | C6 06 26 5D 00 -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is (offset kikuri_init_proc).
+; Original assembly:
+
+kikuri_inc_p1_iterations_done_org       db 083h, 03Eh, 02Ah, 05Dh, 000h, 000h, \
+                                           075h, 004h
+kikuri_inc_p1_iterations_done_pat \
+        db 09Ah
+        dw (offset kikuri_inc_p1_iterations_done_proc), 0
+        db 0EBh, 004h
+inject_def kikuri_inc_p1_iterations_done 0, reiiden, 232Ah, 18D7h, 7
+
+kikuri_chk_p1_iterations_done_org       db 083h, 03Eh, 076h, 013h, 006h
+kikuri_chk_p1_iterations_done_pat \
+        db 09Ah
+        dw (offset kikuri_chk_p1_iterations_done_proc), 0
+inject_def kikuri_chk_p1_iterations_done 0, reiiden, 232Ah, 18F2h, 5
+
+kikuri_inc_p3_frame_org db 0FFh, 006h, 02Ah, 05Dh, 0FFh, 006h, 022h, 05Dh
+kikuri_inc_p3_frame_pat db 09Ah
+                        dw (offset kikuri_inc_p3_frame_proc), 0
+                        db NOP_3BYTES_SI
+inject_def kikuri_inc_p3_frame 0, reiiden, 232Ah, 19EAh, 8
+
+kikuri_chk_p3_frame_org db 081h, 03Eh, 02Ah, 05Dh, 040h, 006h
+kikuri_chk_p3_frame_pat db 09Ah
+                        dw (offset kikuri_chk_p3_frame_proc), 0
+                        db NOP_1BYTE
+inject_def kikuri_chk_p3_frame 0, reiiden, 232Ah, 1A36h, 6
+
+kikuri_inc_p4_iterations_done_org       db 083h, 03Eh, 02Ah, 05Dh, 000h, 000h, \
+                                           075h, 004h
+kikuri_inc_p4_iterations_done_pat \
+        db 09Ah
+        dw (offset kikuri_inc_p4_iterations_done_proc), 0
+        db 0EBh, 004h
+inject_def kikuri_inc_p4_iterations_done 0, reiiden, 232Ah, 1AA1h, 7
+
+kikuri_chk_p4_iterations_done_org       db 083h, 03Eh, 076h, 013h, 01Dh
+kikuri_chk_p4_iterations_done_pat \
+        db 09Ah
+        dw (offset kikuri_chk_p4_iterations_done_proc), 0
+inject_def kikuri_chk_p4_iterations_done 0, reiiden, 232Ah, 1AACh, 5
+
+kikuri_lock_p4_attack_part1_org         db 0C7h, 006h, 074h, 013h, 000h, 000h
+kikuri_lock_p4_attack_part1_pat         db NOP_3BYTES_SI, NOP_3BYTES_DI
+inject_def kikuri_lock_p4_attack_part1 0, reiiden, 232Ah, 19D2h, 6
+
+kikuri_lock_p4_attack_part2_org         db 083h, 03Eh, 02Ah, 05Dh, 000h
+kikuri_lock_p4_attack_part2_pat \
+        db 09Ah
+        dw (offset kikuri_lock_p4_attack_part2_proc), 0
+inject_def kikuri_lock_p4_attack_part2 0, reiiden, 232Ah, 1AA1h, 5
+
+kikuri_skip_opening_org db 0FFh, 006h, 02Ah, 05Dh, \
+                                   0A1h, 02Ah, 05Dh, 0BBh, 003h, 000h
+kikuri_skip_opening_pat \
+        db 09Ah
+        dw (offset kikuri_skip_opening_proc), 0
+        db 0E9h, 0D6h, 002h, NOP_2BYTES_SI
+inject_def kikuri_skip_opening 0, reiiden, 232Ah, 14F6h, 10
+
+kikuri_init_org         db 0C6h, 006h, 026h, 05Dh, 000h
+kikuri_init_pat         db 09Ah
+                        dw (offset kikuri_init_proc), 0
+inject_def kikuri_init 0, reiiden, 232Ah, 17E9h, 5
+
+kikuri_p1_iterations_done       db 0
+kikuri_p3_boss_phase_frame      dw 0
+kikuri_p4_iterations_done       db 0
+
+kikuri_do_skip_opening  db 0
+kikuri_internal_phases  db 2, 4, 5, 6
+
+; The bytes of the two structures of the souls when P3 is started. Note that due
+; to the duration of P2 can be slightly increased by hitting Kikuri at the right
+; moment, the position-related data can differ from an actual gameplay. Not a
+; big deal, I guess...
+; When P4 is started, the data of the souls is also set to these values.
+; The type of the following bytes is CBossEntity[2].
+kikuri_p3_souls db \
+        098h, 000h, 05Eh, 000h, 098h, 000h, 05Eh, 000h, 004h, 000h, 020h, \
+        000h, 020h, 000h, 040h, 002h, 040h, 000h, 090h, 001h, 000h, 000h, \
+        000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 003h, \
+        000h, 000h, 000h, 001h, 000h, 032h, 000h, 000h, 000h, 000h, 000h, \
+        000h, 000h, 000h, 000h, 000h, 000h, 0C8h, 001h, 05Eh, 000h, 0C8h, \
+        001h, 05Eh, 000h, 004h, 000h, 020h, 000h, 020h, 000h, 040h, 002h, \
+        040h, 000h, 090h, 001h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, \
+        000h, 000h, 000h, 000h, 000h, 003h, 000h, 000h, 000h, 001h, 000h, \
+        032h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h
+
+KIKURI_PHASE_OFFSET                             = 5A1Eh
+KIKURI_P4_ATTACK_OFFSET                         = 1374h
+KIKURI_INITIAL_HP_RENDERED_OFFSET               = 5D26h
+KIKURI_SOULS_RAW_OFFSET                         = 5A29h
+KIKURI_ITERATIONS_DONE_OFFSET                   = 1376h
+KIKURI_MAIN_HIT_INVINCIBILITY_FRAME_OFFSET      = 5D22h
+
+; --------------------------------------------------------------------------
+; Function: kikuri_inc_p1_iterations_done_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc kikuri_inc_p1_iterations_done_proc far
+        assume  ds:nothing
+
+        cmp     [byte ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
+        jnz     @@return
+        inc     [word ptr ds:KIKURI_ITERATIONS_DONE_OFFSET]
+        cmp     [byte ptr cs:TIME_LOCK_STATE], 0
+        jne     @@return
+        inc     [byte ptr cs:kikuri_p1_iterations_done]
+
+@@return:
+        ret
+        assume  ds:cseg
+endp kikuri_inc_p1_iterations_done_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_chk_p1_iterations_done_proc
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in (SF==OF)): whether it has been 6 iterations with timelock off or
+;                       not
+; --------------------------------------------------------------------------
+proc kikuri_chk_p1_iterations_done_proc far
+        assume  ds:nothing
+        cmp     [byte ptr cs:kikuri_p1_iterations_done], 6
+        ret
+        assume  ds:cseg
+endp kikuri_chk_p1_iterations_done_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_inc_p3_frame_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc kikuri_inc_p3_frame_proc far
+        assume  ds:nothing
+
+        cmp     [byte ptr cs:TIME_LOCK_STATE], 0
+        jne     @@skip_increasing_frame
+        inc     [word ptr cs:kikuri_p3_boss_phase_frame]
+@@skip_increasing_frame:
+        ; Hooked instructions
+        inc     [word ptr ds:BOSS_PHASE_FRAME_OFFSET]
+        inc     [word ptr ds:KIKURI_MAIN_HIT_INVINCIBILITY_FRAME_OFFSET]
+
+        ret
+        assume  ds:cseg
+endp kikuri_inc_p3_frame_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_chk_p3_frame_proc
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in (ZF || (SF==OF)): whether it has been 1601 frames with timelock off
+;                              or not
+; --------------------------------------------------------------------------
+proc kikuri_chk_p3_frame_proc far
+        assume  ds:nothing
+        cmp     [word ptr cs:kikuri_p3_boss_phase_frame], 1600
+        ret
+        assume  ds:cseg
+endp kikuri_chk_p3_frame_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_inc_p4_iterations_done_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc kikuri_inc_p4_iterations_done_proc far
+        assume  ds:nothing
+
+        cmp     [byte ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
+        jnz     @@return
+        inc     [word ptr ds:KIKURI_ITERATIONS_DONE_OFFSET]
+        cmp     [byte ptr cs:TIME_LOCK_STATE], 0
+        jne     @@return
+        inc     [byte ptr cs:kikuri_p4_iterations_done]
+
+@@return:
+        ret
+        assume  ds:cseg
+endp kikuri_inc_p4_iterations_done_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_chk_p4_iterations_done_proc
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in (ZF || (SF==OF)): whether it has been 30 iterations with timelock
+;                              off or not
+; --------------------------------------------------------------------------
+proc kikuri_chk_p4_iterations_done_proc far
+        assume  ds:nothing
+        cmp     [byte ptr cs:kikuri_p1_iterations_done], 29
+        ret
+        assume  ds:cseg
+endp kikuri_chk_p4_iterations_done_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_lock_p4_attack_part2_proc
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in ZF): whether boss_phase_frame is 0 or not.
+; --------------------------------------------------------------------------
+proc kikuri_lock_p4_attack_part2_proc far
+        assume  ds:nothing
+
+        mov     al, [byte ptr cs:p4_attack.value]
+        test    al, al
+        jz      @@skip_setting_p4_attack
+        dec     al
+        mov     [ds:KIKURI_P4_ATTACK_OFFSET], al
+@@skip_setting_p4_attack:
+
+        ; Hooked instruction
+        cmp     [byte ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
+
+        ret
+        assume  ds:cseg
+endp kikuri_lock_p4_attack_part2_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_skip_opening_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc kikuri_skip_opening_proc far
+local @@graph_accesspage_func:dword, \
+@@graph_copy_accessed_page_to_other:dword, @@ptn_put_8:dword
+        assume  ds:nothing
+        pushad
+
+        ; Set up the addresses of the functions to be called
+        mov     ax, [cs:cur_psp]
+        mov     cx, ax
+        add     ax, 10h + GRAPH_ACCESSPAGE_FUNC_SEGMENT
+        mov     [word ptr @@graph_accesspage_func + 2], ax
+        mov     [word ptr @@graph_accesspage_func], GRAPH_ACCESSPAGE_FUNC_OFFSET
+        mov     ax, cx
+        add     ax, 10h + GRAPH_COPY_ACCESSED_PAGE_TO_OTHER_SEGMENT
+        mov     [word ptr @@graph_copy_accessed_page_to_other + 2], ax
+        mov     [word ptr @@graph_copy_accessed_page_to_other], \
+                GRAPH_COPY_ACCESSED_PAGE_TO_OTHER_OFFSET
+        mov     ax, cx
+        add     ax, 10h + PTN_PUT_8_SEGMENT
+        mov     [word ptr @@ptn_put_8 + 2], ax
+        mov     [word ptr @@ptn_put_8], PTN_PUT_8_OFFSET
+
+        ; Copy the content of VRAM page 1 to page 0 (doing what the long
+        ; animation effectively does, but faster)
+        push    1
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        call    [dword ptr @@graph_copy_accessed_page_to_other]
+        push    0
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        add     sp, 4                                   ; sp+4
+
+        ; Put the orb sprite and the Reimu sprite, as the skipped loop is
+        ; responsible of putting them.
+        push    PTN_MIKO_L PLAYER_TOP [word ptr ds:PLAYER_LEFT_OFFSET]
+        call    [dword ptr @@ptn_put_8]                 ; delayed sp+6
+        push    PTN_ORB [word ptr ds:ORB_CUR_TOP_OFFSET]
+        push    [word ptr ds:ORB_CUR_LEFT_OFFSET]
+        call    [dword ptr @@ptn_put_8]                 ; delayed sp+6
+        add     sp, 12                                  ; sp+12
+
+        ; The skipped loop clears these variables before `break`-ing
+        mov     [word ptr cs:KIKURI_MAIN_HIT_INVINCIBILITY_FRAME_OFFSET], 0
+        mov     [word ptr cs:BOSS_PHASE_FRAME_OFFSET], 0
+
+        popad
+        ret
+        assume  ds:cseg
+endp kikuri_skip_opening_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_init_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc kikuri_init_proc far
+        assume  ds:nothing
+        pusha
+        pushf
+
+        mov     ax, [word ptr cs:hp_slider.value]
+        mov     [word ptr ds:BOSS_HP_OFFSET], ax
+        movzx   bx, [byte ptr cs:phase_slider.value]
+        mov     al, [cs:bx + (offset kikuri_internal_phases) - 1]
+        mov     [ds:KIKURI_PHASE_OFFSET], al
+        cmp     al, 4
+        jne     @@skip_setting_phase_4_pattern
+        mov     al, [byte ptr cs:p4_attack.value]
+        test    al, al
+        jz      @@skip_decreasing_al
+        dec     al
+@@skip_decreasing_al:
+        mov     [ds:KIKURI_P4_ATTACK_OFFSET], al
+@@skip_setting_phase_4_pattern:
+
+        ; Hooked instruction
+        mov     [byte ptr ds:KIKURI_INITIAL_HP_RENDERED_OFFSET], 0
+
+        cmp     [byte ptr cs:phase_slider.value], 1
+        je      @@skip_render_hp
+        call    render_hp
+@@skip_render_hp:
+
+        cmp     [byte ptr cs:phase_slider.value], 3
+        jl      @@skip_initializing_souls
+        push    ds              ; save DS
+        ; Copy 64h bytes from kikuri_p3_souls to souls_raw
+        mov     ax, ds
+        mov     es, ax
+        mov     ax, cs
+        mov     ds, ax
+        mov     cx, 64h
+        mov     si, (offset kikuri_p3_souls)
+        mov     di, KIKURI_SOULS_RAW_OFFSET
+        cld
+        rep movsb
+        pop     ds              ; restore DS
+@@skip_initializing_souls:
+
+        popf
+        popa
+        ret
+        assume  ds:cseg
+endp kikuri_init_proc
+
 ; OP.EXE modifications
 ; ==============================================================
 ;
@@ -2027,9 +2480,12 @@ endp hooked_resident_create_and_stuff_set
 
 inject_failed   db 0
 
-invincible_codes        dw (offset invincible_part1), (invincible_part2), 0FFFFh
-inf_lives_codes         dw (offset inf_lives_part1), (inf_lives_part2), 0FFFFh
-inf_bombs_codes         dw (offset inf_bombs_part1), (inf_bombs_part2), 0FFFFh
+invincible_codes        dw (offset invincible_part1), \
+                           (offset invincible_part2), 0FFFFh
+inf_lives_codes         dw (offset inf_lives_part1), \
+                           (offset inf_lives_part2), 0FFFFh
+inf_bombs_codes         dw (offset inf_bombs_part1), \
+                           (offset inf_bombs_part2), 0FFFFh
 elis_skip_opening       dw (offset elis_skip_opening_part1), \
                            (offset elis_skip_opening_part2), 0FFFFh
 sariel_skip_opening     dw (offset sariel_skip_opening_part1), \
@@ -2069,7 +2525,16 @@ reiiden_unconditionals  dw (offset stage_num_animate), \
                            (offset sariel_hook_form_4_attack)
                         dw (offset mima_init), (offset mima_lock_phase_1), \
                            (offset mima_lock_phase_2), \
-                           (offset mima_set_phase2_first_atk), 0FFFFh
+                           (offset mima_set_phase2_first_atk)
+                        dw (offset kikuri_inc_p1_iterations_done), \
+                           (offset kikuri_chk_p1_iterations_done), \
+                           (offset kikuri_inc_p3_frame), \
+                           (offset kikuri_chk_p3_frame), \
+                           (offset kikuri_inc_p4_iterations_done), \
+                           (offset kikuri_chk_p4_iterations_done), \
+                           (offset kikuri_init), \
+                           (offset kikuri_lock_p4_attack_part1), \
+                           (offset kikuri_lock_p4_attack_part2), 0FFFFh
 
 op_unconditionals       dw (offset practise_menu_part1), \
                            (offset practise_menu_part2), 0FFFFh
@@ -2168,7 +2633,10 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         movzx   ax, [elis_do_skip_opening]
         push    si ax (offset elis_skip_opening)
         call    inject_multiple                 ; delayed sp+6
-        add     sp, 18                          ; sp+18
+        movzx   ax, [kikuri_do_skip_opening]
+        push    si ax (offset kikuri_skip_opening)
+        call    inject_one                      ; delayed sp+6
+        add     sp, 24                          ; sp+24
 
         movzx   ax, [sariel_do_skip_opening]
         push    si ax (offset sariel_skip_opening)
@@ -2686,6 +3154,12 @@ maintain_kikuri_specific_ui:
 @@skip_kikuri_init_hp:
         mov     al, [byte ptr phase_slider.value]
         mov     [byte ptr prev_phase], al
+        ;   Raise the "skip opening" flag if either Phase 1 isn't selected, or
+        ;   the "Skip Opening Animation" tickbox is ticked.
+        cmp     [byte ptr phase_slider.value], 1
+        setne   al
+        or      al, [skip_opening.value]
+        mov     [kikuri_do_skip_opening], al
         jmp     @@skip_adding_bosses
 
         ; Kongara
@@ -3393,7 +3867,17 @@ patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
                         dw (offset mima_init_pat + 3), \
                            (offset mima_lock_phase_1_pat + 3), \
                            (offset mima_lock_phase_2_pat + 3), \
-                           (offset mima_set_phase2_first_atk_pat + 3), 0FFFFh
+                           (offset mima_set_phase2_first_atk_pat + 3)
+                        dw (offset kikuri_inc_p1_iterations_done_pat + 3), \
+                           (offset kikuri_chk_p1_iterations_done_pat + 3), \
+                           (offset kikuri_inc_p3_frame_pat + 3), \
+                           (offset kikuri_chk_p3_frame_pat + 3), \
+                           (offset kikuri_inc_p4_iterations_done_pat + 3), \
+                           (offset kikuri_chk_p4_iterations_done_pat + 3), \
+                           (offset kikuri_skip_opening_pat + 3), \
+                           (offset kikuri_init_pat + 3), \
+                           (offset kikuri_lock_p4_attack_part2_pat + 3), \
+                           0FFFFh
 
 COMMAND_PARAM_LEN_OFFSET        = 80h
 COMMAND_PARAM_OFFSET            = 81h
