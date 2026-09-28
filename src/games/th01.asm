@@ -2324,6 +2324,11 @@ proc kikuri_init_proc far
         assume  ds:cseg
 endp kikuri_init_proc
 
+
+; Kongara warps
+
+kongara_do_skip_opening db 0
+
 ; OP.EXE modifications
 ; ==============================================================
 ;
@@ -2773,12 +2778,15 @@ prev_phase      db 0
 
 YUUGENMAGAN_INITIAL_HP          = 16
 KIKURI_INITIAL_HP               = 14
+KONGARA_INITIAL_HP              = 18
 yuugenmagan_min_hp_in_phases    db 17, 16, 13, 11, 9, 1
 elis_min_hp_in_phases           db 15, 10, 6, 1
 sariel_init_hp_in_phases        db 18, 6
 mima_min_hp_in_phases           db 13, 7, 1
 kikuri_min_hp_in_phases         db 11, 7, 7, 1
 kikuri_default_hp_in_phases     db 14, 10, 10, 6
+kongara_min_hp_in_phases        db 16, 13, 10, 1
+kongara_default_hp_in_phases    db 18, 15, 12, 9
 
 regular_stage_linking   dw (offset stage_slider), (offset life_slider), 0FFFFh
 shingyoku_linking       dw (offset stage_slider), (offset phase_slider), \
@@ -2804,6 +2812,11 @@ mima_linking            dw (offset stage_slider), (offset phase_slider), \
 kikuri_linking          dw (offset stage_slider), (offset phase_slider), \
                            (offset hp_slider), (offset p4_attack), \
                            (offset skip_opening), (offset life_slider), 0FFFFh
+kongara_linking         dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset p1_attack), \
+                           (offset p2_attack), (offset p3_attack), \
+                           (offset p4_attack), (offset skip_opening), \
+                           (offset life_slider), 0FFFFh
 
 maintain_boss_specific_ui_jumptable     \
         dw (offset maintain_shingyoku_specific_ui), \
@@ -3148,11 +3161,46 @@ maintain_kikuri_specific_ui:
 
         ; Kongara
 maintain_kongara_specific_ui:
-        ; Kongara's stage is treated as regular stages for now.
-        mov     [byte ptr current_ui_boss], UI_REGULAR
-        push    (offset regular_stage_linking)
+        ;   Initialize special UI labels
+        cmp     [byte ptr current_ui_boss], UI_KONGARA
+        je      @@skip_kongara_init
+        mov     [byte ptr current_ui_boss], UI_KONGARA
+        ;     Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 4
+        mov     [word ptr p1_cur_first_attack_str], (offset p1_attack_kongara_1)
+        mov     [word ptr p2_cur_first_attack_str], (offset p2_attack_kongara_1)
+        mov     [word ptr p3_cur_first_attack_str], (offset p3_attack_kongara_1)
+        mov     [word ptr p4_cur_first_attack_str], (offset p4_attack_kongara_1)
+        set_phase_attack_value 1, 3
+        set_phase_attack_value 2, 4
+        set_phase_attack_value 3, 3
+        set_phase_attack_value 4, 12
+        ;     Link the UI components that are relevant to Kikuri
+        push    (offset kongara_linking)
         call    link_components
         add     sp, 2
+        mov     [byte ptr prev_phase], 0
+@@skip_kongara_init:
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr phase_slider.value], al
+        je      @@skip_kongara_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     bx, [word ptr phase_slider.value]
+        mov     al, [byte ptr (offset kongara_min_hp_in_phases) - 1 + bx]
+        mov     ah, [byte ptr (offset kongara_default_hp_in_phases) - 1 + bx]
+        mov     [byte ptr hp_slider.min_value], al
+        mov     [byte ptr hp_slider.max_value], KONGARA_INITIAL_HP
+        mov     [byte ptr hp_slider.value], ah
+@@skip_kongara_init_hp:
+        mov     al, [byte ptr phase_slider.value]
+        mov     [byte ptr prev_phase], al
+        ;   Raise the "skip opening" flag if either Phase 1 isn't selected, or
+        ;   the "Skip Opening Animation" tickbox is ticked.
+        cmp     [byte ptr phase_slider.value], 1
+        setne   al
+        or      al, [skip_opening.value]
+        mov     [kongara_do_skip_opening], al
 @@skip_adding_bosses:
 
         ret
@@ -3637,6 +3685,28 @@ p4_attack_kikuri_1      db 'KK P4 1', 0
 p4_attack_kikuri_2      db 'KK P4 2', 0
 p4_attack_kikuri_3      db 'KK P4 3', 0
 p4_attack_kikuri_4      db 'KK P4 4', 0
+p1_attack_kongara_1     db 'KG P1 1', 0
+p1_attack_kongara_2     db 'KG P1 2', 0
+p1_attack_kongara_3     db 'KG P1 3', 0
+p2_attack_kongara_1     db 'KG P2 1', 0
+p2_attack_kongara_2     db 'KG P2 2', 0
+p2_attack_kongara_3     db 'KG P2 3', 0
+p2_attack_kongara_4     db 'KG P2 4', 0
+p3_attack_kongara_1     db 'KG P3 1', 0
+p3_attack_kongara_2     db 'KG P3 2', 0
+p3_attack_kongara_3     db 'KG P3 3', 0
+p4_attack_kongara_1     db 'KG P4 1', 0
+p4_attack_kongara_2     db 'KG P4 2', 0
+p4_attack_kongara_3     db 'KG P4 3', 0
+p4_attack_kongara_4     db 'KG P4 4', 0
+p4_attack_kongara_5     db 'KG P4 5', 0
+p4_attack_kongara_6     db 'KG P4 6', 0
+p4_attack_kongara_7     db 'KG P4 7', 0
+p4_attack_kongara_8     db 'KG P4 8', 0
+p4_attack_kongara_9     db 'KG P4 9', 0
+p4_attack_kongara_10    db 'KG P4 10', 0
+p4_attack_kongara_11    db 'KG P4 11', 0
+p4_attack_kongara_12    db 'KG P4 12', 0
 p1_cur_first_attack_str dw (offset p1_attack_elis_1)
 p2_cur_first_attack_str dw (offset p2_attack_shingyoku_1)
 p3_cur_first_attack_str dw (offset p3b_attack_elis_1)
