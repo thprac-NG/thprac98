@@ -206,8 +206,10 @@ proc my_int2f far
         push    ds
 
         ; Meet the usual assumptions in the .COM file
+        push    bx
         mov     bx, cs
         mov     ds, bx
+        pop     bx
         assume  ds:cseg
 
         ; AL == 00h: Check whether this MUX id has been installed
