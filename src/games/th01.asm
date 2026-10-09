@@ -2556,6 +2556,27 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         jmp     @@return
 @@save_to_inject:
 
+        ; Save the Extended Error Information
+        pusha
+        push    ds
+        mov     ah, 59h
+        xor     bx, bx
+        int     21h
+        assume  ds:nothing
+        pusha           ; AX, BX, CX, DX, original SP, BP, SI, DI
+        mov     [dos_parameter_list.ds_val], ds
+        mov     [dos_parameter_list.es_val], es
+        pop     [word ptr dos_parameter_list.di_val]
+        pop     [word ptr dos_parameter_list.si_val]
+        add     sp, 4   ; Ignore SP, BP
+        pop     [word ptr dos_parameter_list.dx_val]
+        pop     [word ptr dos_parameter_list.cx_val]
+        pop     [word ptr dos_parameter_list.bx_val]
+        pop     [word ptr dos_parameter_list.ax_val]
+        pop     ds
+        assume  ds:cseg
+        popa
+
         mov     ah, 62h
         int     21h
         mov     [@@saved_psp], bx  ; Stored PSP segment
@@ -2654,6 +2675,13 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         call    inject_multiple
         add     sp, 6
 @@skip_op_exe_patches:
+
+        ; Restore the saved Extended Error Information. Yes, INT 21h/5D0Ah is
+        ; in DOS 3.1+, but there are no DOS-3.0x-based DOS on PC-98, so our
+        ; DOS 3+ assumption allows using this function.
+        mov     dx, (offset dos_parameter_list)
+        mov     ax, 5D0Ah
+        int     21h
 
 @@return:
         pop     di si
@@ -3850,6 +3878,21 @@ struc int18_47_argument_block_t
 ends int18_47_argument_block_t
 
 int18_47_argument_block int18_47_argument_block_t {}
+
+struc dos_parameter_list_t
+        ax_val          dw 0
+        bx_val          dw 0
+        cx_val          dw 0
+        dx_val          dw 0
+        si_val          dw 0
+        di_val          dw 0
+        ds_val          dw 0
+        es_val          dw 0
+        reserved        dw 0
+        computer_id     dw 0
+        process_id      dw 0
+ends dos_parameter_list_t
+dos_parameter_list dos_parameter_list_t {}
 
 ; ------------------------------ Helper functions ----------------------------
 
