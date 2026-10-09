@@ -50,7 +50,8 @@ INF_CARD_COMBO_STATE    = ((offset fx_state) + 9)
 INF_ITEM_COMBO_STATE    = ((offset fx_state) + 11)
 
 ; These are byte ptrs, and need to check if is both cleared before any DOS call
-; in a TSR.
+; in a TSR. Unused for now, but they will be useful if we want to make any
+; non-trivial DOS call inside a ISR.
 indos_flag_addr                 dd ?
 critical_error_flag_addr        dd ?
 
@@ -2544,41 +2545,9 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         test    ax, ax
         jz      @@return
 
-        mov     bx, [word ptr indos_flag_addr]
-        mov     es, [word ptr indos_flag_addr + 2]
-        mov     al, [byte ptr es:bx]
-        mov     bx, [word ptr critical_error_flag_addr]
-        mov     es, [word ptr critical_error_flag_addr + 2]
-        or      al, [byte ptr es:bx]
-        test    al, al
-        jz      @@save_to_inject
-        mov     [inject_failed], 1
-        jmp     @@return
-@@save_to_inject:
-
-        ; Save the Extended Error Information
-        pusha
-        push    ds
-        mov     ah, 59h
-        xor     bx, bx
-        int     21h
-        assume  ds:nothing
-        pusha           ; AX, BX, CX, DX, original SP, BP, SI, DI
-        mov     [dos_parameter_list.ds_val], ds
-        mov     [dos_parameter_list.es_val], es
-        pop     [word ptr dos_parameter_list.di_val]
-        pop     [word ptr dos_parameter_list.si_val]
-        add     sp, 4   ; Ignore SP, BP
-        pop     [word ptr dos_parameter_list.dx_val]
-        pop     [word ptr dos_parameter_list.cx_val]
-        pop     [word ptr dos_parameter_list.bx_val]
-        pop     [word ptr dos_parameter_list.ax_val]
-        pop     ds
-        assume  ds:cseg
-        popa
-
         mov     ah, 62h
-        int     21h
+        int     21h     ; This function doesn't use any DOS-internal stacks and
+                        ; thus can be called at any time.
         mov     [@@saved_psp], bx  ; Stored PSP segment
         mov     [cs:cur_psp], bx
         mov     es, bx
@@ -2675,13 +2644,6 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         call    inject_multiple
         add     sp, 6
 @@skip_op_exe_patches:
-
-        ; Restore the saved Extended Error Information. Yes, INT 21h/5D0Ah is
-        ; in DOS 3.1+, but there are no DOS-3.0x-based DOS on PC-98, so our
-        ; DOS 3+ assumption allows using this function.
-        mov     dx, (offset dos_parameter_list)
-        mov     ax, 5D0Ah
-        int     21h
 
 @@return:
         pop     di si
