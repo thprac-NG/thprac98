@@ -4180,6 +4180,7 @@ hp_slider       ui_slider {                             \
 }
 skip_opening_label      db 'Skip Opening Animation', 0
 skip_opening    ui_tickbox {                            \
+        value           = 1,                            \
         label_off       = offset skip_opening_label,    \
         window_off      = offset practise_menu_window   \
 }
