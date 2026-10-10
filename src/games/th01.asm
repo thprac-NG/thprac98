@@ -305,6 +305,10 @@ esc_in_hit_quit_bugfix2_pat     db 09Ah
                                 dw (offset esc_in_hit_quit_bugfix_proc), 0
 inject_def esc_in_hit_quit_bugfix2 0, reiiden, 0B50h, 15D6h, 5
 
+display_orb_while_hit_org       db 075h, 01Dh
+display_orb_while_hit_pat       db NOP_2BYTES_SI
+inject_def display_orb_while_hit 0, reiiden, 0B50h, 1397h, 2
+
 ; --------------------------------------------------------------------------
 ; Function: my_0b50_0775
 ; Description: (See the comment above)
@@ -3014,7 +3018,8 @@ kongara_skip_opening    dw (offset kongara_skip_opening1), \
 reiiden_unconditionals  dw (offset stage_num_animate), \
                            (offset harry_up_animate), \
                            (offset esc_in_hit_quit_bugfix1), \
-                           (offset esc_in_hit_quit_bugfix2), 0FFFFh
+                           (offset esc_in_hit_quit_bugfix2), \
+                           (offset display_orb_while_hit), 0FFFFh
 
 op_unconditionals       dw (offset practise_menu_part1), \
                            (offset practise_menu_part2), 0FFFFh
