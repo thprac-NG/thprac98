@@ -132,6 +132,8 @@ ORB_CUR_TOP_OFFSET              = 228Ah
 Z_PALETTES_OFFSET               = 06F0h
 ; The offsets of stage_pallete[COL_YOKOSHIMA].
 STAGE_PALETTE_YOKOSHIMA_OFFSET  = 5219h
+FRAME_RAND_OFFSET               = 2276h
+PLAYER_INVINCIBILITY_TIME_OFFSET = 2284h
 
 CBOSSENTITY_UNPUT_8_SEGMENT     = 155Fh
 CBOSSENTITY_UNPUT_8_OFFSET      = 0B3Eh
@@ -309,6 +311,11 @@ display_orb_while_hit_org       db 075h, 01Dh
 display_orb_while_hit_pat       db NOP_2BYTES_SI
 inject_def display_orb_while_hit 0, reiiden, 0B50h, 1397h, 2
 
+lock_rank_patch_org     db 083h, 03Eh, 084h, 022h, 001h
+lock_rank_patch_pat     db 09Ah
+                        dw (offset lock_rank_patch_proc), 0
+inject_def lock_rank_patch 0, reiiden, 0B50h, 27A4h, 5
+
 ; --------------------------------------------------------------------------
 ; Function: my_0b50_0775
 ; Description: (See the comment above)
@@ -426,6 +433,27 @@ arg @@data_off:word
         ret
         assume  ds:cseg
 endp load_packed_palettes
+
+proc lock_rank_patch_proc far
+        assume  ds:nothing
+
+        ; Set es:bx to variable `resident`
+        mov     ah, 62h
+        int     21h
+        lea     ax, [bx + 10h + RESSTUFF_CPP_RESIDENT_SEG]
+        mov     es, ax
+        les     bx, [dword ptr es:RESSTUFF_CPP_RESIDENT_OFF]
+
+        ; Set the rank
+        mov     ax, [word ptr rank_slider.value]
+        mov     [word ptr es:bx + resident_t.pellet_speed], ax
+
+        ; Hooked instruction
+        cmp     [word ptr ds:PLAYER_INVINCIBILITY_TIME_OFFSET], 1
+
+        ret
+        assume  ds:cseg
+endp lock_rank_patch_proc
 
 ; Shingyoku Warps
 ; ======================
@@ -2925,6 +2953,8 @@ local @@route:byte, @@saved_df:byte
         mov     [byte ptr es:bx + resident_t.rem_lives], al
         mov     al, [byte ptr bomb_slider.value]
         mov     [byte ptr es:bx + resident_t.rem_bombs], al
+        mov     ax, [word ptr rank_slider.value]
+        mov     [word ptr es:bx + resident_t.pellet_speed], ax
         jmp     @@end_of_resident_field_setting
 @@original_mode:
         ; Simulate the original behaviour
@@ -3019,7 +3049,8 @@ reiiden_unconditionals  dw (offset stage_num_animate), \
                            (offset harry_up_animate), \
                            (offset esc_in_hit_quit_bugfix1), \
                            (offset esc_in_hit_quit_bugfix2), \
-                           (offset display_orb_while_hit), 0FFFFh
+                           (offset display_orb_while_hit), \
+                           (offset lock_rank_patch), 0FFFFh
 
 op_unconditionals       dw (offset practise_menu_part1), \
                            (offset practise_menu_part2), 0FFFFh
@@ -3334,7 +3365,7 @@ kongara_linking         dw (offset stage_slider), (offset phase_slider), \
 ;              when its value is 'Original'). This procedure updates it.
 ; Warning: This function assumes the next component (if any) of the playing
 ;          mode slider is always the section slider, and the last component (if
-;          any) is always the bomb slider.
+;          any) is always the lock rank tickbox.
 ; Input:  Nothing
 ; Output: Nothing
 ; --------------------------------------------------------------------------
@@ -3367,7 +3398,7 @@ endm
         ; the playing mode slider. Destroys AX.
         mov     [playing_mode_slider.next_component_off], \
                         (offset section_slider)
-        mov     [practise_menu_window.tail_component_off], (offset bomb_slider)
+        mov     [practise_menu_window.tail_component_off], (offset lock_rank)
 @@end_of_updating_game_mode_slider:
 
         ; Regular stage
@@ -3756,7 +3787,7 @@ endp update_prac_window_components_from_its_values
 ;              when its value is 'Original'). This procedure updates it.
 ; Warning: This function assumes the next component (if any) of the playing
 ;          mode slider is always the section slider, and the last component (if
-;          the playing mode is 'Custom' is always the bomb slider.
+;          the playing mode is 'Custom') is always the bomb slider (does it?).
 ; Input/Output: Nothing
 ; --------------------------------------------------------------------------
 proc maintain_prac_menu_ui near
@@ -4005,13 +4036,20 @@ proc show_practise_menu near
         push    (offset stage_slider) (offset section_slider)
         push    (offset practise_menu_window)
         call    window_insert_component                         ; delayed sp+6
+        add     sp, 18                                          ; sp+18
         push    (offset life_slider) (offset stage_slider)
         push    (offset practise_menu_window)
         call    window_insert_component                         ; delayed sp+6
         push    (offset bomb_slider) (offset life_slider)
         push    (offset practise_menu_window)
         call    window_insert_component                         ; delayed sp+6
-        add     sp, 30                                          ; sp+30
+        push    (offset rank_slider) (offset bomb_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component                         ; delayed sp+6
+        push    (offset lock_rank) (offset rank_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component                         ; delayed sp+6
+        add     sp, 24                                          ; sp+24
 
         cmp     [byte ptr first_time_showing_prac_menu], 1
         je      @@skip_setting_do_link_only
@@ -4043,9 +4081,9 @@ include "..\src\tui\tsrtui.asm"
 
 practise_menu_window    ui_window {     \
         top_left_x              = 40,   \
-        top_left_y              = 9,    \
+        top_left_y              = 7,    \
         width                   = 38,   \
-        height                  = 16,   \
+        height                  = 18,   \
         default_slider_width    = 22    \
 }
 
@@ -4138,6 +4176,20 @@ bomb_slider     ui_slider {                             \
         max_value       = 5,                            \
         label_off       = offset bomb_slider_label,     \
         text_func_off   = offset cseg:dword_to_dec,     \
+        window_off      = offset practise_menu_window   \
+}
+rank_slider_label       db 'Rank', 0
+rank_slider     ui_slider {                             \
+        value           = 20,                           \
+        min_value       = -15,                          \
+        max_value       = 20,                           \
+        label_off       = offset rank_slider_label,     \
+        text_func_off   = offset cseg:dword_to_dec,     \
+        window_off      = offset practise_menu_window   \
+}
+lock_rank_label         db 'Lock Rank', 0
+lock_rank       ui_tickbox {                            \
+        label_off       = offset lock_rank_label,       \
         window_off      = offset practise_menu_window   \
 }
 form_slider_label       db 'Form', 0
@@ -4456,7 +4508,8 @@ patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
                            (offset harry_up_animate_pat + 3), \
                            (offset practise_menu_part1_pat + 3), \
                            (offset esc_in_hit_quit_bugfix1_pat + 3), \
-                           (offset esc_in_hit_quit_bugfix2_pat + 3)
+                           (offset esc_in_hit_quit_bugfix2_pat + 3), \
+                           (offset lock_rank_patch_pat + 3)
                         dw (offset shingyoku_p2_attack_pat + 3), \
                            (offset shingyoku_init_pat + 3), \
                            (offset shingyoku_skip_hp_animation_part2_pat + 3)
