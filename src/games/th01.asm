@@ -123,6 +123,9 @@ BOSS_PHASE_OFFSET               = 5D2Eh
 BOSS_HP_OFFSET                  = 5D28h
 BOSS_PHASE_FRAME_OFFSET         = 5D2Ah
 INVINCIBILITY_FRAME_OFFSET      = 5464h
+
+INPUT_SHOT_OFFSET               = 00AEh
+INPUT_OK_OFFSET                 = 00B2h
 PLAYER_LEFT_OFFSET              = 2286h
 ORB_CUR_LEFT_OFFSET             = 2288h
 ORB_CUR_TOP_OFFSET              = 228Ah
@@ -292,6 +295,16 @@ harry_up_animate_pat    db 09Ah
 harry_up_animate_var    db 0, 0, 0, 1, 1
 inject_def harry_up_animate, 1, reiiden, 1924h, 0364h, 5
 
+esc_in_hit_quit_bugfix1_org     db 080h, 03Eh, 0AFh, 000h, 001h
+esc_in_hit_quit_bugfix1_pat     db 09Ah
+                                dw (offset esc_in_hit_quit_bugfix_proc), 0
+inject_def esc_in_hit_quit_bugfix1 0, reiiden, 0B50h, 14A9h, 5
+
+esc_in_hit_quit_bugfix2_org     db 080h, 03Eh, 0AFh, 000h, 001h
+esc_in_hit_quit_bugfix2_pat     db 09Ah
+                                dw (offset esc_in_hit_quit_bugfix_proc), 0
+inject_def esc_in_hit_quit_bugfix2 0, reiiden, 0B50h, 15D6h, 5
+
 ; --------------------------------------------------------------------------
 ; Function: my_0b50_0775
 ; Description: (See the comment above)
@@ -311,8 +324,8 @@ proc my_0b50_0775 far
         mov     al, 12h
         int     2Fh
         pop     ax
-        assume  ds:cseg
         ret
+        assume  ds:cseg
 endp my_0b50_0775
 
 ; --------------------------------------------------------------------------
@@ -332,9 +345,21 @@ proc my_1924_0364 far
         mov     al, 12h
         int     2Fh
         pop     ax
-        assume  ds:cseg
         ret
+        assume  ds:cseg
 endp my_1924_0364
+
+proc esc_in_hit_quit_bugfix_proc far
+        assume  ds:nothing
+        cmp     [byte ptr ds:INPUT_SHOT_OFFSET], 1
+        setz    al
+        cmp     [byte ptr ds:INPUT_OK_OFFSET], 1
+        setz    ah
+        and     al, ah
+        cmp     al, 1
+        ret
+        assume  ds:cseg
+endp esc_in_hit_quit_bugfix_proc
 
 ; Variables and procedures shared by multiple boss warps
 boss_init_flag  db 0
@@ -2987,7 +3012,9 @@ kongara_skip_opening    dw (offset kongara_skip_opening1), \
                            (offset kongara_skip_opening2), \
                            (offset kongara_skip_opening3)
 reiiden_unconditionals  dw (offset stage_num_animate), \
-                           (offset harry_up_animate), 0FFFFh
+                           (offset harry_up_animate), \
+                           (offset esc_in_hit_quit_bugfix1), \
+                           (offset esc_in_hit_quit_bugfix2), 0FFFFh
 
 op_unconditionals       dw (offset practise_menu_part1), \
                            (offset practise_menu_part2), 0FFFFh
@@ -4379,7 +4406,9 @@ memory_used2                    db ' bytes.$'
 
 patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
                            (offset harry_up_animate_pat + 3), \
-                           (offset practise_menu_part1_pat + 3)
+                           (offset practise_menu_part1_pat + 3), \
+                           (offset esc_in_hit_quit_bugfix1_pat + 3), \
+                           (offset esc_in_hit_quit_bugfix2_pat + 3)
                         dw (offset shingyoku_p2_attack_pat + 3), \
                            (offset shingyoku_init_pat + 3), \
                            (offset shingyoku_skip_hp_animation_part2_pat + 3)
