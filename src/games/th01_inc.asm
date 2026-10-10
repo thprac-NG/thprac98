@@ -14,6 +14,9 @@ struc rgb_t
         blue    db ?
 ends rgb_t
 
+SIDDHAM_COL     = 9
+COL_YOKOSHIMA   = 15
+
 ; For the C version of these structures, see
 ; https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/resident.hpp#L8-L72 .
 
