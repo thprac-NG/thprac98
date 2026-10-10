@@ -3282,6 +3282,8 @@ enum ui_boss_t  UI_REGULAR, UI_SHINGYOKU, UI_YUUGENMAGAN, UI_ELIS, UI_SARIEL, \
 
 current_ui_boss db 0
 prev_phase      db 0
+first_time_showing_prac_menu db 1
+do_link_only    db 0
 
 YUUGENMAGAN_INITIAL_HP          = 16
 KIKURI_INITIAL_HP               = 14
@@ -3396,20 +3398,24 @@ endm
 
         ; Shingyoku
 @@maintain_shingyoku_specific_ui:
+        ;   Link the UI components that are relevant to Shingyoku
+        push    (offset shingyoku_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_1
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_1:
         cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
         je      @@skip_shingyoku_init
         mov     [byte ptr current_ui_boss], UI_SHINGYOKU
         ;   Initialize UI values
         mov     [byte ptr phase_slider.value], 1
         mov     [byte ptr phase_slider.max_value], 2
-        mov     [byte ptr skip_opening.value], 0
         set_phase_attack_value 2, 4
         mov     [word ptr p2_cur_first_attack_str], \
                 (offset p2_attack_shingyoku_1)
-        ;   Link the UI components that are relevant to Shingyoku
-        push    (offset shingyoku_linking)
-        call    link_components
-        add     sp, 2
         mov     [byte ptr prev_phase], 0
 @@skip_shingyoku_init:
         ;   TODO: Maybe make the following HP handling code into a procedure?
@@ -3446,16 +3452,21 @@ endm
 
         ; Yuugenmagan
 @@maintain_yuugenmagan_specific_ui:
+        ;   Link the UI components that are relevant to Yuugenmagan
+        push    (offset yuugenmagan_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_2
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_2:
         cmp     [byte ptr current_ui_boss], UI_YUUGENMAGAN
         je      @@skip_yuugenmagan_init
         mov     [byte ptr current_ui_boss], UI_YUUGENMAGAN
         ;   Initialize UI values
         mov     [byte ptr phase_slider.value], 1
         mov     [byte ptr phase_slider.max_value], 5
-        ;   Link the UI components that are relevant to Yuugenmagan
-        push    (offset yuugenmagan_linking)
-        call    link_components
-        add     sp, 2
         mov     [byte ptr prev_phase], 0
 @@skip_yuugenmagan_init:
         mov     al, [byte ptr prev_phase]
@@ -3476,6 +3487,15 @@ endm
 
         ; Elis
 @@maintain_elis_specific_ui:
+        ;   Link the UI components that are relevant to Elis
+        push    (offset elis_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_3
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_3:
         ;   Initialize special UI labels
         mov     [word ptr p3_attack.label_off], (offset p3_bat_attack_label)
         mov     [word ptr p4_attack.label_off], (offset p3_girl_attack_label)
@@ -3493,10 +3513,6 @@ endm
         set_phase_attack_value 2, 4
         set_phase_attack_value 3, 4
         set_phase_attack_value 4, 3
-        ;   Link the UI components that are relevant to Elis
-        push    (offset elis_linking)
-        call    link_components
-        add     sp, 2
         mov     [byte ptr prev_phase], 0
 @@skip_elis_init:
         mov     al, [byte ptr prev_phase]
@@ -3525,6 +3541,15 @@ endm
 
         ; Sariel
 @@maintain_sariel_specific_ui:
+        ;   Link the UI components that are relevant to Sariel
+        push    (offset sariel_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_4
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_4:
         ;   Initialize special UI labels
         mov     [word ptr phase_slider.label_off], (offset form_slider_label)
         mov     [word ptr p1_attack.label_off], (offset form_1_attack_label)
@@ -3545,10 +3570,6 @@ endm
         set_phase_attack_value 2, 2
         set_phase_attack_value 3, 3
         set_phase_attack_value 4, 3
-        ;   Link the UI components that are relevant to Sariel
-        push    (offset sariel_linking)
-        call    link_components
-        add     sp, 2
         mov     [byte ptr prev_phase], 0
 @@skip_sariel_init:
         mov     al, [byte ptr prev_phase]
@@ -3586,6 +3607,15 @@ endm
 
         ; Mima
 @@maintain_mima_specific_ui:
+        ;   Link the UI components that are relevant to Mima
+        push    (offset mima_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_5
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_5:
         ;   Initialize special UI labels
         cmp     [byte ptr current_ui_boss], UI_MIMA
         je      @@skip_mima_init
@@ -3597,10 +3627,6 @@ endm
         mov     [word ptr p2_cur_first_attack_str], (offset p2_attack_mima_1)
         set_phase_attack_value 1, 4
         set_phase_attack_value 2, 4
-        ;   Link the UI components that are relevant to Mima
-        push    (offset mima_linking)
-        call    link_components
-        add     sp, 2
         mov     [byte ptr prev_phase], 0
 @@skip_mima_init:
         mov     al, [byte ptr prev_phase]
@@ -3621,6 +3647,15 @@ endm
 
         ; Kikuri
 @@maintain_kikuri_specific_ui:
+        ;   Link the UI components that are relevant to Kikuri
+        push    (offset kikuri_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_6
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_6:
         ;   Initialize special UI labels
         cmp     [byte ptr current_ui_boss], UI_KIKURI
         je      @@skip_kikuri_init
@@ -3630,10 +3665,6 @@ endm
         mov     [byte ptr phase_slider.max_value], 4
         mov     [word ptr p4_cur_first_attack_str], (offset p4_attack_kikuri_1)
         set_phase_attack_value 4, 4
-        ;     Link the UI components that are relevant to Kikuri
-        push    (offset kikuri_linking)
-        call    link_components
-        add     sp, 2
         mov     [byte ptr prev_phase], 0
 @@skip_kikuri_init:
         mov     al, [byte ptr prev_phase]
@@ -3659,6 +3690,15 @@ endm
 
         ; Kongara
 @@maintain_kongara_specific_ui:
+        ;   Link the UI components that are relevant to Kongara
+        push    (offset kongara_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_7
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_7:
         ;   Initialize special UI labels
         cmp     [byte ptr current_ui_boss], UI_KONGARA
         je      @@skip_kongara_init
@@ -3674,10 +3714,6 @@ endm
         set_phase_attack_value 2, 4
         set_phase_attack_value 3, 3
         set_phase_attack_value 4, 12
-        ;     Link the UI components that are relevant to Kikuri
-        push    (offset kongara_linking)
-        call    link_components
-        add     sp, 2
         mov     [byte ptr prev_phase], 0
 @@skip_kongara_init:
         mov     al, [byte ptr prev_phase]
@@ -3701,6 +3737,7 @@ endm
         mov     [kongara_do_skip_opening], al
 @@skip_adding_bosses:
 
+@@return:
         ret
 
 @@jumptable_1   dw (offset @@maintain_shingyoku_specific_ui), \
@@ -3976,7 +4013,11 @@ proc show_practise_menu near
         call    window_insert_component                         ; delayed sp+6
         add     sp, 30                                          ; sp+30
 
-        mov     [byte ptr current_ui_boss], UI_REGULAR
+        cmp     [byte ptr first_time_showing_prac_menu], 1
+        je      @@skip_setting_do_link_only
+        mov     [byte ptr do_link_only], 1
+@@skip_setting_do_link_only:
+        mov     [byte ptr first_time_showing_prac_menu], 0
         call    update_prac_window_components_from_its_values
         push    offset practise_menu_window
         call    draw_window
