@@ -2924,6 +2924,53 @@ inf_lives_codes         dw (offset inf_lives_part1), \
                            (offset inf_lives_part2), 0FFFFh
 inf_bombs_codes         dw (offset inf_bombs_part1), \
                            (offset inf_bombs_part2), 0FFFFh
+shingyoku_practise      dw (offset shingyoku_p2_attack), \
+                           (offset shingyoku_init), \
+                           (offset shingyoku_skip_hp_animation_part2), 0FFFFh
+yuugenmagan_practise    dw (offset yuugenmagan_timelock_p1_part1), \
+                           (offset yuugenmagan_timelock_p1_part2), \
+                           (offset yuugenmagan_timelock_p2_part1), \
+                           (offset yuugenmagan_timelock_p2_part2), \
+                           (offset yuugenmagan_timelock_p3_part1), \
+                           (offset yuugenmagan_timelock_p3_part2), \
+                           (offset yuugenmagan_timelock_p4_part1), \
+                           (offset yuugenmagan_timelock_p4_part2), \
+                           (offset yuugenmagan_init), 0FFFFh
+elis_practise           dw (offset elis_init), \
+                           (offset elis_p1_attack), (offset elis_p2_attack), \
+                           (offset elis_p3g_attack), (offset elis_p3b_attack), \
+                           0FFFFh
+sariel_practise         dw (offset sariel_init), \
+                           (offset sariel_hidden_stage_warp), \
+                           (offset sariel_set_form_1_first_attack), \
+                           (offset sariel_set_form_2_to_4_first_attack), \
+                           (offset sariel_hook_form_1_attack), \
+                           (offset sariel_hook_form_2_attack), \
+                           (offset sariel_hook_form_3_attack), \
+                           (offset sariel_hook_form_4_attack), 0FFFFh
+mima_practise           dw (offset mima_init), (offset mima_lock_phase_1), \
+                           (offset mima_lock_phase_2), \
+                           (offset mima_set_phase2_first_atk), 0FFFFh
+kikuri_practise         dw (offset kikuri_inc_p1_iterations_done), \
+                           (offset kikuri_chk_p1_iterations_done), \
+                           (offset kikuri_inc_p3_frame), \
+                           (offset kikuri_chk_p3_frame), \
+                           (offset kikuri_inc_p4_iterations_done), \
+                           (offset kikuri_chk_p4_iterations_done), \
+                           (offset kikuri_init), \
+                           (offset kikuri_lock_p4_attack_part1), \
+                           (offset kikuri_lock_p4_attack_part2), 0FFFFh
+kongara_practise        dw (offset kongara_init), \
+                           (offset kongara_inc_p1_patterns_done), \
+                           (offset kongara_chk_p1_patterns_done), \
+                           (offset kongara_inc_p2_patterns_done), \
+                           (offset kongara_chk_p2_patterns_done), \
+                           (offset kongara_inc_p3_patterns_done), \
+                           (offset kongara_chk_p3_patterns_done), \
+                           (offset kongara_set_p1_attack), \
+                           (offset kongara_set_p2_attack), \
+                           (offset kongara_set_p3_attack), \
+                           (offset kongara_set_p4_attack), 0FFFFh
 elis_skip_opening       dw (offset elis_skip_opening_part1), \
                            (offset elis_skip_opening_part2), 0FFFFh
 sariel_skip_opening     dw (offset sariel_skip_opening_part1), \
@@ -2940,56 +2987,18 @@ kongara_skip_opening    dw (offset kongara_skip_opening1), \
                            (offset kongara_skip_opening2), \
                            (offset kongara_skip_opening3)
 reiiden_unconditionals  dw (offset stage_num_animate), \
-                           (offset harry_up_animate)
-                        dw (offset shingyoku_p2_attack), \
-                           (offset shingyoku_init), \
-                           (offset shingyoku_skip_hp_animation_part2)
-                        dw (offset yuugenmagan_timelock_p1_part1), \
-                           (offset yuugenmagan_timelock_p1_part2), \
-                           (offset yuugenmagan_timelock_p2_part1), \
-                           (offset yuugenmagan_timelock_p2_part2), \
-                           (offset yuugenmagan_timelock_p3_part1), \
-                           (offset yuugenmagan_timelock_p3_part2), \
-                           (offset yuugenmagan_timelock_p4_part1), \
-                           (offset yuugenmagan_timelock_p4_part2), \
-                           (offset yuugenmagan_init)
-                        dw (offset elis_init), \
-                           (offset elis_p1_attack), (offset elis_p2_attack), \
-                           (offset elis_p3g_attack), (offset elis_p3b_attack)
-                        dw (offset sariel_init), \
-                           (offset sariel_hidden_stage_warp), \
-                           (offset sariel_set_form_1_first_attack), \
-                           (offset sariel_set_form_2_to_4_first_attack), \
-                           (offset sariel_hook_form_1_attack), \
-                           (offset sariel_hook_form_2_attack), \
-                           (offset sariel_hook_form_3_attack), \
-                           (offset sariel_hook_form_4_attack)
-                        dw (offset mima_init), (offset mima_lock_phase_1), \
-                           (offset mima_lock_phase_2), \
-                           (offset mima_set_phase2_first_atk)
-                        dw (offset kikuri_inc_p1_iterations_done), \
-                           (offset kikuri_chk_p1_iterations_done), \
-                           (offset kikuri_inc_p3_frame), \
-                           (offset kikuri_chk_p3_frame), \
-                           (offset kikuri_inc_p4_iterations_done), \
-                           (offset kikuri_chk_p4_iterations_done), \
-                           (offset kikuri_init), \
-                           (offset kikuri_lock_p4_attack_part1), \
-                           (offset kikuri_lock_p4_attack_part2)
-                        dw (offset kongara_init), \
-                           (offset kongara_inc_p1_patterns_done), \
-                           (offset kongara_chk_p1_patterns_done), \
-                           (offset kongara_inc_p2_patterns_done), \
-                           (offset kongara_chk_p2_patterns_done), \
-                           (offset kongara_inc_p3_patterns_done), \
-                           (offset kongara_chk_p3_patterns_done), \
-                           (offset kongara_set_p1_attack), \
-                           (offset kongara_set_p2_attack), \
-                           (offset kongara_set_p3_attack), \
-                           (offset kongara_set_p4_attack), 0FFFFh
+                           (offset harry_up_animate), 0FFFFh
 
 op_unconditionals       dw (offset practise_menu_part1), \
                            (offset practise_menu_part2), 0FFFFh
+
+boss_practise_arr       dw (offset shingyoku_practise), \
+                           (offset yuugenmagan_practise), \
+                           (offset mima_practise), \
+                           (offset elis_practise), \
+                           (offset kikuri_practise), \
+                           (offset sariel_practise), \
+                           (offset kongara_practise)
 
 ; --------------------------------------------------------------------------
 ; Function: inject
@@ -3064,6 +3073,14 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         push    si ax (offset inf_item_combo)
         call    inject_one                      ; delayed sp+6
         add     sp, 18                          ; sp+18
+
+        cmp     [byte ptr stage_slider.value], 5
+        jne     @@skip_boss_inject
+        mov     bx, [word ptr section_slider.value]
+        push    si 1 [word ptr bx - 1 + (offset boss_practise_arr)]
+        call    inject_multiple
+        add     sp, 6
+@@skip_boss_inject:
 
         movzx   ax, [shingyoku_do_skip_opening]
         push    si ax (offset shingyoku_skip_opening)
@@ -3275,15 +3292,6 @@ kongara_linking         dw (offset stage_slider), (offset phase_slider), \
                            (offset p4_attack), (offset skip_opening), \
                            (offset life_slider), 0FFFFh
 
-maintain_boss_specific_ui_jumptable     \
-        dw (offset maintain_shingyoku_specific_ui), \
-           (offset maintain_yuugenmagan_specific_ui), \
-           (offset maintain_mima_specific_ui), \
-           (offset maintain_elis_specific_ui), \
-           (offset maintain_kikuri_specific_ui), \
-           (offset maintain_sariel_specific_ui), \
-           (offset maintain_kongara_specific_ui)
-
 ; --------------------------------------------------------------------------
 ; Function: update_prac_window_components_from_its_values
 ; Description: As the name suggests, the components of the practise window is
@@ -3351,10 +3359,10 @@ endm
 
         mov     bx, [word ptr section_slider.value]
         shl     bx, 1
-        jmp     [word ptr bx + (offset maintain_boss_specific_ui_jumptable)]
+        jmp     [word ptr bx + (offset @@jumptable_1)]
 
         ; Shingyoku
-maintain_shingyoku_specific_ui:
+@@maintain_shingyoku_specific_ui:
         cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
         je      @@skip_shingyoku_init
         mov     [byte ptr current_ui_boss], UI_SHINGYOKU
@@ -3404,7 +3412,7 @@ maintain_shingyoku_specific_ui:
         jmp     @@skip_adding_bosses
 
         ; Yuugenmagan
-maintain_yuugenmagan_specific_ui:
+@@maintain_yuugenmagan_specific_ui:
         cmp     [byte ptr current_ui_boss], UI_YUUGENMAGAN
         je      @@skip_yuugenmagan_init
         mov     [byte ptr current_ui_boss], UI_YUUGENMAGAN
@@ -3434,7 +3442,7 @@ maintain_yuugenmagan_specific_ui:
         jmp     @@skip_adding_bosses
 
         ; Elis
-maintain_elis_specific_ui:
+@@maintain_elis_specific_ui:
         ;   Initialize special UI labels
         mov     [word ptr p3_attack.label_off], (offset p3_bat_attack_label)
         mov     [word ptr p4_attack.label_off], (offset p3_girl_attack_label)
@@ -3483,7 +3491,7 @@ maintain_elis_specific_ui:
         jmp     @@skip_adding_bosses
 
         ; Sariel
-maintain_sariel_specific_ui:
+@@maintain_sariel_specific_ui:
         ;   Initialize special UI labels
         mov     [word ptr phase_slider.label_off], (offset form_slider_label)
         mov     [word ptr p1_attack.label_off], (offset form_1_attack_label)
@@ -3544,7 +3552,7 @@ maintain_sariel_specific_ui:
         jmp     @@skip_adding_bosses
 
         ; Mima
-maintain_mima_specific_ui:
+@@maintain_mima_specific_ui:
         ;   Initialize special UI labels
         cmp     [byte ptr current_ui_boss], UI_MIMA
         je      @@skip_mima_init
@@ -3579,7 +3587,7 @@ maintain_mima_specific_ui:
         jmp     @@skip_adding_bosses
 
         ; Kikuri
-maintain_kikuri_specific_ui:
+@@maintain_kikuri_specific_ui:
         ;   Initialize special UI labels
         cmp     [byte ptr current_ui_boss], UI_KIKURI
         je      @@skip_kikuri_init
@@ -3617,7 +3625,7 @@ maintain_kikuri_specific_ui:
         jmp     @@skip_adding_bosses
 
         ; Kongara
-maintain_kongara_specific_ui:
+@@maintain_kongara_specific_ui:
         ;   Initialize special UI labels
         cmp     [byte ptr current_ui_boss], UI_KONGARA
         je      @@skip_kongara_init
@@ -3661,6 +3669,14 @@ maintain_kongara_specific_ui:
 @@skip_adding_bosses:
 
         ret
+
+@@jumptable_1   dw (offset @@maintain_shingyoku_specific_ui), \
+                   (offset @@maintain_yuugenmagan_specific_ui), \
+                   (offset @@maintain_mima_specific_ui), \
+                   (offset @@maintain_elis_specific_ui), \
+                   (offset @@maintain_kikuri_specific_ui), \
+                   (offset @@maintain_sariel_specific_ui), \
+                   (offset @@maintain_kongara_specific_ui)
 endp update_prac_window_components_from_its_values
 
 ; --------------------------------------------------------------------------
