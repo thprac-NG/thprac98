@@ -297,8 +297,12 @@ local @@negative:byte
         cwd
         xchg    eax, ebx        ; ebx = 10
         mov     eax, [dword ptr @@num]    ; eax = in
+        mov     [byte ptr @@negative], 0
         test    eax, 80000000h
-        setnz   [@@negative]
+        jz      @@not_negative
+        mov     [byte ptr @@negative], 1
+        neg     eax
+@@not_negative:
         mov     di, (offset dword_to_dec_str + 10)
 @@main_loop:
         xor     edx, edx
