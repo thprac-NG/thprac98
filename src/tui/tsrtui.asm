@@ -280,13 +280,14 @@ endp draw_window
 
 ; --------------------------------------------------------------------------
 ; Function: dword_to_dec
-; Description: Print a dword as an unsigned decimal to a static string.
+; Description: Print a dword as an signed decimal to a static string.
 ; Input:  Argument 1 (dword): The dword to print.
 ; Output (in AX): The offset of the static string. Note that the return value
 ;                 won't always be the same.
 ; --------------------------------------------------------------------------
 proc dword_to_dec near
 arg @@num:dword
+local @@negative:byte
         push    ds di
 
         mov     ax, cs
@@ -295,19 +296,26 @@ arg @@num:dword
         mov     ax, 10
         cwd
         xchg    eax, ebx        ; ebx = 10
-        mov     ax, [word ptr @@num + 2]
-        shl     eax, 16
-        mov     ax, [word ptr @@num]   ; eax = in
-        mov     di, (offset dword_to_dec_str + 9)
-@@L1:
+        mov     eax, [dword ptr @@num]    ; eax = in
+        test    eax, 80000000h
+        setnz   [@@negative]
+        mov     di, (offset dword_to_dec_str + 10)
+@@main_loop:
         xor     edx, edx
         div     ebx             ; eax = eax / 10, edx = eax % 10
         add     dx, '0'
         mov     [byte ptr ds:di], dl
         dec     di
         test    eax, eax
-        jnz     @@L1
+        jnz     @@main_loop
         inc     di
+
+        ; Add '-' if needed
+        test    [byte ptr @@negative], 1
+        jz      @@skip_add_negative_sign
+        dec     di
+        mov     [byte ptr ds:di], '-'
+@@skip_add_negative_sign:
 
         mov     ax, di
         pop     di ds
