@@ -106,6 +106,10 @@ proc on_game_start near
         ; Clear Kikuri timeout counters (4 bytes starting from
         ; kikuri_p1_iterations_done)
         mov     [dword ptr kikuri_p1_iterations_done], eax
+        ; Clear Kongara timeout counters (3 bytes starting from
+        ; kongara_p1_patterns_done)
+        mov     [word ptr kongara_p1_patterns_done], ax
+        mov     [byte ptr kongara_p1_patterns_done + 2], al
         ret
 endp on_game_start
 
@@ -121,9 +125,8 @@ INVINCIBILITY_FRAME_OFFSET      = 5464h
 PLAYER_LEFT_OFFSET              = 2286h
 ORB_CUR_LEFT_OFFSET             = 2288h
 ORB_CUR_TOP_OFFSET              = 228Ah
-
-; The offsets of z_Palettes[COL_YOKOSHIMA] and stage_pallete[COL_YOKOSHIMA].
-Z_PALETTE_YOKOSHIMA_OFFSET      = 071Dh
+Z_PALETTES_OFFSET               = 06F0h
+; The offsets of stage_pallete[COL_YOKOSHIMA].
 STAGE_PALETTE_YOKOSHIMA_OFFSET  = 5219h
 
 CBOSSENTITY_UNPUT_8_SEGMENT     = 155Fh
@@ -142,6 +145,10 @@ IRAND_SEGMENT                   = 0000h
 IRAND_OFFSET                    = 1608h
 TEXT_FILLCA_SEGMENT             = 0000h
 TEXT_FILLCA_OFFSET              = 0C7Ch
+Z_PALETTE_SET_ALL_SHOW_SEGMENT  = 0E92h
+Z_PALETTE_SET_ALL_SHOW_OFFSET   = 01F0h
+GRZ_LOAD_SINGLE_SEGMENT         = 106Fh
+GRZ_LOAD_SINGLE_OFFSET          = 0A8Ch
 
 ; REIIDEN.EXE modifications
 ; ==============================================================
@@ -342,6 +349,7 @@ proc render_hp far
 local @@hud_hp_render_addr:dword
         assume  ds:nothing
         pushad
+        pushfd
         mov     [word ptr @@hud_hp_render_addr], HUD_HP_RENDER_OFFSET
         mov     ax, [cur_psp]
         add     ax, 10h + HUD_HP_RENDER_SEGMENT
@@ -350,10 +358,44 @@ local @@hud_hp_render_addr:dword
         push    [word ptr hp_slider.value]
         call    [dword ptr @@hud_hp_render_addr]
         add     sp, 4
+        popfd
         popad
         ret
         assume  ds:cseg
 endp render_hp
+
+; --------------------------------------------------------------------------
+; Function: load_packed_palettes
+; Description: Load a packed palette data (12bits each palette, without any
+;              padding bits) to z_Palettes.
+; Input: Argument 1 (word): offset (relative to CS) of the packed palette value
+;                           to be loaded into z_Palettes.
+; Output: Nothing
+; --------------------------------------------------------------------------
+proc load_packed_palettes far
+arg @@data_off:word
+        assume  ds:nothing
+        push    si di ax
+
+        mov     di, Z_PALETTES_OFFSET
+        mov     si, [@@data_off]
+
+@@copy_loop:
+        mov     al, [cs:si]
+        inc     si
+        mov     ah, al
+        and     ah, 0Fh
+        shr     al, 4
+        mov     [ds:di], ax
+        inc     di
+        inc     di
+        cmp     di, Z_PALETTES_OFFSET + 30h
+        jne     @@copy_loop
+
+        pop     ax di si
+        ret
+        assume  ds:cseg
+endp load_packed_palettes
 
 ; Shingyoku Warps
 ; ======================
@@ -827,10 +869,12 @@ proc hooked_reiiden_1b03_0a19 far
         mov     ax, [word ptr phase_slider.value]
         imul    bx, ax, 3
         mov     ax, [word ptr bx + (offset yuugenmagan_yokoshima_color) - 6]
-        mov     [word ptr ds:Z_PALETTE_YOKOSHIMA_OFFSET], ax
+        mov     [word ptr ds:Z_PALETTES_OFFSET + \
+                             (size rgb_t) * COL_YOKOSHIMA], ax
         mov     [word ptr ds:STAGE_PALETTE_YOKOSHIMA_OFFSET], ax
         mov     al, [byte ptr bx + (offset yuugenmagan_yokoshima_color) - 6 + 2]
-        mov     [byte ptr ds:Z_PALETTE_YOKOSHIMA_OFFSET + 2], al
+        mov     [byte ptr ds:Z_PALETTES_OFFSET + \
+                             (size rgb_t) * COL_YOKOSHIMA + 2], al
         mov     [byte ptr ds:STAGE_PALETTE_YOKOSHIMA_OFFSET + 2], al
         ; Render HP bar
         call    render_hp
@@ -2276,8 +2320,8 @@ endp kikuri_skip_opening_proc
 ; --------------------------------------------------------------------------
 proc kikuri_init_proc far
         assume  ds:nothing
-        pusha
-        pushf
+        pushad
+        pushfd
 
         mov     ax, [word ptr cs:hp_slider.value]
         mov     [word ptr ds:BOSS_HP_OFFSET], ax
@@ -2318,16 +2362,420 @@ proc kikuri_init_proc far
         pop     ds              ; restore DS
 @@skip_initializing_souls:
 
-        popf
-        popa
+        popfd
+        popad
         ret
         assume  ds:cseg
 endp kikuri_init_proc
 
-
 ; Kongara warps
 
-kongara_do_skip_opening db 0
+kongara_init_org                        db 0C6h, 006h, 02Eh, 05Dh, 001h
+kongara_init_pat                        db 09Ah
+                                        dw (offset kongara_init_proc), 0
+inject_def kongara_init 0, reiiden, 2CDDh, 20CBh, 5
+
+kongara_inc_p1_patterns_done_org        db 0A1h, 058h, 016h, 0A3h, 08Dh, 06Bh
+kongara_inc_p1_patterns_done_pat \
+        db 09Ah
+        dw (offset kongara_inc_p1_patterns_done_proc), 0
+        db NOP_1BYTE
+inject_def kongara_inc_p1_patterns_done 0, reiiden, 2CDDh, 218Dh, 6
+
+kongara_chk_p1_patterns_done_org        db 083h, 03Eh, 05Ah, 016h, 007h
+kongara_chk_p1_patterns_done_pat \
+        db 09Ah
+        dw (offset kongara_chk_p1_patterns_done_proc), 0
+inject_def kongara_chk_p1_patterns_done 0, reiiden, 2CDDh, 223Bh, 5
+
+kongara_inc_p2_patterns_done_org        db 0A1h, 058h, 016h, 0A3h, 08Dh, 06Bh
+kongara_inc_p2_patterns_done_pat \
+        db 09Ah
+        dw (offset kongara_inc_p2_patterns_done_proc), 0
+        db NOP_1BYTE
+inject_def kongara_inc_p2_patterns_done 0, reiiden, 2CDDh, 240Dh, 6
+
+kongara_chk_p2_patterns_done_org        db 083h, 03Eh, 05Ah, 016h, 009h
+kongara_chk_p2_patterns_done_pat \
+        db 09Ah
+        dw (offset kongara_chk_p2_patterns_done_proc), 0
+inject_def kongara_chk_p2_patterns_done 0, reiiden, 2CDDh, 248Bh, 5
+
+kongara_inc_p3_patterns_done_org        db 0A1h, 058h, 016h, 0A3h, 08Dh, 06Bh
+kongara_inc_p3_patterns_done_pat \
+        db 09Ah
+        dw (offset kongara_inc_p3_patterns_done_proc), 0
+        db NOP_1BYTE
+inject_def kongara_inc_p3_patterns_done 0, reiiden, 2CDDh, 2650h, 6
+
+kongara_chk_p3_patterns_done_org        db 083h, 03Eh, 05Ah, 016h, 006h
+kongara_chk_p3_patterns_done_pat \
+        db 09Ah
+        dw (offset kongara_chk_p3_patterns_done_proc), 0
+inject_def kongara_chk_p3_patterns_done 0, reiiden, 2CDDh, 26CEh, 5
+
+kongara_skip_opening1_org       db 057h, 09Ah, 008h, 000h, 073h, 021h, \
+                                   059h, 003h, 0FEh
+kongara_skip_opening1_pat       db 09Ah
+                                dw (offset kongara_skip_opening1_proc), 0
+                                db 0E9h, 0CFh, 000h, NOP_1BYTE
+kongara_skip_opening1_var       db 0, 0, 0, 0, 1, 1, 0, 0, 0
+inject_def kongara_skip_opening1 1, reiiden, 2CDDh, 01D2h, 9
+
+kongara_skip_opening2_org       db 06Ah, 028h, 09Ah, 004h, 000h, 036h, 01Eh, \
+                                   083h, 0C4h, 00Ah, 033h, 0F6h
+kongara_skip_opening2_pat       db 083h, 0C4h, 008h, 09Ah
+                                dw (offset kongara_skip_opening2_proc), 0
+                                db 0E9h, 091h, 000h, NOP_1BYTE
+kongara_skip_opening2_var       db 5 dup(0), 1, 1, 5 dup(0)
+inject_def kongara_skip_opening2 1, reiiden, 2CDDh, 030Eh, 12
+
+kongara_skip_opening3_org       db 033h, 0FFh, 0EBh, 03Ah, 0A0h, 00Bh, 007h
+kongara_skip_opening3_pat       db 09Ah
+                                dw (offset kongara_skip_opening3_proc), 0
+                                db 0EBh, 03Ch
+inject_def kongara_skip_opening3 0, reiiden, 2CDDh, 03E2h, 7
+
+kongara_set_p1_attack_org       db 09Ah, 008h, 016h, 000h, 010h, \
+                                   0BBh, 003h, 000h
+kongara_set_p1_attack_pat       db 09Ah
+                                dw (offset kongara_set_p1_attack_proc), 0
+                                db 0EBh, 020h, NOP_1BYTE
+kongara_set_p1_attack_var       db 0, 0, 0, 1, 1, 0, 0, 0
+inject_def kongara_set_p1_attack 1, reiiden, 2CDDh, 2196h, 8
+
+kongara_set_p2_attack_org       db 09Ah, 008h, 016h, 000h, 010h, \
+                                   0BBh, 004h, 000h
+kongara_set_p2_attack_pat       db 09Ah
+                                dw (offset kongara_set_p2_attack_proc), 0
+                                db 0EBh, 020h, NOP_1BYTE
+kongara_set_p2_attack_var       db 0, 0, 0, 1, 1, 0, 0, 0
+inject_def kongara_set_p2_attack 1, reiiden, 2CDDh, 23E6h, 8
+
+kongara_set_p3_attack_org       db 09Ah, 008h, 016h, 000h, 010h, \
+                                   0BBh, 003h, 000h
+kongara_set_p3_attack_pat       db 09Ah
+                                dw (offset kongara_set_p3_attack_proc), 0
+                                db 0EBh, 020h, NOP_1BYTE
+kongara_set_p3_attack_var       db 0, 0, 0, 1, 1, 0, 0, 0
+inject_def kongara_set_p3_attack 1, reiiden, 2CDDh, 2629h, 8
+
+kongara_set_p4_attack_org       db 09Ah, 008h, 016h, 000h, 010h, \
+                                   0BBh, 00Ch, 000h
+kongara_set_p4_attack_pat       db 09Ah
+                                dw (offset kongara_set_p4_attack_proc), 0
+                                db 0EBh, 020h, NOP_1BYTE
+kongara_set_p4_attack_var       db 0, 0, 0, 1, 1, 0, 0, 0
+inject_def kongara_set_p4_attack 1, reiiden, 2CDDh, 291Fh, 8
+
+kongara_do_skip_opening         db 0
+kongara_p1_patterns_done        db 0
+kongara_p2_patterns_done        db 0
+kongara_p3_patterns_done        db 0
+
+; Every nibble here stands for a byte stored in `z_Palettes`.
+kongara_palettes_after_decelerating_packed \
+        db 000h, 005h, 055h, 0C2h, 021h, 006h, 065h, 098h, 08Ah, 0CBh, 0CFh, \
+           0FFh, 013h, 0A0h, 089h, 0F0h, 00Ah, 000h, 000h, 00Fh, 0F0h, 0EBh, \
+           0AEh, 0EEh
+
+KONGARA_PATTERN_CUR_OFFSET      = 1658h
+KONGARA_PATTERN_PREV_OFFSET     = 6B8Dh
+KONGARA_BOSS8_GRZ_OFFSET        = 16C3h
+
+; The siddham seed syllables animation, unfortunately, is bottlenecked by the
+; actual speed of reading the .GRP files and writing to the VRAM. Thus, I
+; suppose skipping this animation requires tons of patching code and probably
+; an observable lag before the Kongara fight. We should better leave the siddham
+; appearing animation as it is...
+
+proc kongara_init_proc far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr hp_slider.value]
+        mov     [ds:BOSS_HP_OFFSET], ax
+        mov     ax, [word ptr phase_slider.value]
+        shl     ax, 1
+        dec     ax
+        mov     [ds:BOSS_PHASE_OFFSET], ax
+        cmp     ax, 1
+        je      @@skip_render_hp
+        call    render_hp
+@@skip_render_hp:
+
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_init_proc
+
+proc kongara_skip_opening1_proc far
+local @@z_palette_set_all_show:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        ; Set the address of the procedure to be called
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h + Z_PALETTE_SET_ALL_SHOW_SEGMENT
+        mov     [word ptr @@z_palette_set_all_show + 2], ax
+        mov     [word ptr @@z_palette_set_all_show], \
+                Z_PALETTE_SET_ALL_SHOW_OFFSET
+
+        push    offset kongara_palettes_after_decelerating_packed
+        call    load_packed_palettes                    ; delayed sp+2
+        push    ds Z_PALETTES_OFFSET
+        call    [dword ptr @@z_palette_set_all_show]    ; delayed sp+4
+        add     sp, 6
+
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp kongara_skip_opening1_proc
+
+proc kongara_skip_opening2_proc far
+local @@graph_copy_accessed_page_to_other:dword, @@graph_accesspage_func:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        ; Set the address of the procedures to be called
+        mov     bx, [cs:cur_psp]
+        lea     ax, [bx + GRAPH_COPY_ACCESSED_PAGE_TO_OTHER_SEGMENT + 10h]
+        mov     [word ptr @@graph_copy_accessed_page_to_other], \
+                GRAPH_COPY_ACCESSED_PAGE_TO_OTHER_OFFSET
+        mov     [word ptr @@graph_copy_accessed_page_to_other + 2], ax
+        lea     ax, [bx + GRAPH_ACCESSPAGE_FUNC_SEGMENT + 10h]
+        mov     [word ptr @@graph_accesspage_func], GRAPH_ACCESSPAGE_FUNC_OFFSET
+        mov     [word ptr @@graph_accesspage_func + 2], ax
+
+        push    1
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        call    [dword ptr @@graph_copy_accessed_page_to_other]
+        push    0
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        add     sp, 4                                   ; sp+4
+
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp kongara_skip_opening2_proc
+
+proc kongara_skip_opening3_proc far
+local @@z_palette_set_all_show:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        ; Set the address of the procedure to be called
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h + Z_PALETTE_SET_ALL_SHOW_SEGMENT
+        mov     [word ptr @@z_palette_set_all_show + 2], ax
+        mov     [word ptr @@z_palette_set_all_show], \
+                Z_PALETTE_SET_ALL_SHOW_OFFSET
+
+        ; Set the palette of the siddham seed syllables to (0, 9, 15)
+        mov     [word ptr ds:Z_PALETTES_OFFSET + (size rgb_t) * SIDDHAM_COL], \
+                0900h
+        mov     [byte ptr ds:Z_PALETTES_OFFSET + \
+                             (size rgb_t) * SIDDHAM_COL + 2], 0Ah
+
+        push    ds Z_PALETTES_OFFSET
+        call    [dword ptr @@z_palette_set_all_show]
+        add     sp, 4
+
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp kongara_skip_opening3_proc
+
+proc kongara_inc_p1_patterns_done_proc far
+        assume  ds:nothing
+        push    ax
+        cmp     [byte ptr cs:TIME_LOCK_STATE], 0
+        jne     @@skip_inc_counter
+        inc     [byte ptr cs:kongara_p1_patterns_done]
+@@skip_inc_counter:
+        ; Hooked instructions
+        mov     ax, [ds:KONGARA_PATTERN_CUR_OFFSET]
+        mov     [ds:KONGARA_PATTERN_PREV_OFFSET], ax
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_inc_p1_patterns_done_proc
+
+proc kongara_chk_p1_patterns_done_proc far
+        assume  ds:nothing
+        cmp     [byte ptr kongara_p1_patterns_done], 7
+        ret
+        assume  ds:cseg
+endp kongara_chk_p1_patterns_done_proc
+
+proc kongara_inc_p2_patterns_done_proc far
+        assume  ds:nothing
+        push    ax
+        cmp     [byte ptr cs:TIME_LOCK_STATE], 0
+        jne     @@skip_inc_counter
+        inc     [byte ptr cs:kongara_p2_patterns_done]
+@@skip_inc_counter:
+        ; Hooked instructions
+        mov     ax, [ds:KONGARA_PATTERN_CUR_OFFSET]
+        mov     [ds:KONGARA_PATTERN_PREV_OFFSET], ax
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_inc_p2_patterns_done_proc
+
+proc kongara_chk_p2_patterns_done_proc far
+        assume  ds:nothing
+        cmp     [byte ptr kongara_p2_patterns_done], 9
+        ret
+        assume  ds:cseg
+endp kongara_chk_p2_patterns_done_proc
+
+proc kongara_inc_p3_patterns_done_proc far
+        assume  ds:nothing
+        push    ax
+        cmp     [byte ptr cs:TIME_LOCK_STATE], 0
+        jne     @@skip_inc_counter
+        inc     [byte ptr cs:kongara_p3_patterns_done]
+@@skip_inc_counter:
+        ; Hooked instructions
+        mov     ax, [ds:KONGARA_PATTERN_CUR_OFFSET]
+        mov     [ds:KONGARA_PATTERN_PREV_OFFSET], ax
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_inc_p3_patterns_done_proc
+
+proc kongara_chk_p3_patterns_done_proc far
+        assume  ds:nothing
+        cmp     [byte ptr kongara_p3_patterns_done], 6
+        ret
+        assume  ds:cseg
+endp kongara_chk_p3_patterns_done_proc
+
+proc kongara_vanilla_set_attack_proc far
+arg @@count_on_first_try:word, @@count_on_second_try:word
+local @@irand:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h + IRAND_SEGMENT
+        mov     [word ptr @@irand], IRAND_OFFSET
+        mov     [word ptr @@irand + 2], ax
+
+        call    [dword ptr @@irand]
+        mov     bx, [@@count_on_first_try]
+        cwd
+        idiv    bx
+        cmp     dx, [ds:KONGARA_PATTERN_PREV_OFFSET]
+        jne     @@skip_second_try
+        call    [dword ptr @@irand]
+        mov     bx, [@@count_on_second_try]
+        cwd
+        idiv    bx
+@@skip_second_try:
+        mov     [ds:KONGARA_PATTERN_CUR_OFFSET], dx
+
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp kongara_vanilla_set_attack_proc
+
+proc kongara_set_p1_attack_proc far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr cs:p1_attack.value]
+        test    ax, ax
+        jz      @@original_behaviour
+        dec     ax
+        mov     [ds:KONGARA_PATTERN_CUR_OFFSET], ax
+        jmp     @@return
+
+@@original_behaviour:
+        push    3 3
+        call    kongara_vanilla_set_attack_proc
+        add     sp, 4
+
+@@return:
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_set_p1_attack_proc
+
+proc kongara_set_p2_attack_proc far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr cs:p2_attack.value]
+        test    ax, ax
+        jz      @@original_behaviour
+        dec     ax
+        mov     [ds:KONGARA_PATTERN_CUR_OFFSET], ax
+        jmp     @@return
+
+@@original_behaviour:
+        push    4 4
+        call    kongara_vanilla_set_attack_proc
+        add     sp, 4
+
+@@return:
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_set_p2_attack_proc
+
+proc kongara_set_p3_attack_proc far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr cs:p3_attack.value]
+        test    ax, ax
+        jz      @@original_behaviour
+        dec     ax
+        mov     [ds:KONGARA_PATTERN_CUR_OFFSET], ax
+        jmp     @@return
+
+@@original_behaviour:
+        push    2 3
+        call    kongara_vanilla_set_attack_proc
+        add     sp, 4
+
+@@return:
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_set_p3_attack_proc
+
+proc kongara_set_p4_attack_proc far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr cs:p4_attack.value]
+        test    ax, ax
+        jz      @@original_behaviour
+        dec     ax
+        mov     [ds:KONGARA_PATTERN_CUR_OFFSET], ax
+        jmp     @@return
+
+@@original_behaviour:
+        push    2 12
+        call    kongara_vanilla_set_attack_proc
+        add     sp, 4
+
+@@return:
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_set_p4_attack_proc
 
 ; OP.EXE modifications
 ; ==============================================================
@@ -2487,6 +2935,9 @@ sariel_lock_form        dw (offset sariel_lock_form_1), \
                            (offset sariel_lock_form_2), \
                            (offset sariel_lock_form_3), \
                            (offset sariel_lock_form_4), 0FFFFh
+kongara_skip_opening    dw (offset kongara_skip_opening1), \
+                           (offset kongara_skip_opening2), \
+                           (offset kongara_skip_opening3)
 reiiden_unconditionals  dw (offset stage_num_animate), \
                            (offset harry_up_animate)
                         dw (offset shingyoku_p2_attack), \
@@ -2523,7 +2974,18 @@ reiiden_unconditionals  dw (offset stage_num_animate), \
                            (offset kikuri_chk_p4_iterations_done), \
                            (offset kikuri_init), \
                            (offset kikuri_lock_p4_attack_part1), \
-                           (offset kikuri_lock_p4_attack_part2), 0FFFFh
+                           (offset kikuri_lock_p4_attack_part2)
+                        dw (offset kongara_init), \
+                           (offset kongara_inc_p1_patterns_done), \
+                           (offset kongara_chk_p1_patterns_done), \
+                           (offset kongara_inc_p2_patterns_done), \
+                           (offset kongara_chk_p2_patterns_done), \
+                           (offset kongara_inc_p3_patterns_done), \
+                           (offset kongara_chk_p3_patterns_done), \
+                           (offset kongara_set_p1_attack), \
+                           (offset kongara_set_p2_attack), \
+                           (offset kongara_set_p3_attack), \
+                           (offset kongara_set_p4_attack), 0FFFFh
 
 op_unconditionals       dw (offset practise_menu_part1), \
                            (offset practise_menu_part2), 0FFFFh
@@ -2557,25 +3019,25 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
 @@save_to_inject:
 
         ; Save the Extended Error Information
-        pusha
-        push    ds
-        mov     ah, 59h
-        xor     bx, bx
-        int     21h
-        assume  ds:nothing
-        pusha           ; AX, BX, CX, DX, original SP, BP, SI, DI
-        mov     [dos_parameter_list.ds_val], ds
-        mov     [dos_parameter_list.es_val], es
-        pop     [word ptr dos_parameter_list.di_val]
-        pop     [word ptr dos_parameter_list.si_val]
-        add     sp, 4   ; Ignore SP, BP
-        pop     [word ptr dos_parameter_list.dx_val]
-        pop     [word ptr dos_parameter_list.cx_val]
-        pop     [word ptr dos_parameter_list.bx_val]
-        pop     [word ptr dos_parameter_list.ax_val]
-        pop     ds
-        assume  ds:cseg
-        popa
+        ; pusha
+        ; push    ds
+        ; mov     ah, 59h
+        ; xor     bx, bx
+        ; int     21h
+        ; assume  ds:nothing
+        ; pusha           ; AX, BX, CX, DX, original SP, BP, SI, DI
+        ; mov     [dos_parameter_list.ds_val], ds
+        ; mov     [dos_parameter_list.es_val], es
+        ; pop     [word ptr dos_parameter_list.di_val]
+        ; pop     [word ptr dos_parameter_list.si_val]
+        ; add     sp, 4   ; Ignore SP, BP
+        ; pop     [word ptr dos_parameter_list.dx_val]
+        ; pop     [word ptr dos_parameter_list.cx_val]
+        ; pop     [word ptr dos_parameter_list.bx_val]
+        ; pop     [word ptr dos_parameter_list.ax_val]
+        ; pop     ds
+        ; assume  ds:cseg
+        ; popa
 
         mov     ah, 62h
         int     21h
@@ -2657,12 +3119,17 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         movzx   ax, [lock_form.value]
         push    si ax (offset sariel_lock_form)
         call    inject_multiple                 ; delayed sp+6
+        add     sp, 18                          ; sp+18
+
         movzx   ax, [sariel_do_skip_fake_death]
         push    si ax (offset sariel_skip_fake_death)
         call    inject_multiple                 ; delayed sp+6
+        movzx   ax, [kongara_do_skip_opening]
+        push    si ax (offset kongara_skip_opening)
+        call    inject_multiple                 ; delayed sp+6
         push    si 1 (offset reiiden_unconditionals)
         call    inject_multiple                 ; delayed sp+6
-        add     sp, 30                          ; sp+30
+        add     sp, 18                          ; sp+18
 @@skip_reiiden_exe_patches:
 
         push    [dword ptr @@saved_filename_ptr] ds (offset op_exe)
@@ -2679,9 +3146,9 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         ; Restore the saved Extended Error Information. Yes, INT 21h/5D0Ah is
         ; in DOS 3.1+, but there are no DOS-3.0x-based DOS on PC-98, so our
         ; DOS 3+ assumption allows using this function.
-        mov     dx, (offset dos_parameter_list)
-        mov     ax, 5D0Ah
-        int     21h
+        ; mov     dx, (offset dos_parameter_list)
+        ; mov     ax, 5D0Ah
+        ; int     21h
 
 @@return:
         pop     di si
@@ -3973,8 +4440,21 @@ patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
                            (offset kikuri_chk_p4_iterations_done_pat + 3), \
                            (offset kikuri_skip_opening_pat + 3), \
                            (offset kikuri_init_pat + 3), \
-                           (offset kikuri_lock_p4_attack_part2_pat + 3), \
-                           0FFFFh
+                           (offset kikuri_lock_p4_attack_part2_pat + 3)
+                        dw (offset kongara_init_pat + 3), \
+                           (offset kongara_skip_opening1_pat + 3), \
+                           (offset kongara_skip_opening2_pat + 6), \
+                           (offset kongara_skip_opening3_pat + 3), \
+                           (offset kongara_inc_p1_patterns_done_pat + 3), \
+                           (offset kongara_chk_p1_patterns_done_pat + 3), \
+                           (offset kongara_inc_p2_patterns_done_pat + 3), \
+                           (offset kongara_chk_p2_patterns_done_pat + 3), \
+                           (offset kongara_inc_p3_patterns_done_pat + 3), \
+                           (offset kongara_chk_p3_patterns_done_pat + 3), \
+                           (offset kongara_set_p1_attack_pat + 3), \
+                           (offset kongara_set_p2_attack_pat + 3), \
+                           (offset kongara_set_p3_attack_pat + 3), \
+                           (offset kongara_set_p4_attack_pat + 3), 0FFFFh
 
 COMMAND_PARAM_LEN_OFFSET        = 80h
 COMMAND_PARAM_OFFSET            = 81h
