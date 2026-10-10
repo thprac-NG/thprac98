@@ -3109,7 +3109,8 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         cmp     [byte ptr stage_slider.value], 5
         jne     @@skip_boss_inject
         mov     bx, [word ptr section_slider.value]
-        push    si 1 [word ptr bx - 1 + (offset boss_practise_arr)]
+        shl     bx, 1
+        push    si 1 [word ptr bx + (offset boss_practise_arr)]
         call    inject_multiple
         add     sp, 6
 @@skip_boss_inject:
