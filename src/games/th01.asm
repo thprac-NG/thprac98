@@ -1164,15 +1164,16 @@ endp elis_p2_attack_select
 ; Function: elis_p3b_attack_select
 ; Description: (See the comment above)
 ; Input: Nothing
-; Output (in AX % 4 + 1): The chosen attack number.
+; Output (in AX % 4): The chosen attack number.
 ; --------------------------------------------------------------------------
 proc elis_p3b_attack_select far
         assume  ds:nothing
         push    bx
         mov     ax, [word ptr p3_attack.value]
+        add     ax, 3
         cmp     [byte ptr current_ui_boss], UI_ELIS
         setz    bl
-        test    ax, ax
+        cmp     ax, 3
         setnz   bh
         test    bh, bl
         jnz     @@skip_irand_calling
@@ -1187,15 +1188,17 @@ endp elis_p3b_attack_select
 ; Function: elis_p3g_attack_select
 ; Description: (See the comment above)
 ; Input: Nothing
-; Output (in AX % 3 + 1): The chosen attack number.
+; Output (in AX % 3): The chosen attack number.
 ; --------------------------------------------------------------------------
 proc elis_p3g_attack_select far
         assume  ds:nothing
         push    bx
         mov     ax, [word ptr p4_attack.value]
+        inc     ax
+        inc     ax
         cmp     [byte ptr current_ui_boss], UI_ELIS
         setz    bl
-        test    ax, ax
+        cmp     ax, 2
         setnz   bh
         test    bh, bl
         jnz     @@skip_irand_calling
@@ -3540,7 +3543,7 @@ endm
         mov     [word ptr p2_cur_first_attack_str], (offset p2_attack_elis_1)
         mov     [word ptr p3_cur_first_attack_str], (offset p3b_attack_elis_1)
         mov     [word ptr p4_cur_first_attack_str], (offset p3g_attack_elis_1)
-        set_phase_attack_value 1, 3
+        set_phase_attack_value 1, 4
         set_phase_attack_value 2, 4
         set_phase_attack_value 3, 4
         set_phase_attack_value 4, 3
@@ -3737,10 +3740,10 @@ endm
         ;     Initialize UI values
         mov     [byte ptr phase_slider.value], 1
         mov     [byte ptr phase_slider.max_value], 4
-        mov     [word ptr p1_cur_first_attack_str], (offset p1_attack_kongara_1)
-        mov     [word ptr p2_cur_first_attack_str], (offset p2_attack_kongara_1)
-        mov     [word ptr p3_cur_first_attack_str], (offset p3_attack_kongara_1)
-        mov     [word ptr p4_cur_first_attack_str], (offset p4_attack_kongara_1)
+        mov     [word ptr p1_cur_first_attack_str], (offset attack_kongara_1)
+        mov     [word ptr p2_cur_first_attack_str], (offset attack_kongara_4)
+        mov     [word ptr p3_cur_first_attack_str], (offset attack_kongara_8)
+        mov     [word ptr p4_cur_first_attack_str], (offset attack_kongara_1)
         set_phase_attack_value 1, 3
         set_phase_attack_value 2, 4
         set_phase_attack_value 3, 3
@@ -4080,11 +4083,11 @@ include "..\src\tui\tsrtuidt.asm"
 include "..\src\tui\tsrtui.asm"
 
 practise_menu_window    ui_window {     \
-        top_left_x              = 40,   \
+        top_left_x              = 38,   \
         top_left_y              = 7,    \
-        width                   = 38,   \
+        width                   = 40,   \
         height                  = 18,   \
-        default_slider_width    = 22    \
+        default_slider_width    = 24    \
 }
 
 playing_mode_original_str       db 'Original', 0
@@ -4242,70 +4245,64 @@ lock_form       ui_tickbox {                            \
         window_off      = offset practise_menu_window   \
 }
 
+;                          Cannot pass this line -> |
+; longest_attack_str    db '123456789012345678901234'
 vanilla_attack          db 'Vanilla', 0
-p2_attack_shingyoku_1   db 'SG P2 1', 0
-p2_attack_shingyoku_2   db 'SG P2 2', 0
-p2_attack_shingyoku_3   db 'SG P2 3', 0
-p2_attack_shingyoku_4   db 'SG P2 4', 0
-p1_attack_elis_1        db 'EL P1 1', 0
-p1_attack_elis_2        db 'EL P1 2', 0
-p1_attack_elis_3        db 'EL P1 3', 0
-p2_attack_elis_1        db 'EL P2 1', 0
-p2_attack_elis_2        db 'EL P2 2', 0
-p2_attack_elis_3        db 'EL P2 3', 0
-p2_attack_elis_4        db 'EL P2 4', 0
-p3b_attack_elis_1       db 'EL P3B 1', 0
-p3b_attack_elis_2       db 'EL P3B 2', 0
-p3b_attack_elis_3       db 'EL P3B 3', 0
-p3b_attack_elis_4       db 'EL P3B 4', 0
-p3g_attack_elis_1       db 'EL P3G 1', 0
-p3g_attack_elis_2       db 'EL P3G 2', 0
-p3g_attack_elis_3       db 'EL P3G 3', 0
-f1_attack_sariel_1      db 'SR F1 1', 0
-f1_attack_sariel_2      db 'SR F1 2', 0
-f1_attack_sariel_3      db 'SR F1 3', 0
-f2_attack_sariel_1      db 'SR F2 1', 0
-f2_attack_sariel_2      db 'SR F2 2', 0
-f3_attack_sariel_1      db 'SR F3 1', 0
-f3_attack_sariel_2      db 'SR F3 2', 0
-f3_attack_sariel_3      db 'SR F3 3', 0
-f4_attack_sariel_1      db 'SR F4 1', 0
-f4_attack_sariel_2      db 'SR F4 2', 0
-f4_attack_sariel_3      db 'SR F4 3', 0
-p1_attack_mima_1        db 'MM P1 1', 0
-p1_attack_mima_2        db 'MM P1 2', 0
-p1_attack_mima_3        db 'MM P1 3', 0
-p1_attack_mima_4        db 'MM P1 4', 0
-p2_attack_mima_1        db 'MM P2 1', 0
-p2_attack_mima_2        db 'MM P2 2', 0
-p2_attack_mima_3        db 'MM P2 3', 0
-p2_attack_mima_4        db 'MM P2 4', 0
-p4_attack_kikuri_1      db 'KK P4 1', 0
-p4_attack_kikuri_2      db 'KK P4 2', 0
-p4_attack_kikuri_3      db 'KK P4 3', 0
-p4_attack_kikuri_4      db 'KK P4 4', 0
-p1_attack_kongara_1     db 'KG P1 1', 0
-p1_attack_kongara_2     db 'KG P1 2', 0
-p1_attack_kongara_3     db 'KG P1 3', 0
-p2_attack_kongara_1     db 'KG P2 1', 0
-p2_attack_kongara_2     db 'KG P2 2', 0
-p2_attack_kongara_3     db 'KG P2 3', 0
-p2_attack_kongara_4     db 'KG P2 4', 0
-p3_attack_kongara_1     db 'KG P3 1', 0
-p3_attack_kongara_2     db 'KG P3 2', 0
-p3_attack_kongara_3     db 'KG P3 3', 0
-p4_attack_kongara_1     db 'KG P4 1', 0
-p4_attack_kongara_2     db 'KG P4 2', 0
-p4_attack_kongara_3     db 'KG P4 3', 0
-p4_attack_kongara_4     db 'KG P4 4', 0
-p4_attack_kongara_5     db 'KG P4 5', 0
-p4_attack_kongara_6     db 'KG P4 6', 0
-p4_attack_kongara_7     db 'KG P4 7', 0
-p4_attack_kongara_8     db 'KG P4 8', 0
-p4_attack_kongara_9     db 'KG P4 9', 0
-p4_attack_kongara_10    db 'KG P4 10', 0
-p4_attack_kongara_11    db 'KG P4 11', 0
-p4_attack_kongara_12    db 'KG P4 12', 0
+p2_attack_shingyoku_1   db 'Chasing', 0
+p2_attack_shingyoku_2   db 'Random downwards', 0
+p2_attack_shingyoku_3   db 'Crossing', 0
+p2_attack_shingyoku_4   db 'Random sling', 0
+p1_attack_elis_1        db 'Lasers', 0
+p1_attack_elis_2        db 'Missles', 0
+p1_attack_elis_3        db 'Pellets', 0
+p1_attack_elis_4        db 'Teleport', 0
+p2_attack_elis_1        db 'Rings', 0
+p2_attack_elis_2        db 'Pellets from spheres', 0
+p2_attack_elis_3        db 'Pellets from rifts', 0
+p2_attack_elis_4        db 'Teleport', 0
+p3b_attack_elis_1       db '5-way', 0   ; aiming for E/N/H, downward for L
+p3b_attack_elis_2       db '2-way aiming', 0
+p3b_attack_elis_3       db 'Rain', 0
+p3b_attack_elis_4       db '2,3-way aiming', 0
+p3g_attack_elis_1       db 'Symmetric', 0
+p3g_attack_elis_2       db 'Rain', 0
+p3g_attack_elis_3       db 'Aiming', 0
+f1_attack_sariel_1      db 'Lasers', 0
+f1_attack_sariel_2      db 'Pellets from vortices', 0
+f1_attack_sariel_3      db 'Pellets from birds', 0
+f2_attack_sariel_1      db 'Aiming bombs', 0
+f2_attack_sariel_2      db 'Aiming pellets', 0
+f3_attack_sariel_1      db 'Lasers', 0
+f3_attack_sariel_2      db 'Rain & Lasers', 0
+f3_attack_sariel_3      db 'Spiral', 0
+f4_attack_sariel_1      db 'Pellets from birds', 0
+f4_attack_sariel_2      db 'Spread', 0
+f4_attack_sariel_3      db 'Rain', 0
+p1_attack_mima_1        db 'Aimed pellets', 0
+p1_attack_mima_2        db 'Aimed missles', 0
+p1_attack_mima_3        db 'Static', 0
+p1_attack_mima_4        db 'Chasing pellets', 0
+p2_attack_mima_1        db 'Pillars', 0
+p2_attack_mima_2        db 'Missles', 0
+p2_attack_mima_3        db 'Slow spray', 0
+p2_attack_mima_4        db 'Lasers', 0
+p4_attack_kikuri_1      db 'Spiral', 0
+p4_attack_kikuri_2      db 'Aiming lasers', 0
+p4_attack_kikuri_3      db 'Rain', 0
+p4_attack_kikuri_4      db 'Vertical lasers', 0
+; P1 uses Attack 1~3, P2 uses 4~7, P3 uses 8~10, P4 uses them all
+attack_kongara_1        db 'Crossing diamonds & rain', 0
+attack_kongara_2        db 'Symmetric', 0
+attack_kongara_3        db '2 snakes & spread', 0
+attack_kongara_4        db 'Aiming rows', 0
+attack_kongara_5        db 'Aiming spray', 0
+attack_kongara_6        db '4 snakes', 0
+attack_kongara_7        db 'Rain from the edges', 0
+attack_kongara_8        db 'Rain from slash', 0
+attack_kongara_9        db 'Lasers & 3-way', 0
+attack_kongara_10       db 'Triangular slash', 0
+attack_kongara_11       db 'Semicircle rain', 0
+attack_kongara_12       db 'Aiming slash', 0
 p1_cur_first_attack_str dw (offset p1_attack_elis_1)
 p2_cur_first_attack_str dw (offset p2_attack_shingyoku_1)
 p3_cur_first_attack_str dw (offset p3b_attack_elis_1)
