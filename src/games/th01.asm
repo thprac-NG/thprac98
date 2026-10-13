@@ -3540,7 +3540,7 @@ endm
         mov     [word ptr p2_cur_first_attack_str], (offset p2_attack_elis_1)
         mov     [word ptr p3_cur_first_attack_str], (offset p3b_attack_elis_1)
         mov     [word ptr p4_cur_first_attack_str], (offset p3g_attack_elis_1)
-        set_phase_attack_value 1, 4
+        set_phase_attack_value 1, 3
         set_phase_attack_value 2, 4
         set_phase_attack_value 3, 4
         set_phase_attack_value 4, 3
@@ -4250,7 +4250,6 @@ p2_attack_shingyoku_4   db 'SG P2 4', 0
 p1_attack_elis_1        db 'EL P1 1', 0
 p1_attack_elis_2        db 'EL P1 2', 0
 p1_attack_elis_3        db 'EL P1 3', 0
-p1_attack_elis_4        db 'EL P1 4', 0
 p2_attack_elis_1        db 'EL P2 1', 0
 p2_attack_elis_2        db 'EL P2 2', 0
 p2_attack_elis_3        db 'EL P2 3', 0
