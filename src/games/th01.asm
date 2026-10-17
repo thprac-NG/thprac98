@@ -2061,6 +2061,7 @@ endp mima_set_phase2_first_atk_proc
 ; Kikuri Warps
 ; ============================
 ; Check https://github.com/H-J-Granger/ReC98/commit/8e8d7823cad3bb362e87a3764071e3e137d7b369
+; and https://github.com/H-J-Granger/ReC98/commit/ba6c0e5308b5909a88a23c1de0b3704cdd1fcb6d
 ; for the C version of the modification in this section.
 ;
 ; kikuri_inc_p1_iterations_done {
@@ -2142,6 +2143,25 @@ endp mima_set_phase2_first_atk_proc
 ;   232A:14FB | E9 D6 02          jmp     232A:17D4   ; jump to stage 2 init
 ;   232A:14FE | 89 F6             mov     si, si      ; effectively nop
 ;
+; kikuri_p4_atk3_rank_fix {
+;   232A:123B | 83 3E 2A 5D 64 75 17 66 68 17 00 16 00 66 68 23 00 19 00 ->
+;             | 83 3E 2A 5D 65 75 17 66 68 3C 00 40 00 66 68 34 00 38 00
+; }
+; Modification:
+; - 332A:123B | 83 3E 2A 5D 64    cmp     boss_phase_frame, 64h
+; + 332A:123B | 83 3E 2A 5D 65    cmp     boss_phase_frame, 65h
+;   332A:1240 | 75 17             jnz     short 332A:1259
+; - 332A:1242 | 66 68 17 00 16 00 push    large 160017h
+; - 332A:1248 | 66 68 23 00 19 00 push    large 190023h
+; + 332A:1242 | 66 68 3C 00 40 00 push    large 3C0040h
+; + 332A:1248 | 66 68 34 00 38 00 push    large 340038h
+;   332A:124E | 1E                push    ds
+;   332A:124F | 68 17 5D          push    offset pattern_state.interval
+;   332A:1252 | 0E                push    cs
+;   332A:1253 | E8 EE ED          call    fn_332A_0044
+;   332A:1256 | 83 C4 0C          add     sp, 0Ch
+;   332A:1259 | ...
+;
 ; kikuri_init {
 ;   232A:17E9 | C6 06 26 5D 00 -> 9A yy yy xx xx
 ; } where "xxxx" is cseg, and "yyyy" is (offset kikuri_init_proc).
@@ -2204,6 +2224,20 @@ kikuri_skip_opening_pat \
         dw (offset kikuri_skip_opening_proc), 0
         db 0E9h, 0D6h, 002h, NOP_2BYTES_SI
 inject_def kikuri_skip_opening 0, reiiden, 232Ah, 14F6h, 10
+
+; In the vanilla game, the rank of this attack isn't set up correctly, and the
+; attack eventually reuse the rank of the last attack (which will always be
+; Attack 2). We will set up the rank (to the ones in Attack 2) here explicitly
+; since this attack may not follows Attack 2 in the practise mode.
+kikuri_p4_atk3_rank_fix_org     db 083h, 03Eh, 02Ah, 05Dh, 064h, \
+                                   075h, 017h, \
+                                   066h, 068h, 017h, 000h, 016h, 000h, \
+                                   066h, 068h, 023h, 000h, 019h, 000h
+kikuri_p4_atk3_rank_fix_pat     db 083h, 03Eh, 02Ah, 05Dh, 065h, \
+                                   075h, 017h, \
+                                   066h, 068h, 03Ch, 000h, 040h, 000h, \
+                                   066h, 068h, 034h, 000h, 038h, 000h
+inject_def kikuri_p4_atk3_rank_fix 0, reiiden, 232Ah, 123Bh, 19
 
 kikuri_init_org         db 0C6h, 006h, 026h, 05Dh, 000h
 kikuri_init_pat         db 09Ah
@@ -3069,7 +3103,8 @@ kikuri_practise         dw (offset kikuri_inc_p1_iterations_done), \
                            (offset kikuri_chk_p4_iterations_done), \
                            (offset kikuri_init), \
                            (offset kikuri_lock_p4_attack_part1), \
-                           (offset kikuri_lock_p4_attack_part2), 0FFFFh
+                           (offset kikuri_lock_p4_attack_part2), \
+                           (offset kikuri_p4_atk3_rank_fix), 0FFFFh
 kongara_practise        dw (offset kongara_init), \
                            (offset kongara_inc_p1_patterns_done), \
                            (offset kongara_chk_p1_patterns_done), \
