@@ -3604,6 +3604,9 @@ endm
 
         ; Elis
 @@maintain_elis_specific_ui:
+        ;   Initialize special UI labels
+        mov     [word ptr p3_attack.label_off], (offset p3_bat_attack_label)
+        mov     [word ptr p4_attack.label_off], (offset p3_girl_attack_label)
         ;   Link the UI components that are relevant to Elis
         push    (offset elis_linking)
         call    link_components
@@ -3613,9 +3616,6 @@ endm
         mov     [byte ptr do_link_only], 0
         jmp     @@return
 @@skip_returning_because_of_link_only_3:
-        ;   Initialize special UI labels
-        mov     [word ptr p3_attack.label_off], (offset p3_bat_attack_label)
-        mov     [word ptr p4_attack.label_off], (offset p3_girl_attack_label)
         cmp     [byte ptr current_ui_boss], UI_ELIS
         je      @@skip_elis_init
         mov     [byte ptr current_ui_boss], UI_ELIS
@@ -3658,6 +3658,12 @@ endm
 
         ; Sariel
 @@maintain_sariel_specific_ui:
+        ;   Initialize special UI labels
+        mov     [word ptr phase_slider.label_off], (offset form_slider_label)
+        mov     [word ptr p1_attack.label_off], (offset form_1_attack_label)
+        mov     [word ptr p2_attack.label_off], (offset form_2_attack_label)
+        mov     [word ptr p3_attack.label_off], (offset form_3_attack_label)
+        mov     [word ptr p4_attack.label_off], (offset form_4_attack_label)
         ;   Link the UI components that are relevant to Sariel
         push    (offset sariel_linking)
         call    link_components
@@ -3667,12 +3673,6 @@ endm
         mov     [byte ptr do_link_only], 0
         jmp     @@return
 @@skip_returning_because_of_link_only_4:
-        ;   Initialize special UI labels
-        mov     [word ptr phase_slider.label_off], (offset form_slider_label)
-        mov     [word ptr p1_attack.label_off], (offset form_1_attack_label)
-        mov     [word ptr p2_attack.label_off], (offset form_2_attack_label)
-        mov     [word ptr p3_attack.label_off], (offset form_3_attack_label)
-        mov     [word ptr p4_attack.label_off], (offset form_4_attack_label)
         cmp     [byte ptr current_ui_boss], UI_SARIEL
         je      @@skip_sariel_init
         mov     [byte ptr current_ui_boss], UI_SARIEL
