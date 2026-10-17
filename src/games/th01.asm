@@ -1126,10 +1126,10 @@ local @@in_p3:byte, @@graph_accesspage_func:dword
         mov     al, [byte ptr bx + (offset elis_boss_phase_val_of_each_stages) \
                               - 1]
         mov     [byte ptr ds:BOSS_PHASE_OFFSET], al
-        ; Set the form of Elis, and unput the Elis sprite if warping to P3.
+        ; Set the form of Elis if warping to P3.
         cmp     [byte ptr phase_slider.value], 3
         jne     @@skip_p3_handling
-        mov     [byte ptr @@in_p3], 0
+        mov     [byte ptr @@in_p3], 1
         mov     [word ptr ds:ELIS_FORM_OFFSET], F_GIRL
         push    0
         call    [dword ptr @@graph_accesspage_func]
@@ -1138,7 +1138,7 @@ local @@in_p3:byte, @@graph_accesspage_func:dword
 @@skip_main_handling:
 
         cmp     [byte ptr @@in_p3], 0
-        je      @@skip_sprite_adding
+        jne     @@skip_sprite_adding
         push    1
         call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
         call    ent_still_or_wave_unlock_put_lock_8
