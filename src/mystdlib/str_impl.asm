@@ -44,7 +44,7 @@ arg @@dest:dword, @@src:dword, @@movsb_count:word
         rep movsb
 
         pop     di si ds
-        assume  ds:dataseg
+        assume  ds:@data
         ret
 endp _MEMCPY_HELPER
 end

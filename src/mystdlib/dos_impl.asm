@@ -129,7 +129,7 @@ arg @@int_no:word, @@in_regs_off:word, @@in_regs_seg:word, \
         pop     [word ptr es:si + wordregs_t.si_]       ; pop (si after INT)
 
         pop     si di ds
-        assume  ds:dataseg
+        assume  ds:@data
         ret
 endp _INT86X_
 
