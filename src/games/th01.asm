@@ -953,6 +953,7 @@ endp hooked_reiiden_1b03_0a19
 ; Elis Warps
 ; ============================
 ; Check https://github.com/H-J-Granger/ReC98/commit/788916dee0fa685702a1507320367f6960fe464e
+; and https://github.com/H-J-Granger/ReC98/commit/25b9f97979f566f21da532028ce9f7d382258317
 ; for the C version of the modification in this section.
 ;
 ; elis_skip_opening_part1 {
@@ -977,13 +978,15 @@ endp hooked_reiiden_1b03_0a19
 ; Note: The 127 here is (KEYFRAME_SLIGHT_RIPPLE - 1).
 
 ; elis_init {
-;   24E3:3391 | C7 06 D7 5D 01 00 -> 9A yy yy xx xx 90
+;   24E3:334A | 6A 01 9A 1E 01 92 1E -> 9A yy yy xx xx EB 3A
+;             |                ^^ ^^
 ; } where "xxxx" is cseg, and "yyyy" is (offset elis_init_proc).
 ; Original assembly:
-;   24E3:3391 | C7 06 D7 5D 01 00 mov    [word ptr phase.cur.pattern], 1
+;   24E3:334A | 6A 01             push   1
+;   24E3:334C | 9A 1E 01 92 1E    callf  graph_accesspage_func
 ; Modified assembly:
-;   24E3:3391 | 9A yy yy xx xx    callf  elis_init_proc
-;   24E3:3396 | 90                nop
+;   24E3:334A | 9A yy yy xx xx    callf  elis_init_proc
+;   24E3:334C | EB 3A             jmp    short 24E3:338B ; skip all the callings
 ;
 ; elis_p1_attack {
 ;   24E3:0F89 | 9A 08 16 00 00 -> 9A yy yy xx xx
