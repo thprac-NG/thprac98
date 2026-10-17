@@ -952,8 +952,9 @@ endp hooked_reiiden_1b03_0a19
 
 ; Elis Warps
 ; ============================
-; Check https://github.com/H-J-Granger/ReC98/commit/788916dee0fa685702a1507320367f6960fe464e
-; and https://github.com/H-J-Granger/ReC98/commit/25b9f97979f566f21da532028ce9f7d382258317
+; Check https://github.com/H-J-Granger/ReC98/commit/788916dee0fa685702a1507320367f6960fe464e ,
+; https://github.com/H-J-Granger/ReC98/commit/25b9f97979f566f21da532028ce9f7d382258317 , and
+; https://github.com/H-J-Granger/ReC98/commit/9545c33dfcbefe79931c8374f81f521cd5251fcb
 ; for the C version of the modification in this section.
 ;
 ; elis_skip_opening_part1 {
@@ -987,6 +988,15 @@ endp hooked_reiiden_1b03_0a19
 ; Modified assembly:
 ;   24E3:334A | 9A yy yy xx xx    callf  elis_init_proc
 ;   24E3:334C | EB 3A             jmp    short 24E3:338B ; skip all the callings
+;
+; elis_p1_attack_init {
+;   24E3:3391 | C7 06 D7 5D 01 00 -> 9A yy yy xx xx 90
+; }, where "xxxx" is cseg, and "yyyy" is (offset elis_p1_attack_init_proc).
+; Original assembly: mov [word ptr phase.cur.pattern], 1
+; Modified assembly:
+;   24E3:3391 | 9A yy yy xx xx    callf  elis_p1_attack_init_proc
+;   24E3:3396 | 90                nop
+; (elis_p2_attack_init) is completely the same.
 ;
 ; elis_p1_attack {
 ;   24E3:0F89 | 9A 08 16 00 00 -> 9A yy yy xx xx
@@ -1036,11 +1046,23 @@ elis_init_pat                   db 09Ah
 elis_init_var                   db 5 dup (0), 1, 1
 inject_def elis_init, 1, reiiden, 24E3h, 334Ah, 7
 
+elis_p1_attack_init_org         db 0C7h, 006h, 0D7h, 05Dh, 001h, 000h
+elis_p1_attack_init_pat         db 09Ah
+                                dw (offset elis_p1_attack_init_proc), 0
+                                db NOP_1BYTE
+inject_def elis_p1_attack_init, 0, reiiden, 24E3h, 3391h, 6
+
 elis_p1_attack_org              db 09Ah, 008h, 016h, 000h, 000h
 elis_p1_attack_pat              db 09Ah
                                 dw (offset elis_p1_attack_select), 0
 elis_p1_attack_var              db 0, 0, 0, 1, 1
 inject_def elis_p1_attack, 1, reiiden, 24E3h, 0F89h, 5
+
+elis_p2_attack_init_org         db 0C7h, 006h, 0D7h, 05Dh, 001h, 000h
+elis_p2_attack_init_pat         db 09Ah
+                                dw (offset elis_p2_attack_init_proc), 0
+                                db NOP_1BYTE
+inject_def elis_p2_attack_init, 0, reiiden, 24E3h, 34ECh, 6
 
 elis_p2_attack_org              db 09Ah, 008h, 016h, 000h, 000h
 elis_p2_attack_pat              db 09Ah
@@ -1155,6 +1177,30 @@ local @@in_p3:byte, @@graph_accesspage_func:dword
 endp elis_init_proc
 
 ; --------------------------------------------------------------------------
+; Function: elis_p1_attack_init_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc elis_p1_attack_init_proc far
+        assume  ds:nothing
+        push    ax
+        cmp     [byte ptr current_ui_boss], UI_ELIS
+        jne     @@return
+        mov     ax, [word ptr p1_attack.value]
+        test    ax, ax
+        jnz     @@skip_adding_2
+        inc     ax
+@@skip_adding_2:
+        and     ax, 3
+        mov     [word ptr ds:ELIS_PHASE_CUR_PATTERN_OFFSET], ax
+        ; phase.cur.pattern = (AX == 0 ? 1 : AX) % 4
+@@return:
+        pop     ax
+        ret
+        assume  ds:cseg
+endp elis_p1_attack_init_proc
+
+; --------------------------------------------------------------------------
 ; Function: elis_p1_attack_select
 ; Description: (See the comment above)
 ; Input: Nothing
@@ -1179,6 +1225,30 @@ proc elis_p1_attack_select far
         ret
         assume  ds:cseg
 endp elis_p1_attack_select
+
+; --------------------------------------------------------------------------
+; Function: elis_p2_attack_init_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc elis_p2_attack_init_proc far
+        assume  ds:nothing
+        push    ax
+        cmp     [byte ptr current_ui_boss], UI_ELIS
+        jne     @@return
+        mov     ax, [word ptr p2_attack.value]
+        test    ax, ax
+        jnz     @@skip_adding_2
+        inc     ax
+@@skip_adding_2:
+        and     ax, 3
+        mov     [word ptr ds:ELIS_PHASE_CUR_PATTERN_OFFSET], ax
+        ; phase.cur.pattern = (AX == 0 ? 1 : AX) % 4
+@@return:
+        pop     ax
+        ret
+        assume  ds:cseg
+endp elis_p2_attack_init_proc
 
 ; --------------------------------------------------------------------------
 ; Function: elis_p2_attack_select
@@ -3081,6 +3151,8 @@ yuugenmagan_practise    dw (offset yuugenmagan_timelock_p1_part1), \
                            (offset yuugenmagan_timelock_p4_part2), \
                            (offset yuugenmagan_init), 0FFFFh
 elis_practise           dw (offset elis_init), \
+                           (offset elis_p1_attack_init), \
+                           (offset elis_p2_attack_init), \
                            (offset elis_p1_attack), (offset elis_p2_attack), \
                            (offset elis_p3g_attack), (offset elis_p3b_attack), \
                            0FFFFh
@@ -4602,7 +4674,9 @@ patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
                            (offset yuugenmagan_timelock_p4_part2_pat + 3), \
                            (offset yuugenmagan_init_pat + 3)
                         dw (offset elis_init_pat + 3), \
+                           (offset elis_p1_attack_init_pat + 3), \
                            (offset elis_p1_attack_pat + 3), \
+                           (offset elis_p2_attack_init_pat + 3), \
                            (offset elis_p2_attack_pat + 3), \
                            (offset elis_p3b_attack_pat + 3), \
                            (offset elis_p3g_attack_pat + 3)
