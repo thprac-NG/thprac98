@@ -137,6 +137,8 @@ PLAYER_INVINCIBILITY_TIME_OFFSET = 2284h
 
 CBOSSENTITY_UNPUT_8_SEGMENT     = 155Fh
 CBOSSENTITY_UNPUT_8_OFFSET      = 0B3Eh
+CBOSSENTITY_LOCKED_MOVE_AND_PUT_8_SEGMENT = 155Fh
+CBOSSENTITY_LOCKED_MOVE_AND_PUT_8_OFFSET  = 12ADh
 BOSS_ENTITY_0_OFFSET            = 4E8Ah
 
 GRP_PUT_PALLETE_SHOW_SEGMENT    = 106Fh
@@ -1024,11 +1026,12 @@ elis_skip_opening_part2_pat     db 0C7h, 006h, 0D3h, 05Dh, 0FFh, 000h, \
                                    0C7h, 046h, 0FCh, 001h, 000h
 inject_def elis_skip_opening_part2, 0, reiiden, 24E3h, 3033h, 11
 
-elis_init_org                   db 0C7h, 006h, 0D7h, 05Dh, 001h, 000h
+elis_init_org                   db 06Ah, 001h, 09Ah, 01Eh, 001h, 092h, 01Eh
 elis_init_pat                   db 09Ah
                                 dw (offset elis_init_proc), 0
-                                db NOP_1BYTE
-inject_def elis_init, 0, reiiden, 24E3h, 3391h, 6
+                                db 0EBh, 03Ah
+elis_init_var                   db 5 dup (0), 1, 1
+inject_def elis_init, 1, reiiden, 24E3h, 334Ah, 7
 
 elis_p1_attack_org              db 09Ah, 008h, 016h, 000h, 000h
 elis_p1_attack_pat              db 09Ah
@@ -1061,17 +1064,52 @@ elis_boss_phase_val_of_each_stages      db 1, 3, 4
 elis_do_skip_opening    db 0
 
 ; --------------------------------------------------------------------------
+; Function: ent_still_or_wave_unlock_put_lock_8
+; Description: A reconstruction of the inline function
+;              ent_still_or_wave.unlock_put_lock_8().
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc ent_still_or_wave_unlock_put_lock_8 far
+local @@cbossentity_locked_move_and_put_8:dword
+        assume  ds:nothing
+
+        mov     bx, [cur_psp]
+        lea     ax, [bx + 10h + CBOSSENTITY_LOCKED_MOVE_AND_PUT_8_SEGMENT]
+        mov     [word ptr @@cbossentity_locked_move_and_put_8], \
+                CBOSSENTITY_LOCKED_MOVE_AND_PUT_8_OFFSET
+        mov     [word ptr @@cbossentity_locked_move_and_put_8 + 2], ax
+
+        mov     [word ptr ds:BOSS_ENTITY_0_OFFSET + cbossentity.lock_frame], 0
+        push    3 0 0 0 ds BOSS_ENTITY_0_OFFSET
+        call    [dword ptr @@cbossentity_locked_move_and_put_8]
+        add     sp, 12
+
+        ret
+        assume  ds:cseg
+endp ent_still_or_wave_unlock_put_lock_8
+
+; --------------------------------------------------------------------------
 ; Function: elis_init_proc
 ; Description: (See the comment above)
 ; Input/Output: Nothing
 ; --------------------------------------------------------------------------
 proc elis_init_proc far
-local @@cbossentity_unput_8:dword
+local @@in_p3:byte, @@graph_accesspage_func:dword
         assume  ds:nothing
+        pushad
+        pushfd
+
+        mov     [byte ptr @@in_p3], 0
+
+        ; Set up the address of the procedure to be called
+        mov     bx, [cur_psp]
+        lea     ax, [bx + 10h + GRAPH_ACCESSPAGE_FUNC_SEGMENT]
+        mov     [word ptr @@graph_accesspage_func], GRAPH_ACCESSPAGE_FUNC_OFFSET
+        mov     [word ptr @@graph_accesspage_func + 2], ax
+
         mov     [word ptr ds:ELIS_PHASE_CUR_PATTERN_OFFSET], 1
         cmp     [byte ptr current_ui_boss], UI_ELIS
-        jne     @@skip_handling
-        pushad
+        jne     @@skip_main_handling
         mov     bx, [word ptr phase_slider.value]
         cmp     bx, 1
         je      @@skip_render_hp
@@ -1086,24 +1124,29 @@ local @@cbossentity_unput_8:dword
                               - 1]
         mov     [byte ptr ds:BOSS_PHASE_OFFSET], al
         ; Set the form of Elis, and unput the Elis sprite if warping to P3.
-        cmp     bx, 3
+        cmp     [byte ptr phase_slider.value], 3
         jne     @@skip_p3_handling
+        mov     [byte ptr @@in_p3], 0
         mov     [word ptr ds:ELIS_FORM_OFFSET], F_GIRL
-        mov     [word ptr @@cbossentity_unput_8], CBOSSENTITY_UNPUT_8_OFFSET
-        mov     ax, [cur_psp]
-        add     ax, 10h + CBOSSENTITY_UNPUT_8_SEGMENT
-        mov     [word ptr @@cbossentity_unput_8 + 2], ax
-        push    C_STILL
-        ;   Equivantly, push [word ptr ds:BOSS_ENTITY_0_OFFSET +
-        ;   cbossentity.cur_top] [word ptr ds:BOSS_ENTITY_0_OFFSET +
-        ;   cbossentity.cur_left], benifiting from their adjacing offsets.
-        push    [dword ptr ds:BOSS_ENTITY_0_OFFSET + cbossentity.cur_left]
-        push    ds BOSS_ENTITY_0_OFFSET
-        call    [dword ptr @@cbossentity_unput_8]
-        add     sp, 10
+        push    0
+        call    [dword ptr @@graph_accesspage_func]
+        add     sp, 2
 @@skip_p3_handling:
+@@skip_main_handling:
+
+        cmp     [byte ptr @@in_p3], 0
+        je      @@skip_sprite_adding
+        push    1
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        call    ent_still_or_wave_unlock_put_lock_8
+        push    0
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        call    ent_still_or_wave_unlock_put_lock_8
+        add     sp, 4                                   ; sp+4
+@@skip_sprite_adding:
+
+        popfd
         popad
-@@skip_handling:
         ret
         assume  ds:cseg
 endp elis_init_proc
@@ -2152,7 +2195,7 @@ kikuri_lock_p4_attack_part2_pat \
 inject_def kikuri_lock_p4_attack_part2 0, reiiden, 232Ah, 1AA1h, 5
 
 kikuri_skip_opening_org db 0FFh, 006h, 02Ah, 05Dh, \
-                                   0A1h, 02Ah, 05Dh, 0BBh, 003h, 000h
+                           0A1h, 02Ah, 05Dh, 0BBh, 003h, 000h
 kikuri_skip_opening_pat \
         db 09Ah
         dw (offset kikuri_skip_opening_proc), 0
@@ -2330,6 +2373,7 @@ local @@graph_accesspage_func:dword, \
 @@graph_copy_accessed_page_to_other:dword, @@ptn_put_8:dword
         assume  ds:nothing
         pushad
+        pushfd
 
         ; Set up the addresses of the functions to be called
         mov     ax, [cs:cur_psp]
@@ -2369,6 +2413,7 @@ local @@graph_accesspage_func:dword, \
         mov     [word ptr cs:KIKURI_MAIN_HIT_INVINCIBILITY_FRAME_OFFSET], 0
         mov     [word ptr cs:BOSS_PHASE_FRAME_OFFSET], 0
 
+        popfd
         popad
         ret
         assume  ds:cseg
