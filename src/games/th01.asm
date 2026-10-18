@@ -195,6 +195,7 @@ GRZ_LOAD_SINGLE_OFFSET          = 0A8Ch
 
 reiiden_exe     db "REIIDEN.EXE", 0
 op_exe          db "OP.EXE", 0
+fuuin_exe       db "FUUIN.EXE", 0
 
 include "..\src\inject.asm"
 
@@ -3035,6 +3036,10 @@ practise_menu_part2_org db 026h, 0C6h, 047h, 014h, 000h
 practise_menu_part2_pat db 0EBh, 018h, NOP_3BYTES_DI
 inject_def practise_menu_part2, 0, op, 0A1Ch, 0664h, 5
 
+skip_vanilla_set_rank_org       db 026h, 0C7h, 047h, 019h, 0FCh, 0FFh
+skip_vanilla_set_rank_pat       db NOP_3BYTES_SI, NOP_3BYTES_DI
+inject_def skip_vanilla_set_rank, 0, op, 0A1Ch, 06D1h, 6
+
 ; The segment and offset of the variable `resident` (of type resident_t far)
 ; defined in
 ; https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/core/resstuff.cpp#L11 .
@@ -3135,6 +3140,51 @@ local @@route:byte, @@saved_df:byte
         assume  ds:cseg
 endp hooked_resident_create_and_stuff_set
 
+; FUUIN.EXE modifications
+; ==============================================================
+
+enter_ending_org        db 09Ah, 005h, 000h, 094h, 01Bh
+enter_ending_pat        db 09Ah
+                        dw offset enter_ending_proc, 0
+enter_ending_var        db 0, 0, 0, 1, 1
+inject_def enter_ending, 1, fuuin, 09F4h, 0208h, 5
+
+END_AND_VERDICT_AND_REGIST_ANIMATE_SEGMENT      = 0B94h
+END_AND_VERDICT_AND_REGIST_ANIMATE_OFFSET       = 0005h
+VERDICT_ANIMATE_AND_REGIST_MENU_SEGMENT         = 0B94h
+VERDICT_ANIMATE_AND_REGIST_MENU_OFFSET          = 0B06h
+
+proc enter_ending_proc far
+local @@end_and_verdict_and_regist_animate:dword, \
+@@verdict_animate_and_regist_menu:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        mov     bx, [cur_psp]
+        lea     ax, [bx + 10 + END_AND_VERDICT_AND_REGIST_ANIMATE_SEGMENT]
+        mov     [word ptr @@end_and_verdict_and_regist_animate + 2], ax
+        mov     [word ptr @@end_and_verdict_and_regist_animate], \
+                END_AND_VERDICT_AND_REGIST_ANIMATE_OFFSET
+        lea     ax, [bx + 10 + VERDICT_ANIMATE_AND_REGIST_MENU_SEGMENT]
+        mov     [word ptr @@verdict_animate_and_regist_menu + 2], ax
+        mov     [word ptr @@verdict_animate_and_regist_menu], \
+                VERDICT_ANIMATE_AND_REGIST_MENU_OFFSET
+
+        cmp     [byte ptr playing_mode_slider.value], 1
+        je      @@skip_ending_calling
+        call    [dword ptr @@end_and_verdict_and_regist_animate]
+        jmp     @@return
+@@skip_ending_calling:
+        call    [dword ptr @@verdict_animate_and_regist_menu]
+
+@@return:
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp enter_ending_proc
+
 inject_failed   db 0
 
 invincible_codes        dw (offset invincible_part1), \
@@ -3216,7 +3266,9 @@ reiiden_unconditionals  dw (offset stage_num_animate), \
                            (offset lock_rank_patch), 0FFFFh
 
 op_unconditionals       dw (offset practise_menu_part1), \
-                           (offset practise_menu_part2), 0FFFFh
+                           (offset practise_menu_part2), \
+                           (offset skip_vanilla_set_rank), 0FFFFh
+fuuin_unconditionals    dw (offset enter_ending), 0FFFFh
 
 boss_practise_arr       dw (offset shingyoku_practise), \
                            (offset yuugenmagan_practise), \
@@ -3355,6 +3407,17 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         call    inject_multiple
         add     sp, 6
 @@skip_op_exe_patches:
+
+        push    [dword ptr @@saved_filename_ptr] ds (offset fuuin_exe)
+        call    strcmp_ignore_case
+        add     sp, 8
+        test    ax, ax
+        jnz     @@skip_fuuin_exe_patches
+
+        push    si 1 (offset fuuin_unconditionals)
+        call    inject_multiple
+        add     sp, 6
+@@skip_fuuin_exe_patches:
 
 @@return:
         pop     di si
@@ -4705,6 +4768,7 @@ patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
                            (offset esc_in_hit_quit_bugfix1_pat + 3), \
                            (offset esc_in_hit_quit_bugfix2_pat + 3), \
                            (offset lock_rank_patch_pat + 3)
+                        dw (offset enter_ending_pat + 3)
                         dw (offset shingyoku_p2_attack_pat + 3), \
                            (offset shingyoku_init_pat + 3), \
                            (offset shingyoku_skip_hp_animation_part2_pat + 3)
