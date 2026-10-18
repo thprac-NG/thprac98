@@ -58,6 +58,10 @@ critical_error_flag_addr        dd ?
 cur_psp         dw ?
 temp_proc       dd ?
 
+; This variable must be set *before* entering the REIIDEN.EXE for the
+; timer-interrupt-driven inject code to work as intended.
+current_practise_boss   db 0
+
 include 'interupt.asm'  ; Hooked Interrupts
 
 ; --------------------------------------------------------------------------
@@ -551,7 +555,7 @@ proc shingyoku_p2_attack_select far
         assume  ds:nothing
         push    bx
         mov     ax, [word ptr p2_attack.value]
-        cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
+        cmp     [byte ptr current_practise_boss], UI_SHINGYOKU
         setz    bl
         test    ax, ax
         setnz   bh
@@ -572,7 +576,7 @@ endp shingyoku_p2_attack_select
 ; --------------------------------------------------------------------------
 proc hooked_reiiden_2269_08c6 far
         assume  ds:nothing
-        cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
+        cmp     [byte ptr current_practise_boss], UI_SHINGYOKU
         jne     @@skip_handling
         cmp     [byte ptr boss_init_flag], 1
         jne     @@skip_handling
@@ -595,7 +599,7 @@ endp hooked_reiiden_2269_08c6
 ; --------------------------------------------------------------------------
 proc hooked_reiiden_2269_0b13 far
         assume  ds:nothing
-        cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
+        cmp     [byte ptr current_practise_boss], UI_SHINGYOKU
         jne     @@skip_handling
         cmp     [byte ptr shingyoku_do_skip_p1], 1
         jne     @@skip_handling
@@ -911,7 +915,7 @@ endp hooked_reiiden_1b03_1ab9
 ; --------------------------------------------------------------------------
 proc hooked_reiiden_1b03_0a19 far
         assume  ds:nothing
-        cmp     [byte ptr current_ui_boss], UI_YUUGENMAGAN
+        cmp     [byte ptr current_practise_boss], UI_YUUGENMAGAN
         jne     @@skip_handling
         cmp     [byte ptr boss_init_flag], 1
         jne     @@skip_handling
@@ -1134,7 +1138,7 @@ local @@in_p3:byte, @@graph_accesspage_func:dword
         mov     [word ptr @@graph_accesspage_func + 2], ax
 
         mov     [word ptr ds:ELIS_PHASE_CUR_PATTERN_OFFSET], 1
-        cmp     [byte ptr current_ui_boss], UI_ELIS
+        cmp     [byte ptr current_practise_boss], UI_ELIS
         jne     @@skip_main_handling
         mov     bx, [word ptr phase_slider.value]
         cmp     bx, 1
@@ -1185,7 +1189,7 @@ endp elis_init_proc
 proc elis_p1_attack_init_proc far
         assume  ds:nothing
         push    ax
-        cmp     [byte ptr current_ui_boss], UI_ELIS
+        cmp     [byte ptr current_practise_boss], UI_ELIS
         jne     @@return
         mov     ax, [word ptr p1_attack.value]
         test    ax, ax
@@ -1211,7 +1215,7 @@ proc elis_p1_attack_select far
         assume  ds:nothing
         push    bx
         mov     ax, [word ptr p1_attack.value]
-        cmp     [byte ptr current_ui_boss], UI_ELIS
+        cmp     [byte ptr current_practise_boss], UI_ELIS
         setz    bl
         test    ax, ax
         setnz   bh
@@ -1235,7 +1239,7 @@ endp elis_p1_attack_select
 proc elis_p2_attack_init_proc far
         assume  ds:nothing
         push    ax
-        cmp     [byte ptr current_ui_boss], UI_ELIS
+        cmp     [byte ptr current_practise_boss], UI_ELIS
         jne     @@return
         mov     ax, [word ptr p2_attack.value]
         test    ax, ax
@@ -1261,7 +1265,7 @@ proc elis_p2_attack_select far
         assume  ds:nothing
         push    bx
         mov     ax, [word ptr p2_attack.value]
-        cmp     [byte ptr current_ui_boss], UI_ELIS
+        cmp     [byte ptr current_practise_boss], UI_ELIS
         setz    bl
         test    ax, ax
         setnz   bh
@@ -1288,7 +1292,7 @@ proc elis_p3b_attack_select far
         push    bx
         mov     ax, [word ptr p3_attack.value]
         add     ax, 3
-        cmp     [byte ptr current_ui_boss], UI_ELIS
+        cmp     [byte ptr current_practise_boss], UI_ELIS
         setz    bl
         cmp     ax, 3
         setnz   bh
@@ -1313,7 +1317,7 @@ proc elis_p3g_attack_select far
         mov     ax, [word ptr p4_attack.value]
         inc     ax
         inc     ax
-        cmp     [byte ptr current_ui_boss], UI_ELIS
+        cmp     [byte ptr current_practise_boss], UI_ELIS
         setz    bl
         cmp     ax, 2
         setnz   bh
@@ -3040,6 +3044,12 @@ skip_vanilla_set_rank_org       db 026h, 0C7h, 047h, 019h, 0FCh, 0FFh
 skip_vanilla_set_rank_pat       db NOP_3BYTES_SI, NOP_3BYTES_DI
 inject_def skip_vanilla_set_rank, 0, op, 0A1Ch, 06D1h, 6
 
+hook_start_continue_org         db 026h, 0C7h, 047h, 049h, 000h, 000h
+hook_start_continue_pat         db 09Ah
+                                dw (offset hook_start_continue_proc), 0
+                                db NOP_1BYTE
+inject_def hook_start_continue, 0, op, 0A1Ch, 0751h, 6
+
 ; The segment and offset of the variable `resident` (of type resident_t far)
 ; defined in
 ; https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/core/resstuff.cpp#L11 .
@@ -3091,7 +3101,10 @@ local @@route:byte, @@saved_df:byte
 @@skip_route_checking:
         mov     [@@route], bl
 
-        ; Set es:bx to variable `resident`
+        mov     al, [current_ui_boss]
+        mov     [current_practise_boss], al
+
+        ; Set variable `resident`
         mov     ah, 62h
         int     21h
         lea     ax, [bx + 10h + RESSTUFF_CPP_RESIDENT_SEG]
@@ -3122,6 +3135,7 @@ local @@route:byte, @@saved_df:byte
 
         jmp     @@end_of_resident_field_setting
 @@original_mode:
+        mov     [byte ptr current_practise_boss], 0
         ; Simulate the original behaviour
         mov     [byte ptr es:bx + resident_t.route], ROUTE_MAKAI
         mov     [word ptr es:bx + resident_t.stage_id], 0
@@ -3139,6 +3153,15 @@ local @@route:byte, @@saved_df:byte
         ret
         assume  ds:cseg
 endp hooked_resident_create_and_stuff_set
+
+proc hook_start_continue_proc far
+        assume  ds:nothing
+        mov     [byte ptr current_practise_boss], 0
+        ; Hooked instruction
+        mov     [word ptr es:bx + resident_t.point_value], 0
+        ret
+        assume  ds:cseg
+endp hook_start_continue_proc
 
 ; FUUIN.EXE modifications
 ; ==============================================================
@@ -3267,7 +3290,8 @@ reiiden_unconditionals  dw (offset stage_num_animate), \
 
 op_unconditionals       dw (offset practise_menu_part1), \
                            (offset practise_menu_part2), \
-                           (offset skip_vanilla_set_rank), 0FFFFh
+                           (offset skip_vanilla_set_rank), \
+                           (offset hook_start_continue), 0FFFFh
 fuuin_unconditionals    dw (offset enter_ending), 0FFFFh
 
 boss_practise_arr       dw (offset shingyoku_practise), \
@@ -3352,14 +3376,13 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         call    inject_one                      ; delayed sp+6
         add     sp, 18                          ; sp+18
 
-        cmp     [byte ptr stage_slider.value], 5
-        jne     @@skip_boss_inject
+        cmp     [byte ptr current_practise_boss], 0
+        je      @@skip_boss_inject
         mov     bx, [word ptr section_slider.value]
         shl     bx, 1
         push    si 1 [word ptr bx + (offset boss_practise_arr)]
         call    inject_multiple
         add     sp, 6
-@@skip_boss_inject:
 
         movzx   ax, [shingyoku_do_skip_opening]
         push    si ax (offset shingyoku_skip_opening)
@@ -3392,9 +3415,12 @@ local @@saved_psp:word, @@saved_filename_ptr:dword
         movzx   ax, [kongara_do_skip_opening]
         push    si ax (offset kongara_skip_opening)
         call    inject_multiple                 ; delayed sp+6
+        add     sp, 12                          ; sp+12
+@@skip_boss_inject:
+
         push    si 1 (offset reiiden_unconditionals)
-        call    inject_multiple                 ; delayed sp+6
-        add     sp, 18                          ; sp+18
+        call    inject_multiple
+        add     sp, 6
 @@skip_reiiden_exe_patches:
 
         push    [dword ptr @@saved_filename_ptr] ds (offset op_exe)
@@ -4767,7 +4793,8 @@ patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
                            (offset practise_menu_part1_pat + 3), \
                            (offset esc_in_hit_quit_bugfix1_pat + 3), \
                            (offset esc_in_hit_quit_bugfix2_pat + 3), \
-                           (offset lock_rank_patch_pat + 3)
+                           (offset lock_rank_patch_pat + 3), \
+                           (offset hook_start_continue_pat + 3)
                         dw (offset enter_ending_pat + 3)
                         dw (offset shingyoku_p2_attack_pat + 3), \
                            (offset shingyoku_init_pat + 3), \
