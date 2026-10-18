@@ -27,7 +27,7 @@ f2_text         db 'F2: Inf. Lives', 0
 f3_text         db 'F3: Inf. Bombs', 0
 f4_text         db 'F4: Time Lock', 0
 f5_text         db 'F5: Inf. Card Combo', 0
-f6_text         db 'F6: Inf. Item Combo', 0
+f6_text         db 'F6: Inf. PIV', 0
 fx_text         dw offset f1_text, offset f2_text, offset f3_text, \
                    offset f4_text, offset f5_text, offset f6_text
 
@@ -3004,25 +3004,24 @@ endp kongara_set_p4_attack_proc
 ; for the C version of the original code.
 ;
 ; practise_menu_part2 {
-;   0A1C:0664 | 26 C6 47 14 00 26 C7 47 3F 00 00 A0 93 00 04 02 26 88 47 15 ->
-;             | 8D AE 00 00 8D B4 00 00 8D BD 00 00 8D AE 00 00 8D B4 00 00
+;   0A1C:0664 | 26 C6 47 14 00 -> EB 18 8D 7D 00
 ; }
-; Original assembly: (es:bx has been set to the address of `resident`)
-;   0A1C:0664 | 26 C6 47 14 00          mov     [byte ptr es:bx +
-;             |                                  resdient_t.route], ROUTE_MAKAI
-;   0A1C:0669 | 26 C7 47 3F 00 00       mov     [word ptr es:bx +
-;             |                                  resident_t.stage_id], 0000h
-;   0A1C:066F | A0 93 00                mov     al, [ds:opts + cfg_options_t.
-;             |                                      credit_lives_extra]
-;   0A1C:0672 | 04 02                   add     al, 02h
-;   0A1C:0674 | 26 88 47 15             mov     [byte ptr es:bx +
-;             |                                  route_t.rem_lives], al
-; Modified assembly: (effectively nop)
-;   0A1C:0664 | 8D AE 00 00             lea     bp, [bp + 0000h]
-;   0A1C:0668 | 8D B4 00 00             lea     si, [si + 0000h]
-;   0A1C:066C | 8D BD 00 00             lea     di, [di + 0000h]
-;   0A1C:0670 | 8D AE 00 00             lea     bp, [bp + 0000h]
-;   0A1C:0674 | 8D B4 00 00             lea     si, [si + 0000h]
+; Modification:
+;   0A1C:0660 | C4 1E 56 1C       les    bx, [dword ptr resident]
+; - 0A1C:0664 | 26 C6 47 14 00    mov    [byte ptr es:bx + resdient_t.route],
+;             |                          ROUTE_MAKAI
+; + 0A1C:0664 | EB 18             jmp    short 0A1C:067E
+; + 0A1C:0666 | 8D 7D 00          lea    di, [di+00h]
+;   0A1C:0669 | 26 C7 47 3F 00 00 mov    [word ptr es:bx +
+;             |                                    resident_t.stage_id], 0000h
+;   0A1C:066F | A0 93 00          mov    al, [ds:opts + cfg_options_t.
+;             |                                         credit_lives_extra]
+;   0A1C:0672 | 04 02             add    al, 02h
+;   0A1C:0674 | 26 88 47 15       mov    [byte ptr es:bx + route_t.rem_lives],
+;             |                          al
+;   0A1C:0678 | 26 C7 47 49 00 00 mov    [word ptr es:bx + route_t.point_value],
+;             |                          0
+;   0A1C:067E | ...
 ; Check https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L378-L380
 ; for the C version of the original code.
 
@@ -3032,12 +3031,9 @@ practise_menu_part1_pat db 09Ah
 practise_menu_part1_var db 0, 0, 0, 1, 1
 inject_def practise_menu_part1, 1, op, 0A1Ch, 0612h, 5
 
-practise_menu_part2_org db 026h, 0C6h, 047h, 014h, 000h, 026h, 0C7h, 047h, \
-                           03Fh, 000h, 000h, 0A0h, 093h, 000h, 004h, 002h, \
-                           026h, 088h, 047h, 015h
-practise_menu_part2_pat db NOP_4BYTES_BP, NOP_4BYTES_SI, NOP_4BYTES_DI, \
-                           NOP_4BYTES_BP, NOP_4BYTES_SI
-inject_def practise_menu_part2, 0, op, 0A1Ch, 0664h, 20
+practise_menu_part2_org db 026h, 0C6h, 047h, 014h, 000h
+practise_menu_part2_pat db 0EBh, 018h, NOP_3BYTES_DI
+inject_def practise_menu_part2, 0, op, 0A1Ch, 0664h, 5
 
 ; The segment and offset of the variable `resident` (of type resident_t far)
 ; defined in
@@ -3110,6 +3106,15 @@ local @@route:byte, @@saved_df:byte
         mov     [byte ptr es:bx + resident_t.rem_bombs], al
         mov     ax, [word ptr rank_slider.value]
         mov     [word ptr es:bx + resident_t.pellet_speed], ax
+        push    bx es
+        mov     ax, [word ptr piv_slider.value]
+        dec     ax      ; The stored point_value is the *last* PIV.
+        push    ax
+        call    piv_param_to_raw
+        add     sp, 2
+        pop     es bx
+        mov     [word ptr es:bx + resident_t.point_value], ax
+
         jmp     @@end_of_resident_field_setting
 @@original_mode:
         ; Simulate the original behaviour
@@ -4194,14 +4199,17 @@ proc show_practise_menu near
         push    (offset stage_slider) (offset section_slider)
         push    (offset practise_menu_window)
         call    window_insert_component                         ; delayed sp+6
-        add     sp, 18                                          ; sp+18
         push    (offset life_slider) (offset stage_slider)
         push    (offset practise_menu_window)
         call    window_insert_component                         ; delayed sp+6
+        add     sp, 24                                          ; sp+24
         push    (offset bomb_slider) (offset life_slider)
         push    (offset practise_menu_window)
         call    window_insert_component                         ; delayed sp+6
-        push    (offset rank_slider) (offset bomb_slider)
+        push    (offset piv_slider) (offset bomb_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component                         ; delayed sp+6
+        push    (offset rank_slider) (offset piv_slider)
         push    (offset practise_menu_window)
         call    window_insert_component                         ; delayed sp+6
         push    (offset lock_rank) (offset rank_slider)
@@ -4239,9 +4247,9 @@ include "..\src\tui\tsrtui.asm"
 
 practise_menu_window    ui_window {     \
         top_left_x              = 38,   \
-        top_left_y              = 7,    \
+        top_left_y              = 6,    \
         width                   = 40,   \
-        height                  = 18,   \
+        height                  = 19,   \
         default_slider_width    = 24    \
 }
 
@@ -4334,6 +4342,42 @@ bomb_slider     ui_slider {                             \
         max_value       = 5,                            \
         label_off       = offset bomb_slider_label,     \
         text_func_off   = offset cseg:dword_to_dec,     \
+        window_off      = offset practise_menu_window   \
+}
+proc piv_param_to_raw near
+arg @@input:word
+        mov     bx, [@@input]
+        cmp     bl, 15
+        jne     @@not_65530
+        mov     ax, 65530
+        jmp     @@return
+@@not_65530:
+        mov     ax, 1000
+        cmp     bl, 10
+        jb      @@skip_tweaking_for_10k_or_above
+        mov     ax, 10000
+        sub     bl, 9
+@@skip_tweaking_for_10k_or_above:
+        imul    bx
+@@return:
+        ret
+endp piv_param_to_raw
+proc piv_text_func near
+arg @@in_lo:word, @@in_hi:word
+        push    [@@in_lo]
+        call    piv_param_to_raw        ; delayed sp+2
+        push    0 ax
+        call    dword_to_dec            ; delayed sp+4
+        add     sp, 6                   ; sp+6
+        ret
+endp piv_text_func
+piv_slider_label        db 'PIV', 0
+piv_slider     ui_slider {                              \
+        value           = 1,                            \
+        min_value       = 1,                            \
+        max_value       = 15,                           \
+        label_off       = offset piv_slider_label,      \
+        text_func_off   = offset cseg:piv_text_func,    \
         window_off      = offset practise_menu_window   \
 }
 rank_slider_label       db 'Rank', 0
