@@ -4768,25 +4768,29 @@ label end_of_resident byte
 ; ===========================================================================
 
 dos_version_low_message         db 'The version of DOS is too low. DOS 3+ is ',\
-                                   'required.$'
-successfully_installed          db 'Successfully installed thprac98.$'
-failed_to_install               db 'Failed to install thprac98: $'
+                                   'required.', 13, 10, '$'
+successfully_installed          db 'Successfully installed thprac98.', 13, 10, \
+                                   '$'
+failed_to_install               db 'Failed to install thprac98: ', 13, 10, '$'
 cannot_get_cef                  db 'Cannot get the address of Critical ', \
                                    'Error Flag. Error Code: '
-cannot_get_cef_num              db '??h.$'
-cannot_get_mux_id               db 'Cannot register in INT 2Fh.$'
-already_installed               db 'Thprac98 has already been installed. $'
-failed_to_uninstall             db 'Failed to uninstall thprac98: $'
-successfully_uninstalled        db 'Successfully uninstalled thprac98.$'
-not_installed                   db "Thprac98 hasn't been installed. $"
+cannot_get_cef_num              db '??h.', 13, 10, '$'
+cannot_get_mux_id               db 'Cannot register in INT 2Fh.', 13, 10, '$'
+already_installed               db 'Thprac98 has already been installed. ', \
+                                   13, 10, '$'
+failed_to_uninstall             db 'Failed to uninstall thprac98: ', 13, 10, '$'
+successfully_uninstalled        db 'Successfully uninstalled thprac98.', 13, \
+                                   10, '$'
+not_installed                   db "Thprac98 hasn't been installed. ", 13, 10, \
+                                   '$'
 int_vector_hooked               db 'INT '
-int_vector_hooked_num           db '??h is hooked by someone else.$'
+int_vector_hooked_num           db '??h is hooked by someone else.', 13, 10, '$'
 cannot_find_mcb                 db "Can't find the MCB of the previous TSR ", \
-                                   "in the MCB chain.$"
-unknown_parameter               db 'Unknown paramter.$'
+                                   "in the MCB chain.", 13, 10, '$'
+unknown_parameter               db 'Unknown paramter.', 13, 10, '$'
 memory_used                     db 13, 10, 'Memory used: $'
 memory_used_num_buffer          db 11 dup ('?')
-memory_used2                    db ' bytes.$'
+memory_used2                    db ' bytes.', 13, 10, '$'
 
 patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
                            (offset harry_up_animate_pat + 3), \
