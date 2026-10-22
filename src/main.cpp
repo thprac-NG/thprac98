@@ -245,7 +245,7 @@ int wrapped_main(int argc, char far** argv) {
     scan_game_version;  // To disable the warning
   }
   if (param_set[command_param_t::LAUNCH]) {
-    launch_th01(argv[file_argument_start]);
+    launch_game(argv[file_argument_start]);
   }
   return 0;
 }
