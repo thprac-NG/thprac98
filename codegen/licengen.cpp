@@ -8,12 +8,11 @@
   "// To modify this file, edit files under codegen/licenses and use" ENDL \
   "// codegen/licengen.cpp to regenerate this file." ENDL ENDL
 
-const int LICENSE_COUNT = 5;
-const char* license_name[LICENSE_COUNT] = {
-    "thprac98", "lohmann_json", "master_lib", "takeda_msdos", "mpaland_printf"};
+const int LICENSE_COUNT = 4;
+const char* license_name[LICENSE_COUNT] = {"thprac98", "lohmann_json",
+                                           "master_lib", "mpaland_printf"};
 const char* license_filename[LICENSE_COUNT] = {"thprac.txt", "lohmjson.txt",
-                                               "masterlb.txt", "tkdmsdos.txt",
-                                               "mpprintf.txt"};
+                                               "masterlb.txt", "mpprintf.txt"};
 FILE* handler[LICENSE_COUNT];
 char buffer[100];
 
