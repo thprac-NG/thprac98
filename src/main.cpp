@@ -71,8 +71,6 @@ void print_license(bool pause = true) {
   print_one_license("thprac98", license_thprac98, pause);
   print_one_license("Lohmann's JSON", license_lohmann_json, pause);
   print_one_license("master.lib", license_master_lib, pause);
-  print_one_license("Takeda Toshiya's MS-DOS Player", license_takeda_msdos,
-                    pause);
   print_one_license("Marco Paland's printf", license_mpaland_printf, pause);
   return;
 }
