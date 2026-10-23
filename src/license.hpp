@@ -1,6 +1,7 @@
 // WARNING: THIS FILE IS AUTO-GENERATED
-// To modify this file, edit files under codegen/licenses and use
-// codegen/licengen.cpp to regenerate this file.
+// To modify this file, rebuild the TH0X.COM files and 
+// use codegen/comembed.cpp to regenerate this file.
+// clang-format off
 
 #ifndef THPRAC98_SRC_LICENSE_HPP_
 #define THPRAC98_SRC_LICENSE_HPP_

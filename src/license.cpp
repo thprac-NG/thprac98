@@ -1,6 +1,7 @@
 // WARNING: THIS FILE IS AUTO-GENERATED
-// To modify this file, edit files under codegen/licenses and use
-// codegen/licengen.cpp to regenerate this file.
+// To modify this file, rebuild the TH0X.COM files and 
+// use codegen/comembed.cpp to regenerate this file.
+// clang-format off
 
 #include "src/license.hpp"
 
@@ -143,4 +144,5 @@ const char* const license_mpaland_printf =
     "CLAIM, DAMAGES OR OTHER\r\nLIABILITY, WHETHER IN AN ACTION OF CONTR" \
     "ACT, TORT OR OTHERWISE, ARISING FROM,\r\nOUT OF OR IN CONNECTION WI" \
     "TH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\r\nSOFTWARE.\r\n\r\n" \
-    "
+    "\r\n";
+

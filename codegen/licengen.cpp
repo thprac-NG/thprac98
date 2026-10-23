@@ -6,7 +6,8 @@
 #define THPRAC98_LICENSE_WARNING_TEXT                                      \
   "// WARNING: THIS FILE IS AUTO-GENERATED" ENDL                           \
   "// To modify this file, edit files under codegen/licenses and use" ENDL \
-  "// codegen/licengen.cpp to regenerate this file." ENDL ENDL
+  "// codegen/licengen.cpp to regenerate this file." ENDL                  \
+  "// clang-format off" ENDL ENDL
 
 const int LICENSE_COUNT = 4;
 const char* license_name[LICENSE_COUNT] = {"thprac98", "lohmann_json",
@@ -146,5 +147,6 @@ int wrapped_main(int argc, char far** argv) {
   for (i = 0; i < LICENSE_COUNT; ++i) {
     fclose(handler[i]);
   }
+  fclose(fout);
   return 0;
 }
