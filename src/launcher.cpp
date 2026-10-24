@@ -171,7 +171,7 @@ void launch_game(const char far* path) {
         path);
     return;
   }
-  if (new_path[path_len] != '\\') {
+  if (new_path[path_len - 1] != '\\') {
     new_path[path_len++] = '\\';
   }
   new_path[path_len] = '\0';
