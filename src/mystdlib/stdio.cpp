@@ -140,6 +140,7 @@ int fclose_(FILE_* stream) {
     errno_ = out_reg.x.ax;
     return EOF;
   }
+  stream->file_handle = -1;
   return 0;
 }
 
