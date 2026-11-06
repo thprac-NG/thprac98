@@ -1,0 +1,5137 @@
+ideal
+model tiny, cpp
+radix 10
+locals
+p386
+
+include "..\src\asmdefs.asm"
+include "..\src\games\th01_inc.asm"
+
+segment cseg para private 'CODE' USE16
+org 100h
+        assume  cs:cseg, ds:cseg
+
+start:
+        jmp     real_start
+
+ENV_SEG_OFF     EQU 2Ch
+
+BS_MENU_WIDTH   EQU 21
+BS_MENU_HEIGHT  EQU 8
+FX_COUNT        EQU (BS_MENU_HEIGHT - 2)  ; Should be no greater than 6,
+                                          ; otherwise INT18h/04h won't work
+                                          ; properly.
+
+f1_text         db 'F1: (TH02 BS)', 0
+f2_text         db 'F2: Inf. Lives', 0
+f3_text         db 'F3: Inf. Bombs', 0
+f4_text         db 'F4: Time Lock', 0
+f5_text         db 'F5: Inf. Card Combo', 0
+f6_text         db 'F6: Inf. PIV', 0
+fx_text         dw offset f1_text, offset f2_text, offset f3_text, \
+                   offset f4_text, offset f5_text, offset f6_text
+
+bs_covered_tram         dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
+bs_covered_tram_attr    dw (BS_MENU_HEIGHT * BS_MENU_WIDTH) dup (?)
+
+; The high byte represents "down", and the low byte alternates each time pressed
+bs_state        dw 0
+fx_state        dw FX_COUNT dup(0)
+prac_menu_state dw 0
+key_z_up_once   db 0
+arrow_state     db 0    ; stored in bit 2,3,4,5 for up, left, right, down
+space_state     db 0    ; stored in bit 4
+
+INVICIBLE_STATE         = ((offset fx_state) + 1)
+INF_LIFES_STATE         = ((offset fx_state) + 3)
+INF_BOMBS_STATE         = ((offset fx_state) + 5)
+TIME_LOCK_STATE         = ((offset fx_state) + 7)
+INF_CARD_COMBO_STATE    = ((offset fx_state) + 9)
+INF_ITEM_COMBO_STATE    = ((offset fx_state) + 11)
+
+; These are byte ptrs, and need to check if is both cleared before any DOS call
+; in a TSR. Unused for now, but they will be useful if we want to make any
+; non-trivial DOS call inside a ISR.
+indos_flag_addr                 dd ?
+critical_error_flag_addr        dd ?
+
+cur_psp         dw ?
+temp_proc       dd ?
+
+; This variable must be set *before* entering the REIIDEN.EXE for the
+; timer-interrupt-driven inject code to work as intended.
+current_practise_boss   db 0
+
+include 'interupt.asm'  ; Hooked Interrupts
+
+; --------------------------------------------------------------------------
+; Function: after_load_exe
+; Description: Handles procedures after loading an executable. Get called
+;              `WAIT_LOAD_TIME`*10 ms after every INT 21h/4Bh call.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc after_load_exe near
+        call    store_covered_tram
+        call    show_bs_menu
+        ; call    inject
+        ret
+endp
+
+; --------------------------------------------------------------------------
+; Function: on_tick
+; Description: Maintains the UI of the practice menu and backspace menu, and
+;              injects the code. Get called every `MY_INT8_CALL_INTERVAL`*10 ms.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc on_tick near
+local @@return_val:byte
+        ; Maintain the backspace menu. The return value of `maintain_bs_menu_ui`
+        ; indicates whether the status of the FX has been updated, and we are
+        ; passing the value to `inject`.
+        call    maintain_bs_menu_ui
+        mov     [@@return_val], al
+        ; call    inject
+        call    maintain_prac_menu_ui
+        movzx   ax, [@@return_val]
+        ret
+endp on_tick
+
+; --------------------------------------------------------------------------
+; Function: on_game_start
+; Description: Get called every time the game is started.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc on_game_start near
+        ; Clear Yuugenmagan timeout counters (5 bytes starting from
+        ; yuugenmagan_p1_frame_elapsed)
+        xor     ax, ax
+        cwd
+        mov     [dword ptr yuugenmagan_p1_frame_elapsed], eax
+        mov     [byte ptr yuugenmagan_p1_frame_elapsed + 4], al
+        ; Clear Kikuri timeout counters (4 bytes starting from
+        ; kikuri_p1_iterations_done)
+        mov     [dword ptr kikuri_p1_iterations_done], eax
+        ; Clear Kongara timeout counters (3 bytes starting from
+        ; kongara_p1_patterns_done)
+        mov     [word ptr kongara_p1_patterns_done], ax
+        mov     [byte ptr kongara_p1_patterns_done + 2], al
+        ret
+endp on_game_start
+
+; ===========================================================================
+;                                INJECT CODE
+; ===========================================================================
+
+; For some reason, Shingyoku doesn't use these variables.
+BOSS_PHASE_OFFSET               = 5D2Eh
+BOSS_HP_OFFSET                  = 5D28h
+BOSS_PHASE_FRAME_OFFSET         = 5D2Ah
+INVINCIBILITY_FRAME_OFFSET      = 5464h
+
+INPUT_SHOT_OFFSET               = 00AEh
+INPUT_OK_OFFSET                 = 00B2h
+PLAYER_LEFT_OFFSET              = 2286h
+ORB_CUR_LEFT_OFFSET             = 2288h
+ORB_CUR_TOP_OFFSET              = 228Ah
+Z_PALETTES_OFFSET               = 06F0h
+; The offsets of stage_pallete[COL_YOKOSHIMA].
+STAGE_PALETTE_YOKOSHIMA_OFFSET  = 5219h
+FRAME_RAND_OFFSET               = 2276h
+PLAYER_INVINCIBILITY_TIME_OFFSET = 2284h
+
+CBOSSENTITY_UNPUT_8_SEGMENT     = 155Fh
+CBOSSENTITY_UNPUT_8_OFFSET      = 0B3Eh
+CBOSSENTITY_LOCKED_MOVE_AND_PUT_8_SEGMENT = 155Fh
+CBOSSENTITY_LOCKED_MOVE_AND_PUT_8_OFFSET  = 12ADh
+BOSS_ENTITY_0_OFFSET            = 4E8Ah
+
+GRP_PUT_PALLETE_SHOW_SEGMENT    = 106Fh
+GRP_PUT_PALLETE_SHOW_OFFSET     = 04BEh
+GRAPH_ACCESSPAGE_FUNC_SEGMENT   = 0E92h
+GRAPH_ACCESSPAGE_FUNC_OFFSET    = 011Eh
+GRAPH_COPY_ACCESSED_PAGE_TO_OTHER_SEGMENT = 0E92h
+GRAPH_COPY_ACCESSED_PAGE_TO_OTHER_OFFSET  = 0360h
+PTN_PUT_8_SEGMENT               = 1967h
+PTN_PUT_8_OFFSET                = 0171h
+IRAND_SEGMENT                   = 0000h
+IRAND_OFFSET                    = 1608h
+TEXT_FILLCA_SEGMENT             = 0000h
+TEXT_FILLCA_OFFSET              = 0C7Ch
+Z_PALETTE_SET_ALL_SHOW_SEGMENT  = 0E92h
+Z_PALETTE_SET_ALL_SHOW_OFFSET   = 01F0h
+GRZ_LOAD_SINGLE_SEGMENT         = 106Fh
+GRZ_LOAD_SINGLE_OFFSET          = 0A8Ch
+
+; REIIDEN.EXE modifications
+; ==============================================================
+;
+; For the discompiled version of the Fx modifications, check:
+; F1-F3: https://github.com/H-J-Granger/ReC98/commit/d159a9960ae4d52c4c2bb6d91fcd5046f6dad4e5
+; F4: https://github.com/H-J-Granger/ReC98/commit/c2e20cc6a5d7b27e71ac219433e2eb4285b69adc
+; F5-F6: https://github.com/H-J-Granger/ReC98/commit/d420132646f2fc895b7be87642c7489760dbfd8b
+;
+; F1: Invincibile {
+;   0B50:29A9 | 7E 2F -> 89 DB
+;   0B50:29BA | C4 1E FC 47 26 FE 4F 15 -> C6 06 AF 00 00 E9 A2 FD
+; }
+; F2: Inf. Lives {
+;   0B50:29BE | 26 FE 4F 15 FF 0E E0 00 -> 8D B4 00 00 8D BD 00 00
+;   1967:198B | 9A 95 08 58 28 -> 90 8D B4 00 00
+;             |          ^^ ^^ (*1)
+; }
+; F3: Inf. Bombs {
+;   1967:08B3 | 40 -> 90
+;   1967:08AB | FE 0E 92 00 -> 8D 9F 00 00
+; }
+; F4: Lock Time {
+;   1924:0154 | 83 2E 0C 54 02 -> 8D 9F 00 00 90
+; }
+; F5: Inf. Card Combo {
+;   0B50:12EE | C7 06 E4 00 00 00 -> 89 D2 8D 9F 00 00
+; }
+; F6: Inf. Item Combo {
+;   17CA:07BD | 26 C7 47 49 00 00 -> 8D 74 00 8D 7D 00
+; }
+; F7: Everlasting BGM
+;
+; -----------------------
+; (*1) This is an absolute call, the segment address might differ.
+
+reiiden_exe     db "REIIDEN.EXE", 0
+op_exe          db "OP.EXE", 0
+fuuin_exe       db "FUUIN.EXE", 0
+
+include "..\src\inject.asm"
+
+macro inject_def name, var_mem, file_basename, seg_val, off_val, len_val
+        IF var_mem
+        &name           inject_code_t {                 \
+                filename = offset &file_basename&_exe,  \
+                seg = seg_val,                          \
+                off = off_val,                          \
+                len = len_val,                          \
+                original_mem = offset &name&_org,       \
+                patched_mem = offset &name&_pat,        \
+                variable_mem = offset &name&_var        \
+        }
+        ELSE
+        &name           inject_code_t {                 \
+                filename = offset &file_basename&_exe,  \
+                seg = seg_val,                          \
+                off = off_val,                          \
+                len = len_val,                          \
+                original_mem = offset &name&_org,       \
+                patched_mem = offset &name&_pat         \
+        }
+        ENDIF
+endm
+
+invincible_part1_org    db 07Eh, 02Fh
+invincible_part1_pat    db NOP_2BYTES_BX
+inject_def invincible_part1, 0, reiiden, 0B50h, 29A9h, 2
+
+invincible_part2_org    db 0C4h, 01Eh, 0FCh, 047h, 026h, 0FEh, 04Fh, 015h
+invincible_part2_pat    db 0C6h, 006h, 0AFh, 000h, 000h, 0E9h, 0A2h, 0FDh
+inject_def invincible_part2, 0, reiiden, 0B50h, 29BAh, 8
+
+inf_lives_part1_org     db 026h, 0FEh, 04Fh, 015h, 0FFh, 00Eh, 0E0h, 000h
+inf_lives_part1_pat     db NOP_4BYTES_SI, NOP_4BYTES_DI
+inject_def inf_lives_part1, 0, reiiden, 0B50h, 29BEh, 8
+
+inf_lives_part2_org     db 09Ah, 095h, 008h, 058h, 028h
+inf_lives_part2_pat     db NOP_1BYTE, NOP_4BYTES_SI
+inf_lives_part2_var     db 0, 0, 0, 1, 1
+inject_def inf_lives_part2, 1, reiiden, 1967h, 198Bh, 5
+
+inf_bombs_part1_org     db 040h
+inf_bombs_part1_pat     db NOP_1BYTE
+inject_def inf_bombs_part1, 0, reiiden, 1967h, 08B3h, 1
+
+inf_bombs_part2_org     db 0FEh, 00Eh, 092h, 000h
+inf_bombs_part2_pat     db NOP_4BYTES_BX
+inject_def inf_bombs_part2, 0, reiiden, 1967h, 08ABh, 4
+
+time_lock_org           db 083h, 02Eh, 00Ch, 054h, 002h
+time_lock_pat           db NOP_4BYTES_BX, NOP_1BYTE
+inject_def time_lock, 0, reiiden, 1924h, 0154h, 5
+
+inf_card_combo_org      db 0C7h, 006h, 0E4h, 000h, 000h, 000h
+inf_card_combo_pat      db NOP_2BYTES_DX, NOP_4BYTES_BX
+inject_def inf_card_combo, 0, reiiden, 0B50h, 12EEh, 6
+
+inf_item_combo_org      db 026h, 0C7h, 047h, 049h, 000h, 000h
+inf_item_combo_pat      db NOP_3BYTES_SI, NOP_3BYTES_DI
+inject_def inf_item_combo, 0, reiiden, 17CAh, 07BDh, 6
+
+; stage_num_animate (restore the menu after "STAGE XX" animation): {
+;   0B50:0775 | 1E 68 59 01 9A 7A 62 00 10 83 C4 0E ->
+;             |                      ^^ ^^ (*1)
+;             | 9A yy yy xx xx 8D 9F 00 00 83 C4 0A
+; }, where "xxxx" is cseg, and "yyyy" is (offset my_0b50_0775).
+; Original assembly:
+;   0B50:0775 | 1E                push    DS
+;   0B50:0776 | 68 59 01          push    159h    ; offset of the string "\x1B*"
+;   0B50:0779 | 9A 7A 62 00 10    callf   printf
+;   0B50:077E | 83 C4 0E          add     sp, 0Eh
+; Modified assembly:
+;   0B50:0775 | 9A yy yy xx xx    callf   my_0b50_0775
+;   0B50:077A | 8D 9F 00 00       lea     bx, [bx + 0000h]  ; effectively nop
+;   0B50:077E | 83 C4 0A          add     sp, 0Ah
+; Check https://github.com/H-J-Granger/ReC98/blob/d892535e723b3691612363d1bbdbd2a54f43fb43/th01/main_01.cpp#L314
+; for the C version of the original code.
+;
+; harry_up_anmiate (restore the menu after "HARRY UP" animation): {
+;   1924:0364 | 9A 6A 0C 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; }, where "xxxx" is cseg, and "yyyy" is (offset my_1924_0364).
+; Original assembly: call text_clear (provided by master.lib)
+; Modified assembly: call my_1924_0364
+;
+; -----------------------
+; (*1) This is an absolute call, the segment address might differ.
+
+stage_num_animate_org   db 01Eh, 068h, 059h, 001h, 09Ah, 07Ah, 062h, 000h, \
+                           010h, 083h, 0C4h, 00Eh
+stage_num_animate_pat   db 09Ah
+                        dw (offset my_0b50_0775), 0
+                        db NOP_4BYTES_BX, 083h, 0C4h, 00Ah
+stage_num_animate_var   db 7 dup(0), 1, 1, 3 dup(0)
+inject_def stage_num_animate, 1, reiiden, 0B50h, 0775h, 12
+
+harry_up_animate_org    db 09Ah, 06Ah, 00Ch, 000h, 000h
+harry_up_animate_pat    db 09Ah
+                        dw (offset my_1924_0364), 0
+harry_up_animate_var    db 0, 0, 0, 1, 1
+inject_def harry_up_animate, 1, reiiden, 1924h, 0364h, 5
+
+esc_in_hit_quit_bugfix1_org     db 080h, 03Eh, 0AFh, 000h, 001h
+esc_in_hit_quit_bugfix1_pat     db 09Ah
+                                dw (offset esc_in_hit_quit_bugfix_proc), 0
+inject_def esc_in_hit_quit_bugfix1 0, reiiden, 0B50h, 14A9h, 5
+
+esc_in_hit_quit_bugfix2_org     db 080h, 03Eh, 0AFh, 000h, 001h
+esc_in_hit_quit_bugfix2_pat     db 09Ah
+                                dw (offset esc_in_hit_quit_bugfix_proc), 0
+inject_def esc_in_hit_quit_bugfix2 0, reiiden, 0B50h, 15D6h, 5
+
+display_orb_while_hit_org       db 075h, 01Dh
+display_orb_while_hit_pat       db NOP_2BYTES_SI
+inject_def display_orb_while_hit 0, reiiden, 0B50h, 1397h, 2
+
+lock_rank_patch_org     db 083h, 03Eh, 084h, 022h, 001h
+lock_rank_patch_pat     db 09Ah
+                        dw (offset lock_rank_patch_proc), 0
+inject_def lock_rank_patch 0, reiiden, 0B50h, 27A4h, 5
+
+; --------------------------------------------------------------------------
+; Function: my_0b50_0775
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc my_0b50_0775 far
+        assume  ds:nothing
+        push    ax
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h
+        mov     [word ptr cs:temp_proc], 627Ah
+        mov     [word ptr cs:temp_proc + 2], ax
+        push    ds 159h
+        call    [dword ptr cs:temp_proc]
+        add     sp, 4
+        mov     ah, [cs:int2f_mux_id]
+        mov     al, 12h
+        int     2Fh
+        pop     ax
+        ret
+        assume  ds:cseg
+endp my_0b50_0775
+
+; --------------------------------------------------------------------------
+; Function: my_1924_0364
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc my_1924_0364 far
+        assume  ds:nothing
+        push    ax
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h
+        mov     [word ptr cs:temp_proc], 0C6Ah
+        mov     [word ptr cs:temp_proc + 2], ax
+        call    [dword ptr cs:temp_proc]
+        mov     ah, [cs:int2f_mux_id]
+        mov     al, 12h
+        int     2Fh
+        pop     ax
+        ret
+        assume  ds:cseg
+endp my_1924_0364
+
+proc esc_in_hit_quit_bugfix_proc far
+        assume  ds:nothing
+        cmp     [byte ptr ds:INPUT_SHOT_OFFSET], 1
+        setz    al
+        cmp     [byte ptr ds:INPUT_OK_OFFSET], 1
+        setz    ah
+        and     al, ah
+        cmp     al, 1
+        ret
+        assume  ds:cseg
+endp esc_in_hit_quit_bugfix_proc
+
+; Variables and procedures shared by multiple boss warps
+boss_init_flag  db 0
+
+; --------------------------------------------------------------------------
+; Function: render_hp
+; Description: Render the HP bar of the boss, according to the value stored in
+;              [hp_slider.value]. We do this by calling `hud_hp_render` with a
+;              parameter func=HUD_HP_FUNC_RERENDER.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc render_hp far
+local @@hud_hp_render_addr:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+        mov     [word ptr @@hud_hp_render_addr], HUD_HP_RENDER_OFFSET
+        mov     ax, [cur_psp]
+        add     ax, 10h + HUD_HP_RENDER_SEGMENT
+        mov     [word ptr @@hud_hp_render_addr + 2], ax
+        push    HUD_HP_FUNC_RERENDER
+        push    [word ptr hp_slider.value]
+        call    [dword ptr @@hud_hp_render_addr]
+        add     sp, 4
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp render_hp
+
+; --------------------------------------------------------------------------
+; Function: load_packed_palettes
+; Description: Load a packed palette data (12bits each palette, without any
+;              padding bits) to z_Palettes.
+; Input: Argument 1 (word): offset (relative to CS) of the packed palette value
+;                           to be loaded into z_Palettes.
+; Output: Nothing
+; --------------------------------------------------------------------------
+proc load_packed_palettes far
+arg @@data_off:word
+        assume  ds:nothing
+        push    si di ax
+
+        mov     di, Z_PALETTES_OFFSET
+        mov     si, [@@data_off]
+
+@@copy_loop:
+        mov     al, [cs:si]
+        inc     si
+        mov     ah, al
+        and     ah, 0Fh
+        shr     al, 4
+        mov     [ds:di], ax
+        inc     di
+        inc     di
+        cmp     di, Z_PALETTES_OFFSET + 30h
+        jne     @@copy_loop
+
+        pop     ax di si
+        ret
+        assume  ds:cseg
+endp load_packed_palettes
+
+proc lock_rank_patch_proc far
+        assume  ds:nothing
+
+        ; Set es:bx to variable `resident`
+        mov     ah, 62h
+        int     21h
+        lea     ax, [bx + 10h + RESSTUFF_CPP_RESIDENT_SEG]
+        mov     es, ax
+        les     bx, [dword ptr es:RESSTUFF_CPP_RESIDENT_OFF]
+
+        ; Set the rank
+        mov     ax, [word ptr rank_slider.value]
+        mov     [word ptr es:bx + resident_t.pellet_speed], ax
+
+        ; Hooked instruction
+        cmp     [word ptr ds:PLAYER_INVINCIBILITY_TIME_OFFSET], 1
+
+        ret
+        assume  ds:cseg
+endp lock_rank_patch_proc
+
+; Shingyoku Warps
+; ======================
+; Check https://github.com/H-J-Granger/ReC98/commit/3d6b5d9eb7b87979bd4cd94a481db064bfd1d364/
+; for the C version of the modification in this section.
+;
+; shingyoku_p2_attack {
+;   2269:0B68 | 9A 08 16 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; }, where "xxxx" is cseg, and "yyyy" is (offset shingyoku_p2_attack_select).
+; Original assembly: callf irand
+; Modified assembly: callf shingyoku_p2_attack_select
+;
+; shingyoku_init {
+;   2269:08C6 | 80 3E 3E 13 00 -> 9A yy yy xx xx
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_2269_08c6).
+; Original assembly: cmp [byte ptr DS:BOSS_PHASE_OFFSET], 00h
+; Modified assembly: callf hooked_reiiden_2269_08c6
+;
+; shingyoku_skip_opening {
+;   2269:090A | E9 8F 00 -> E9 99 00
+; }
+; Original assembly: jmp 2269:099C  ; the while loop's "jump to middle"
+; Modified assembly: jmp 2269:09A6  ; make the jump skip the conditional test
+;
+; shingyoku_skip_hp_animation_part1 {
+;   2269:0A3A | 75 13 -> EB 13
+; }
+; Original assembly: jnz 2269:0A4F  ; Skip HP animation if done
+; Modified assembly: jmp 2269:0A4F  ; Skip HP animation completely
+;
+; shingyoku_skip_hp_animation_part2 {
+;   2269:0B13 | FF 06 DF 59 FF 06 E1 59 -> 9A yy yy xx xx 8D 74 00
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_2269_0b13).
+; Original assembly: (expanded from the inline function phase.frame_common)
+;   2269:0B13 | FF 06 DF 59       inc    [word ptr boss_phase_frame]
+;   2269:0B17 | FF 06 E1 59       inc    [word ptr invincibility_frame]
+; Modified assembly:
+;   2269:0B13 | 9A yy yy xx xx    callf  hooked_reiiden_2269_0b13
+;   2269:0B18 | 8D 74 00          lea    si, [si + 00h]  ; effectively nop
+;
+; -----------------------
+; (*1) This is an absolute call, the segment address might differ.
+
+shingyoku_p2_attack_org db 09Ah, 008h, 016h, 000h, 000h
+shingyoku_p2_attack_pat db 09Ah
+                        dw (offset shingyoku_p2_attack_select), 0
+shingyoku_p2_attack_var db 0, 0, 0, 1, 1
+inject_def shingyoku_p2_attack, 1, reiiden, 2269h, 0B68h, 5
+
+shingyoku_init_org      db 080h, 03Eh, 03Eh, 013h, 000h
+shingyoku_init_pat      db 09Ah
+                        dw (offset hooked_reiiden_2269_08c6), 0
+inject_def shingyoku_init, 0, reiiden, 2269h, 08C6h, 5
+
+shingyoku_skip_opening_org      db 0E9h, 08Fh, 000h
+shingyoku_skip_opening_pat      db 0E9h, 099h, 000h
+inject_def shingyoku_skip_opening, 0, reiiden, 2269h, 090Ah, 3
+
+shingyoku_skip_hp_animation_part1_org   db 075h, 013h
+shingyoku_skip_hp_animation_part1_pat   db 0EBh, 013h
+inject_def shingyoku_skip_hp_animation_part1, 0, reiiden, 2269h, 0A3Ah, 2
+
+shingyoku_skip_hp_animation_part2_org   db 0FFh, 006h, 0DFh, 059h, \
+                                           0FFh, 006h, 0E1h, 059h
+shingyoku_skip_hp_animation_part2_pat   db 09Ah
+                                        dw offset hooked_reiiden_2269_0b13, 0
+                                        db NOP_3BYTES_SI
+inject_def shingyoku_skip_hp_animation_part2, 0, reiiden, 2269h, 0B13h, 8
+
+shingyoku_do_skip_opening               db 0
+shingyoku_do_skip_p1                    db 0
+shingyoku_rerender_hp_flag              db 0
+; offsets of boss_phase and boss_hp from the DS of shingyoku_main. These
+; variable are boss-independent.
+SHINGYOKU_BOSS_PHASE_OFFSET             = 133Eh
+SHINGYOKU_BOSS_HP_OFFSET                = 59E3h
+SHINGYOKU_PHASE_FRAME_OFFSET            = 59DFh
+SHINGYOKU_INVINCIBILITY_FRAME_OFFSET    = 59E1h
+HUD_HP_RENDER_SEGMENT                   = 2188h
+HUD_HP_RENDER_OFFSET                    = 009Ch
+HUD_HP_FUNC_RERENDER                    = 0FFFFh
+
+; --------------------------------------------------------------------------
+; Function: shingyoku_p2_attack_select
+; Description: Select the attack of the Phase 2 of Shingyoku, according to
+;              the practise settings.
+; Input: Nothing
+; Output (in AX % 4): The chosen attack number.
+; --------------------------------------------------------------------------
+proc shingyoku_p2_attack_select far
+        assume  ds:nothing
+        push    bx
+        mov     ax, [word ptr p2_attack.value]
+        cmp     [byte ptr current_practise_boss], UI_SHINGYOKU
+        setz    bl
+        test    ax, ax
+        setnz   bh
+        test    bh, bl
+        jnz     @@skip_irand_calling
+        call    [dword ptr shingyoku_p2_attack_org + 1]
+@@skip_irand_calling:
+        pop     bx
+        ret
+        assume  ds:cseg
+endp shingyoku_p2_attack_select
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_2269_08c6
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in ZF): whether `boss_phase` is 0.
+; --------------------------------------------------------------------------
+proc hooked_reiiden_2269_08c6 far
+        assume  ds:nothing
+        cmp     [byte ptr current_practise_boss], UI_SHINGYOKU
+        jne     @@skip_handling
+        cmp     [byte ptr boss_init_flag], 1
+        jne     @@skip_handling
+        mov     [byte ptr boss_init_flag], 0
+        push    ax
+        mov     ax, [word ptr hp_slider.value]
+        mov     [ds:SHINGYOKU_BOSS_HP_OFFSET], ax
+        pop     ax
+@@skip_handling:
+        ; The hooked instruction
+        cmp     [byte ptr ds:SHINGYOKU_BOSS_PHASE_OFFSET], 0
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_2269_08c6
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_2269_0b13
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc hooked_reiiden_2269_0b13 far
+        assume  ds:nothing
+        cmp     [byte ptr current_practise_boss], UI_SHINGYOKU
+        jne     @@skip_handling
+        cmp     [byte ptr shingyoku_do_skip_p1], 1
+        jne     @@skip_handling
+        cmp     [byte ptr shingyoku_rerender_hp_flag], 1
+        jne     @@skip_handling
+        mov     [byte ptr shingyoku_rerender_hp_flag], 0
+        call    render_hp
+@@skip_handling:
+        ; The hooked instruction
+        inc     [word ptr ds:SHINGYOKU_PHASE_FRAME_OFFSET]
+        inc     [word ptr ds:SHINGYOKU_INVINCIBILITY_FRAME_OFFSET]
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_2269_0b13
+
+; Yuugenmagan Warps
+; ============================
+; Check https://github.com/H-J-Granger/ReC98/commit/998ba7f8411a9207446811dc0a2a0f131d32f8d0/
+; and https://github.com/H-J-Granger/ReC98/commit/137ab477533bddecbd11534d80f80d7e769a8c84/
+; for the C version of the modification in this section.
+;
+; yuugenmagan_timelock_p1_part1 {
+;   1B03:0E9B | FF 06 2A 56 FF 06 64 54 -> 9A yy yy xx xx 8D 74 00
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_0e9b).
+; Original assembly: (expanded from the inline function phase.frame_common)
+;   1B03:0E9B | FF 06 2A 56       inc    [word ptr boss_phase_frame]
+;   1B03:0E9F | FF 06 64 54       inc    [word ptr invincibility_frame]
+; Modified assembly:
+;   1B03:0E9B | 9A yy yy xx xx    callf  hooked_reiiden_1b03_0e9b
+;   1B03:0EA0 | 8D 74 00          lea    si, [si + 00h]  ; effectively nop
+;
+; yuugenmagan_timelock_p1_part2 {
+;   1B03:0FEB | 81 3E 2A 5D 4C 04 -> 9A yy yy xx xx 90
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_0feb).
+; Original assembly:
+;   1B03:0E9F | 81 3E 2A 5D 4C 04 cmp    [word ptr invincibility_frame], 1100
+; Modified assembly:
+;   1B03:0E9F | 9A yy yy xx xx    callf  hooked_reiiden_1b03_0feb
+;   1B03:0EA4 | 90                nop
+;
+; yuugenmagan_timelock_p2_part1 {
+;   1B03:12ED | C7 06 2A 5D 00 00 -> 9A yy yy xx xx 90
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_12ed).
+; Original assembly: (expanded from the macro pattern_missile_pairs_from_south)
+;   1B03:12ED | C7 06 2A 5D 00 00 mov    [word ptr boss_phase_frame], 0
+; Modified assembly:
+;   1B03:12ED | 9A yy yy xx xx    callf  hooked_reiiden_1b03_12ed
+;   1B03:12D2 | 90                nop
+;
+; yuugenmagan_timelock_p2_part2 {
+;   1B03:13A8 | A0 74 54 98 3D 05 00 -> 9A yy yy xx xx 89 F6
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_13a8).
+; Original assembly:
+;   1B03:13A8 | A0 74 54          mov    al, [u3.iterations_done]
+;   1B03:13AB | 98                cbw
+;   1B03:13AC | 3D 05 00          cmp    ax, 5
+; Modified assembly:
+;   1B03:13A8 | 9A yy yy xx xx    callf  hooked_reiiden_1b03_13a8
+;   1B03:13AD | 89 F6             mov    si, si  ; effectively nop
+;
+; yuugenmagan_timelock_p3_part1 {
+;   1B03:163E | C7 06 2A 5D 00 00 -> 9A yy yy xx xx 90
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_163e).
+; Original assembly: (expanded from the macro pattern_missile_pairs_from_south)
+;   1B03:163E | C7 06 2A 5D 00 00 mov    [word ptr boss_phase_frame], 0
+; Modified assembly:
+;   1B03:163E | 9A yy yy xx xx    callf  hooked_reiiden_1b03_163e
+;   1B03:1643 | 90                nop
+;
+; yuugenmagan_timelock_p3_part2 {
+;   1B03:16FE | A0 74 54 98 3D 04 00 -> 9A yy yy xx xx 89 F6
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_16fe).
+; Original assembly:
+;   1B03:16FE | A0 74 54          mov    al, [u3.iterations_done]
+;   1B03:1701 | 98                cbw
+;   1B03:1702 | 3D 05 00          cmp    ax, 4
+; Modified assembly:
+;   1B03:16FE | 9A yy yy xx xx    callf  hooked_reiiden_1b03_16fe
+;   1B03:1703 | 89 F6             mov    si, si  ; effectively nop
+;
+; yuugenmagan_timelock_p4_part1 {
+;   1B03:19FE | C7 06 2A 5D 00 00 -> 9A yy yy xx xx 90
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_19fe).
+; Original assembly: (expanded from the macro pattern_missile_pairs_from_south)
+;   1B03:19FE | C7 06 2A 5D 00 00 mov    [word ptr boss_phase_frame], 0
+; Modified assembly:
+;   1B03:19FE | 9A yy yy xx xx    callf  hooked_reiiden_1b03_19fe
+;   1B03:1A03 | 90                nop
+;
+; yuugenmagan_timelock_p4_part2 {
+;   1B03:1AB9 | A0 74 54 98 3D 04 00 -> 9A yy yy xx xx 89 F6
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_1ab9).
+; Original assembly:
+;   1B03:1AB9 | A0 74 54          mov    al, [u3.iterations_done]
+;   1B03:1ABC | 98                cbw
+;   1B03:1ABD | 3D 05 00          cmp    ax, 4
+; Modified assembly:
+;   1B03:1AB9 | 9A yy yy xx xx    callf  hooked_reiiden_1b03_1ab9
+;   1B03:1ABE | 89 F6             mov    si, si  ; effectively nop
+;
+; yuugenmagan_timelock_init {
+;   1B03:0A19 | 80 3E 2E 5D 00 -> 9A yy yy xx xx
+; }, where "xxxx" is cseg, and "yyyy" is (offset hooked_reiiden_1b03_0a19).
+; Original assembly: cmp    [byte ptr boss_phase], 0
+; Modified assembly: callf  hooked_reiiden_1b03_0a19
+;
+; TODO: The hooks of P2~P4 timelocking can be compressed.
+
+yuugenmagan_timelock_p1_part1_org       db 0FFh, 006h, 02Ah, 05Dh, \
+                                           0FFh, 006h, 064h, 054h
+yuugenmagan_timelock_p1_part1_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_0e9b, 0
+                                        db NOP_3BYTES_SI
+inject_def yuugenmagan_timelock_p1_part1, 0, reiiden, 1B03h, 0E9Bh, 8
+
+yuugenmagan_timelock_p1_part2_org       db 081h, 03Eh, 02Ah, 05Dh, 04Ch, 004h
+yuugenmagan_timelock_p1_part2_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_0feb, 0
+                                        db NOP_1BYTE
+inject_def yuugenmagan_timelock_p1_part2, 0, reiiden, 1B03h, 0FEBh, 6
+
+yuugenmagan_timelock_p2_part1_org       db 0C7h, 006h, 02Ah, 05Dh, 000h, 000h
+yuugenmagan_timelock_p2_part1_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_12ed, 0
+                                        db NOP_1BYTE
+inject_def yuugenmagan_timelock_p2_part1, 0, reiiden, 1B03h, 12EDh, 6
+
+yuugenmagan_timelock_p2_part2_org       db 0A0h, 074h, 054h, 098h, \
+                                           03Dh, 005h, 000h
+yuugenmagan_timelock_p2_part2_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_13a8, 0
+                                        db NOP_2BYTES_SI
+inject_def yuugenmagan_timelock_p2_part2, 0, reiiden, 1B03h, 13A8h, 7
+
+yuugenmagan_timelock_p3_part1_org       db 0C7h, 006h, 02Ah, 05Dh, 000h, 000h
+yuugenmagan_timelock_p3_part1_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_163e, 0
+                                        db NOP_1BYTE
+inject_def yuugenmagan_timelock_p3_part1, 0, reiiden, 1B03h, 163Eh, 6
+
+yuugenmagan_timelock_p3_part2_org       db 0A0h, 074h, 054h, 098h, \
+                                           03Dh, 004h, 000h
+yuugenmagan_timelock_p3_part2_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_16fe, 0
+                                        db NOP_2BYTES_SI
+inject_def yuugenmagan_timelock_p3_part2, 0, reiiden, 1B03h, 16FEh, 7
+
+yuugenmagan_timelock_p4_part1_org       db 0C7h, 006h, 02Ah, 05Dh, 000h, 000h
+yuugenmagan_timelock_p4_part1_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_19fe, 0
+                                        db NOP_1BYTE
+inject_def yuugenmagan_timelock_p4_part1, 0, reiiden, 1B03h, 19FEh, 6
+
+yuugenmagan_timelock_p4_part2_org       db 0A0h, 074h, 054h, 098h, \
+                                           03Dh, 004h, 000h
+yuugenmagan_timelock_p4_part2_pat       db 09Ah
+                                        dw offset hooked_reiiden_1b03_1ab9, 0
+                                        db NOP_2BYTES_SI
+inject_def yuugenmagan_timelock_p4_part2, 0, reiiden, 1B03h, 1AB9h, 7
+
+yuugenmagan_init_org    db 080h, 03Eh, 02Eh, 05Dh, 000h
+yuugenmagan_init_pat    db 09Ah
+                        dw offset hooked_reiiden_1b03_0a19, 0
+inject_def yuugenmagan_init, 0, reiiden, 1B03h, 0A19h, 5
+
+yuugenmagan_p1_frame_elapsed    dw 0
+yuugenmagan_p2_iterations_done  db 0
+yuugenmagan_p3_iterations_done  db 0
+yuugenmagan_p4_iterations_done  db 0
+
+; The palette color of the kanji yokoshima(U+90AA) during each stage (P1~P4).
+yuugenmagan_yokoshima_color     rgb_t <13, 13, 5>, <0, 13, 68>, <63, 0, 68>, \
+                                      <0, 0, 68>
+
+YUUGENMAGAN_ITERATIONS_DONE_OFFSET      = 5474h
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_0e9b
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_0e9b far
+        assume  ds:nothing
+        cmp     [byte ptr TIME_LOCK_STATE], 1
+        je      @@skip_add_p1_frame
+        inc     [word ptr yuugenmagan_p1_frame_elapsed]
+@@skip_add_p1_frame:
+        ; The hooked instruction
+        inc     [word ptr ds:BOSS_PHASE_FRAME_OFFSET]
+        inc     [word ptr ds:INVINCIBILITY_FRAME_OFFSET]
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_0e9b
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_0feb
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in ((ZF!=0)||(SF!=OF))): whether it has been 1100 frames with
+;                                  timelock off
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_0feb far
+        assume  ds:nothing
+        cmp     [word ptr yuugenmagan_p1_frame_elapsed], 1100
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_0feb
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_12ed
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_12ed far
+        assume  ds:nothing
+        cmp     [byte ptr TIME_LOCK_STATE], 1
+        je      @@skip_add_p2_iterations_done
+        inc     [byte ptr yuugenmagan_p2_iterations_done]
+@@skip_add_p2_iterations_done:
+        ; The hooked instruction
+        mov     [word ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_12ed
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_13a8
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in (SF==OF)): whether it has been 5 iterations with timelock off
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_13a8 far
+        assume  ds:nothing
+        cmp     [byte ptr yuugenmagan_p2_iterations_done], 5
+        ; The side effect of the hooked instruction
+        movzx   ax, [byte ptr ds:YUUGENMAGAN_ITERATIONS_DONE_OFFSET]
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_13a8
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_163e
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_163e far
+        assume  ds:nothing
+        cmp     [byte ptr TIME_LOCK_STATE], 1
+        je      @@skip_add_p3_iterations_done
+        inc     [byte ptr yuugenmagan_p3_iterations_done]
+@@skip_add_p3_iterations_done:
+        ; The hooked instruction
+        mov     [word ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_163e
+
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_16fe
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in ((ZF==0)&&(SF==OF))): whether it has been 5 iterations with
+;                                  timelock off
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_16fe far
+        assume  ds:nothing
+        cmp     [byte ptr yuugenmagan_p3_iterations_done], 4
+        ; The side effect of the hooked instruction
+        movzx   ax, [byte ptr ds:YUUGENMAGAN_ITERATIONS_DONE_OFFSET]
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_16fe
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_19fe
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_19fe far
+        assume  ds:nothing
+        cmp     [byte ptr TIME_LOCK_STATE], 1
+        je      @@skip_add_p4_iterations_done
+        inc     [byte ptr yuugenmagan_p4_iterations_done]
+@@skip_add_p4_iterations_done:
+        ; The hooked instruction
+        mov     [word ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_19fe
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_1ab9
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in ((ZF==0)&&(SF==OF))): whether it has been 5 iterations with
+;                                  timelock off
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_1ab9 far
+        assume  ds:nothing
+        cmp     [byte ptr yuugenmagan_p4_iterations_done], 4
+        ; The side effect of the hooked instruction
+        movzx   ax, [byte ptr ds:YUUGENMAGAN_ITERATIONS_DONE_OFFSET]
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_1ab9
+
+; --------------------------------------------------------------------------
+; Function: hooked_reiiden_1b03_0a19
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in ZF): whether boss_phase is 0.
+; --------------------------------------------------------------------------
+proc hooked_reiiden_1b03_0a19 far
+        assume  ds:nothing
+        cmp     [byte ptr current_practise_boss], UI_YUUGENMAGAN
+        jne     @@skip_handling
+        cmp     [byte ptr boss_init_flag], 1
+        jne     @@skip_handling
+        mov     [byte ptr boss_init_flag], 0
+        push    ax bx
+        mov     ax, [word ptr phase_slider.value]
+        cmp     ax, 1
+        je      @@skip_set_hp_and_phase
+        ; Set boss_phase to the transition phase before the selected phase.
+        ; P2 -> 2, P3 -> 4, P4 -> 6, P5 -> 8.
+        sub     ax, 1
+        shl     ax, 1
+        mov     [byte ptr ds:BOSS_PHASE_OFFSET], al
+        ; Set the palette color of the kanji yokoshima in the background to the
+        ; background color of the previous stage.
+        mov     ax, [word ptr phase_slider.value]
+        imul    bx, ax, 3
+        mov     ax, [word ptr bx + (offset yuugenmagan_yokoshima_color) - 6]
+        mov     [word ptr ds:Z_PALETTES_OFFSET + \
+                             (size rgb_t) * COL_YOKOSHIMA], ax
+        mov     [word ptr ds:STAGE_PALETTE_YOKOSHIMA_OFFSET], ax
+        mov     al, [byte ptr bx + (offset yuugenmagan_yokoshima_color) - 6 + 2]
+        mov     [byte ptr ds:Z_PALETTES_OFFSET + \
+                             (size rgb_t) * COL_YOKOSHIMA + 2], al
+        mov     [byte ptr ds:STAGE_PALETTE_YOKOSHIMA_OFFSET + 2], al
+        ; Render HP bar
+        call    render_hp
+        ; Set boss_hp
+        mov     ax, [word ptr hp_slider.value]
+        mov     [ds:BOSS_HP_OFFSET], ax
+@@skip_set_hp_and_phase:
+        pop     bx ax
+@@skip_handling:
+        ; The hooked instruction
+        cmp     [byte ptr ds:BOSS_PHASE_OFFSET], 0
+        ret
+        assume  ds:cseg
+endp hooked_reiiden_1b03_0a19
+
+; Elis Warps
+; ============================
+; Check https://github.com/H-J-Granger/ReC98/commit/788916dee0fa685702a1507320367f6960fe464e ,
+; https://github.com/H-J-Granger/ReC98/commit/25b9f97979f566f21da532028ce9f7d382258317 , and
+; https://github.com/H-J-Granger/ReC98/commit/9545c33dfcbefe79931c8374f81f521cd5251fcb
+; for the C version of the modification in this section.
+;
+; elis_skip_opening_part1 {
+;   24E3:2E3C | C7 06 D3 5D 00 00 -> E9 F3 01 8D 74 00
+; }
+; Original assembly:
+;   24E3:2E3C | C7 06 D3 5D 00 00 mov    [word ptr hit.invincibility_frame], 0
+; Modified assembly:
+;   24E3:2E3C | E9 F4 01          jmp    24E3:3033  ; skip the entire loop
+;   24E3:2E3F | 8D 74 00          lea    si, [si + 00h]  ; effectively nop
+;
+; elis_skip_opening_part2 {
+;   24E3:3033 | C7 06 D3 5D 00 00 C7 46 FC 00 00 ->
+;             | C7 06 D3 5D FF 00 C7 46 FC 01 00
+; }
+; Original assembly:
+;   24E3:3033 | C7 06 D3 5D 00 00 mov    [word ptr hit.invincibility_frame], 0
+;   24E3:3039 | C7 46 FC 00 00    mov    [word ptr bp - trails_offscreen], 0
+; Modified assembly:
+;   24E3:3033 | C7 06 D3 5D FF 00 mov    [word ptr hit.invincibility_frame], 127
+;   24E3:3039 | C7 46 FC 01 00    mov    [word ptr bp - trails_offscreen], 1
+; Note: The 127 here is (KEYFRAME_SLIGHT_RIPPLE - 1).
+
+; elis_init {
+;   24E3:334A | 6A 01 9A 1E 01 92 1E -> 9A yy yy xx xx EB 3A
+;             |                ^^ ^^
+; } where "xxxx" is cseg, and "yyyy" is (offset elis_init_proc).
+; Original assembly:
+;   24E3:334A | 6A 01             push   1
+;   24E3:334C | 9A 1E 01 92 1E    callf  graph_accesspage_func
+; Modified assembly:
+;   24E3:334A | 9A yy yy xx xx    callf  elis_init_proc
+;   24E3:334C | EB 3A             jmp    short 24E3:338B ; skip all the callings
+;
+; elis_p1_attack_init {
+;   24E3:3391 | C7 06 D7 5D 01 00 -> 9A yy yy xx xx 90
+; }, where "xxxx" is cseg, and "yyyy" is (offset elis_p1_attack_init_proc).
+; Original assembly: mov [word ptr phase.cur.pattern], 1
+; Modified assembly:
+;   24E3:3391 | 9A yy yy xx xx    callf  elis_p1_attack_init_proc
+;   24E3:3396 | 90                nop
+; (elis_p2_attack_init) is completely the same.
+;
+; elis_p1_attack {
+;   24E3:0F89 | 9A 08 16 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (offset elis_p1_attack_select).
+; Original assembly: callf irand
+; Modified assembly: callf elis_p1_attack_select
+;
+; elis_p2_attack {
+;   24E3:1AA9 | 9A 08 16 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (offset elis_p2_attack_select).
+; Original assembly: callf irand
+; Modified assembly: callf elis_p2_attack_select
+;
+; elis_p3b_attack {
+;   24E3:2D7E | 9A 08 16 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (offset elis_p3b_attack_select).
+; Original assembly: callf irand
+; Modified assembly: callf elis_p3b_attack_select
+;
+; elis_p3g_attack {
+;   24E3:2CB9 | 9A 08 16 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (offset elis_p3g_attack_select).
+; Original assembly: callf irand
+; Modified assembly: callf elis_p3g_attack_select
+;
+; -----------------------
+; (*1) This is an absolute call, the segment address might differ.
+
+elis_skip_opening_part1_org     db 0C7h, 006h, 0D3h, 05Dh, 000h, 000h
+elis_skip_opening_part1_pat     db 0E9h, 0F4h, 001h, NOP_3BYTES_SI
+inject_def elis_skip_opening_part1, 0, reiiden, 24E3h, 2E3Ch, 6
+
+elis_skip_opening_part2_org     db 0C7h, 006h, 0D3h, 05Dh, 000h, 000h, \
+                                   0C7h, 046h, 0FCh, 000h, 000h
+elis_skip_opening_part2_pat     db 0C7h, 006h, 0D3h, 05Dh, 0FFh, 000h, \
+                                   0C7h, 046h, 0FCh, 001h, 000h
+inject_def elis_skip_opening_part2, 0, reiiden, 24E3h, 3033h, 11
+
+elis_init_org                   db 06Ah, 001h, 09Ah, 01Eh, 001h, 092h, 01Eh
+elis_init_pat                   db 09Ah
+                                dw (offset elis_init_proc), 0
+                                db 0EBh, 03Ah
+elis_init_var                   db 5 dup (0), 1, 1
+inject_def elis_init, 1, reiiden, 24E3h, 334Ah, 7
+
+elis_p1_attack_init_org         db 0C7h, 006h, 0D7h, 05Dh, 001h, 000h
+elis_p1_attack_init_pat         db 09Ah
+                                dw (offset elis_p1_attack_init_proc), 0
+                                db NOP_1BYTE
+inject_def elis_p1_attack_init, 0, reiiden, 24E3h, 3391h, 6
+
+elis_p1_attack_org              db 09Ah, 008h, 016h, 000h, 000h
+elis_p1_attack_pat              db 09Ah
+                                dw (offset elis_p1_attack_select), 0
+elis_p1_attack_var              db 0, 0, 0, 1, 1
+inject_def elis_p1_attack, 1, reiiden, 24E3h, 0F89h, 5
+
+elis_p2_attack_init_org         db 0C7h, 006h, 0D7h, 05Dh, 001h, 000h
+elis_p2_attack_init_pat         db 09Ah
+                                dw (offset elis_p2_attack_init_proc), 0
+                                db NOP_1BYTE
+inject_def elis_p2_attack_init, 0, reiiden, 24E3h, 34ECh, 6
+
+elis_p2_attack_org              db 09Ah, 008h, 016h, 000h, 000h
+elis_p2_attack_pat              db 09Ah
+                                dw (offset elis_p2_attack_select), 0
+elis_p2_attack_var              db 0, 0, 0, 1, 1
+inject_def elis_p2_attack, 1, reiiden, 24E3h, 1AA9h, 5
+
+elis_p3b_attack_org             db 09Ah, 008h, 016h, 000h, 000h
+elis_p3b_attack_pat             db 09Ah
+                                dw (offset elis_p3b_attack_select), 0
+elis_p3b_attack_var             db 0, 0, 0, 1, 1
+inject_def elis_p3b_attack, 1, reiiden, 24E3h, 2D7Eh, 5
+
+elis_p3g_attack_org             db 09Ah, 008h, 016h, 000h, 000h
+elis_p3g_attack_pat             db 09Ah
+                                dw (offset elis_p3g_attack_select), 0
+elis_p3g_attack_var             db 0, 0, 0, 1, 1
+inject_def elis_p3g_attack, 1, reiiden, 24E3h, 2CB9h, 5
+
+ELIS_FORM_OFFSET                        = 13ACh
+ELIS_PHASE_CUR_PATTERN_OFFSET           = 5DD7h
+elis_boss_phase_val_of_each_stages      db 1, 3, 4
+
+elis_do_skip_opening    db 0
+
+; --------------------------------------------------------------------------
+; Function: ent_still_or_wave_unlock_put_lock_8
+; Description: A reconstruction of the inline function
+;              ent_still_or_wave.unlock_put_lock_8().
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc ent_still_or_wave_unlock_put_lock_8 far
+local @@cbossentity_locked_move_and_put_8:dword
+        assume  ds:nothing
+
+        mov     bx, [cur_psp]
+        lea     ax, [bx + 10h + CBOSSENTITY_LOCKED_MOVE_AND_PUT_8_SEGMENT]
+        mov     [word ptr @@cbossentity_locked_move_and_put_8], \
+                CBOSSENTITY_LOCKED_MOVE_AND_PUT_8_OFFSET
+        mov     [word ptr @@cbossentity_locked_move_and_put_8 + 2], ax
+
+        mov     [word ptr ds:BOSS_ENTITY_0_OFFSET + cbossentity.lock_frame], 0
+        push    3 0 0 0 ds BOSS_ENTITY_0_OFFSET
+        call    [dword ptr @@cbossentity_locked_move_and_put_8]
+        add     sp, 12
+
+        ret
+        assume  ds:cseg
+endp ent_still_or_wave_unlock_put_lock_8
+
+; --------------------------------------------------------------------------
+; Function: elis_init_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc elis_init_proc far
+local @@in_p3:byte, @@graph_accesspage_func:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        mov     [byte ptr @@in_p3], 0
+
+        ; Set up the address of the procedure to be called
+        mov     bx, [cur_psp]
+        lea     ax, [bx + 10h + GRAPH_ACCESSPAGE_FUNC_SEGMENT]
+        mov     [word ptr @@graph_accesspage_func], GRAPH_ACCESSPAGE_FUNC_OFFSET
+        mov     [word ptr @@graph_accesspage_func + 2], ax
+
+        mov     [word ptr ds:ELIS_PHASE_CUR_PATTERN_OFFSET], 1
+        cmp     [byte ptr current_practise_boss], UI_ELIS
+        jne     @@skip_main_handling
+        mov     bx, [word ptr phase_slider.value]
+        cmp     bx, 1
+        je      @@skip_render_hp
+        call    render_hp
+@@skip_render_hp:
+        mov     ax, [word ptr hp_slider.value]
+        mov     [word ptr ds:BOSS_HP_OFFSET], ax
+        ; Set boss_phase according to the selected phase. We are setting it to
+        ; the transitional phase before (our) Phase 3, since there are some
+        ; initialization regarding to the bat form in that transitional stage.
+        mov     al, [byte ptr bx + (offset elis_boss_phase_val_of_each_stages) \
+                              - 1]
+        mov     [byte ptr ds:BOSS_PHASE_OFFSET], al
+        ; Set the form of Elis if warping to P3.
+        cmp     [byte ptr phase_slider.value], 3
+        jne     @@skip_p3_handling
+        mov     [byte ptr @@in_p3], 1
+        mov     [word ptr ds:ELIS_FORM_OFFSET], F_GIRL
+        push    0
+        call    [dword ptr @@graph_accesspage_func]
+        add     sp, 2
+@@skip_p3_handling:
+@@skip_main_handling:
+
+        cmp     [byte ptr @@in_p3], 0
+        jne     @@skip_sprite_adding
+        push    1
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        call    ent_still_or_wave_unlock_put_lock_8
+        push    0
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        call    ent_still_or_wave_unlock_put_lock_8
+        add     sp, 4                                   ; sp+4
+@@skip_sprite_adding:
+
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp elis_init_proc
+
+; --------------------------------------------------------------------------
+; Function: elis_p1_attack_init_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc elis_p1_attack_init_proc far
+        assume  ds:nothing
+        push    ax
+        cmp     [byte ptr current_practise_boss], UI_ELIS
+        jne     @@return
+        mov     ax, [word ptr p1_attack.value]
+        test    ax, ax
+        jnz     @@skip_adding_2
+        inc     ax
+@@skip_adding_2:
+        and     ax, 3
+        mov     [word ptr ds:ELIS_PHASE_CUR_PATTERN_OFFSET], ax
+        ; phase.cur.pattern = (AX == 0 ? 1 : AX) % 4
+@@return:
+        pop     ax
+        ret
+        assume  ds:cseg
+endp elis_p1_attack_init_proc
+
+; --------------------------------------------------------------------------
+; Function: elis_p1_attack_select
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in AX % 4): The chosen attack number.
+; --------------------------------------------------------------------------
+proc elis_p1_attack_select far
+        assume  ds:nothing
+        push    bx
+        mov     ax, [word ptr p1_attack.value]
+        cmp     [byte ptr current_practise_boss], UI_ELIS
+        setz    bl
+        test    ax, ax
+        setnz   bh
+        test    bh, bl
+        ; If AX == 1,2,3 here, we are already done. If it's 4, we still gets
+        ; the teleportation (indexed by 0).
+        jnz     @@skip_irand_calling
+        ; If AX == 0 (vanilla), we call `irand` to get attack number.
+        call    [dword ptr elis_p1_attack_org + 1]
+@@skip_irand_calling:
+        pop     bx
+        ret
+        assume  ds:cseg
+endp elis_p1_attack_select
+
+; --------------------------------------------------------------------------
+; Function: elis_p2_attack_init_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc elis_p2_attack_init_proc far
+        assume  ds:nothing
+        push    ax
+        cmp     [byte ptr current_practise_boss], UI_ELIS
+        jne     @@return
+        mov     ax, [word ptr p2_attack.value]
+        test    ax, ax
+        jnz     @@skip_adding_2
+        inc     ax
+@@skip_adding_2:
+        and     ax, 3
+        mov     [word ptr ds:ELIS_PHASE_CUR_PATTERN_OFFSET], ax
+        ; phase.cur.pattern = (AX == 0 ? 1 : AX) % 4
+@@return:
+        pop     ax
+        ret
+        assume  ds:cseg
+endp elis_p2_attack_init_proc
+
+; --------------------------------------------------------------------------
+; Function: elis_p2_attack_select
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in AX % 4): The chosen attack number.
+; --------------------------------------------------------------------------
+proc elis_p2_attack_select far
+        assume  ds:nothing
+        push    bx
+        mov     ax, [word ptr p2_attack.value]
+        cmp     [byte ptr current_practise_boss], UI_ELIS
+        setz    bl
+        test    ax, ax
+        setnz   bh
+        test    bh, bl
+        ; If AX == 1,2,3 here, we are already done. If it's 4, we still gets
+        ; the teleportation (indexed by 0).
+        jnz     @@skip_irand_calling
+        ; If AX == 0 (vanilla), we call `irand` to get attack number.
+        call    [dword ptr elis_p2_attack_org + 1]
+@@skip_irand_calling:
+        pop     bx
+        ret
+        assume  ds:cseg
+endp elis_p2_attack_select
+
+; --------------------------------------------------------------------------
+; Function: elis_p3b_attack_select
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in AX % 4): The chosen attack number.
+; --------------------------------------------------------------------------
+proc elis_p3b_attack_select far
+        assume  ds:nothing
+        push    bx
+        mov     ax, [word ptr p3_attack.value]
+        add     ax, 3
+        cmp     [byte ptr current_practise_boss], UI_ELIS
+        setz    bl
+        cmp     ax, 3
+        setnz   bh
+        test    bh, bl
+        jnz     @@skip_irand_calling
+        call    [dword ptr elis_p3b_attack_org + 1]
+@@skip_irand_calling:
+        pop     bx
+        ret
+        assume  ds:cseg
+endp elis_p3b_attack_select
+
+; --------------------------------------------------------------------------
+; Function: elis_p3g_attack_select
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in AX % 3): The chosen attack number.
+; --------------------------------------------------------------------------
+proc elis_p3g_attack_select far
+        assume  ds:nothing
+        push    bx
+        mov     ax, [word ptr p4_attack.value]
+        inc     ax
+        inc     ax
+        cmp     [byte ptr current_practise_boss], UI_ELIS
+        setz    bl
+        cmp     ax, 2
+        setnz   bh
+        test    bh, bl
+        jnz     @@skip_irand_calling
+        call    [dword ptr elis_p3g_attack_org + 1]
+@@skip_irand_calling:
+        pop     bx
+        ret
+        assume  ds:cseg
+endp elis_p3g_attack_select
+
+; Sariel Warps
+; ============================
+; Check https://github.com/H-J-Granger/ReC98/commit/ad24150b06e323d7aeea9ed29ad08966b5b2927d
+; for the C version of the modification in this section.
+;
+; sariel_skip_opening_part1 {
+;   2865:0062 | 1E 68 41 15 9A BE 04 6F 20 -> 9A yy yy xx xx EB 12 89 F6
+;             |                      ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_draw_background).
+; sariel_skip_opening_part2 {
+;   2865:009B | 83 C4 16 -> 83 C4 0C
+; }
+; sariel_skip_fake_death_part3 {
+;   2865:0089 | 1E 68 59 15 9A F9 00 45 22 -> 83 C4 04 EB 15 8D B4 00 00
+;             |                      ^^ ^^ (*1)
+; }
+; The modifications of the two patches:
+; - 2865:0062 | 1E                push   ds
+; - 2865:0063 | 68 41 15          push   1541h  ; pointer to "boss6_l.grp"
+; - 2865:0066 | 9A BE 04 6F 20    callf  grp_put_palette_show     ; delayed sp+4
+; + 2865:0062 | 9A yy yy xx xx    callf  sariel_draw_background
+; + 2865:0067 | EB 12             jmp    2865:007B
+; + 2865:0069 | 89 F6             mov    si, si  ; effectively nop
+;   2865:006B | 6A 01             push   1
+;   2865:006D | 9A 1E 01 92 1E    callf  graph_accesspage_func    ; delayed sp+2
+;   2865:0072 | 1E                push   ds
+;   2865:0073 | 68 4D 15          push   154Dh  ; pointer to "boss6_h.grp"
+;   2865:0076 | 9A BE 04 6F 20    callf  grp_put_palette_show     ; delayed sp+4
+;   2865:007B | 6A 00             push   0
+;   2865:007D | 9A 1E 01 92 1E    callf  graph_accesspage_func    ; delayed sp+2
+;   2865:0082 | 6A 04             push   BOSS_STAGE
+;   2865:0084 | 9A 8E 05 39 30    callf  stageobjs_init_and_render ; dela.. sp+2
+; - 2865:0089 | 1E                push   ds
+; - 2865:008A | 68 59 15          push   1559h  ; pointer to "TENSI.MDT"
+; - 2865:008D | 9A F9 00 45 22    callf  mdrv2_bgm_load           ; delayed sp+4
+; + 2865:0089 | 83 C4 04          add    sp, 04h                          ; sp+4
+; + 2865:008C | EB 15             jmp    2865:00A3
+; + 2865:008E | 8D B4 00 00       lea    si, [si + 0000h]  ; effectively nop
+;   2865:0092 | 1E                push   ds
+;   2865:0093 | 68 63 15          push   1563h  ; pointer to SE_FN=="zigoku.mde"
+;   2865:0096 | 9A 09 01 45 22    callf  mdrv2_se_load            ; delayed sp+4
+; - 2865:009B | 83 C4 16          add    sp, 16h                         ; sp+20
+; + 2865:009B | 83 C4 0C          add    sp, 0Ch                         ; sp+12
+;   2865:009E | 9A 19 01 45 22    callf  mdrv2_bgm_play
+;   2865:00A3 | ...
+;
+; sariel_skip_opening_part3 {
+;   2865:00B1 | EB 19 -> EB 46
+; }
+; Original assembly: jmp 2865:00CC  ; the "guarded do" jump
+; Modified assembly: jmp 2865:00F9  ; skip the entire loop
+;
+; sariel_skip_opening_part4 {
+;   2865:3AFE | FF 06 2A 5D -> E9 AF 01 90
+; }
+; Original assembly:
+;   2865:3AFE | FF 06 2A 5D       inc    [word ptr boss_phase_frame]
+; Modified assembly:
+;   2865:3AFE | FF 06 2A          jmp    2865:3CB0  ; jump to the init part
+;   2865:3B01 | 90                nop
+;
+; sariel_init {
+;   2865:3CC1 | 9A 08 16 00 10 BB 06 00 -> 9A yy yy xx xx EB 14 90
+;             |          ^^ ^^
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_init_proc).
+; The modifications of the patch:
+; - 2865:3CC1 | 9A 08 16 00 10    callf  irand
+; - 2865:3CC6 | BB 06 00          mov    bx, 6
+; + 2865:3CC1 | 9A yy yy xx xx    callf  sariel_init_proc
+; + 2865:3CC6 | EB 14             jmp    2865:3CDC
+; + 2865:3CC8 | 90                nop
+;   2865:3CC9 | 99                cwd
+;   2865:3CCA | F7 FB             idiv   bx
+;   2865:3CCC | 42                inc    dx
+;   2865:3CCD | 89 16 F9 14       mov    [phase.patterns_until_next], dx
+;   2865:3CD1 | C7 06 2A 5D 00 00 mov    [word ptr boss_phase_frame], 0
+;   2865:3CD7 | C6 06 97 6A 00    mov    [byte ptr initial_hp_rendered], 0
+;   2865:3CDC | ...
+;
+; sariel_skip_fake_death_part1 {
+;   2865:41F0 | C7 06 2A 5D 00 00 -> C7 06 2A 5D C8 00
+; }
+; Original assembly: mov [word ptr boss_phase_frame], 0
+; Modified assembly: mov [word ptr boss_phase_frame], 200
+;
+; sariel_skip_fake_death_part2 {
+;   2865:41F0 | 1E 68 E8 3F -> EB 10 89 F6
+; }
+; The modifications of the patch:
+; - 2865:438F | 1E                push    ds
+; - 2865:4390 | 68 E8 3F          push    offset grp_palette
+; + 2865:438F | EB 10             jmp     2865:43A1
+; + 2865:4391 | 89 F6             mov     si, si  ; effectively nop
+;   2865:4393 | 1E                push    ds
+;   2865:4394 | 68 F0 06          push    offset z_Palettes
+;   2865:4397 | 6A 00             push    0
+;   2865:4399 | 9A 64 03 73 21    callf   pagetrans_diagonal_8x8_with_palette
+;   2865:439E | 83 C4 0A          add     sp, 0Ah
+;   2865:43A1 | ...
+;
+; sariel_hidden_stage_warp {
+;   2865:442A | C7 06 28 5D 06 00 -> 8D 74 00 8D 7D 00
+; }
+; Original assembly:
+;   2865:442A | C7 06 28 5D 06 00 mov    [word ptr boss_hp], 6
+; Modified assembly (effectively nop):
+;   2865:442A | 8D 74 00          lea    si, [si + 00h]
+;   2865:442D | 8D 7D 00          lea    di, [di + 00h]
+;
+; sariel_lock_form_1 {
+;   2865:3E36 | 0F 8C 44 09 -> E9 45 09 90
+; }
+; sariel_lock_form_2 {
+;   2865:3F29 | 0F 8C 51 08 -> E9 52 08 90
+; }
+; sariel_lock_form_3 {
+;   2865:4045 | 0F 8C 35 07 -> E9 36 07 90
+; }
+; sariel_lock_form_4 {
+;   2865:417A | 0F 8C 00 06 -> E9 01 06 90
+; }
+; The modifications of these patch (take form_1 as an example, the assembly of
+; the other three is exactly the same):
+;   2865:3E2F | A1 F7 14          mov    ax, [phase.patterns_until_next]
+;   2865:3E32 | 3B 06 F9 14       cmp    ax, [phase.u1.patterns_done]
+; - 2865:3E36 | 0F 8C 44 09       jl     2865:477E  ; return if finish
+; + 2865:3E36 | E9 45 09          jmp    2865:477E  ; always return
+; + 2865:3E39 | 90                nop
+;
+; sariel_set_form_1_first_attack {
+;   2865:3CB5 | C7 06 F5 14 00 00 -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_set_form_1_first_attack).
+; Original assembly:
+;   2865:3CB5 | C7 06 F5 14 00 00 mov    [word ptr pattern_cur], 0
+; Modified assembly:
+;   2865:3CB5 | 9A yy yy xx xx    callf  sariel_set_form_1_first_attack
+;   2865:3CBA | 90                nop
+;
+; sariel_set_form_2_to_4_first_attack {
+;   2865:4192 | C7 06 F5 14 00 00 -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is
+; (offset sariel_set_form_2_to_4_first_attack).
+; Original assembly:
+;   2865:4192 | C7 06 F5 14 00 00 mov    [word ptr pattern_cur], 0
+; Modified assembly:
+;   2865:4192 | 9A yy yy xx xx    callf  sariel_set_form_2_to_4_first_attack
+;   2865:4197 | 90                nop
+;
+; sariel_hook_form_1_attack {
+;   2865:3DDA | 83 3E F5 14 02 75 04 -> 9A yy yy xx xx EB 0B
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_hook_form_1_attack).
+; sariel_hook_form_3_attack {
+;   2865:3FE8 | 83 3E F5 14 02 75 04 -> 9A yy yy xx xx EB 0B
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_hook_form_3_attack).
+; sariel_hook_form_4_attack {
+;   2865:411E | 83 3E F5 14 02 75 04 -> 9A yy yy xx xx EB 0B
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_hook_form_4_attack).
+; The modification of these patch: (take form_1 as an example, the assembly of
+; the other two is almost the same):
+; - 2865:3DDA | 83 3E F5 14 02    cmp    pattern_cur, 2  ; 5 in form_3
+; - 2865:3DDF | 75 04             jnz    2865:3DE5
+; + 2865:3DDA | 9A yy yy xx xx    callf  sariel_select_form_1_attack
+; + 2865:3DDF | EB 0B             jmp    2865:3DEC
+;   2865:3DE1 | 33 C0             xor    ax, ax  ; mov ax, 10  in form_3
+;   2865:3DE3 | EB 04             jmp    2865:3DE9
+;   2865:3DE5 | A1 F5 14          mov    ax, pattern_cur
+;   2865:3DE8 | 40                inc    ax
+;   2865:3DE9 | A3 F5 14          mov    pattern_cur, ax
+;   2865:3DEC | ...
+;
+; sariel_hook_form_2_attack {
+;   2865:3ED8 | 2B 06 F5 14 A3 F5 14 -> 9A yy yy xx xx 89 F6
+; } where "xxxx" is cseg, and "yyyy" is (offset sariel_hook_form_2_attack).
+; The modification of the patch:
+;   2865:3ED5 | B8 01 00          mov    ax, 1
+; - 2865:3ED8 | 2B 06 F5 14       sub    ax, [word ptr pattern_cur]
+; - 2865:3EDC | A3 F5 14          inc    [word ptr u1.patterns_done]
+; + 2865:3ED8 | 9A yy yy xx xx    callf  sariel_hook_form_2_attack
+; + 2865:3EDD | 89 F6             mov    si, si
+;
+; -----------------------
+; (*1) This is an absolute call, the segment address might differ.
+
+sariel_skip_opening_part1_org   db 01Eh, 068h, 041h, 015h, \
+                                   09Ah, 0BEh, 004h, 000h, 000h
+sariel_skip_opening_part1_pat   db 09Ah
+                                dw (offset sariel_draw_background), 0
+                                db 0EBh, 012h, NOP_2BYTES_SI
+sariel_skip_opening_part1_var   db 7 dup (0), 1, 1
+inject_def sariel_skip_opening_part1, 1, reiiden, 2865h, 0062h, 9
+
+sariel_skip_opening_part2_org   db 083h, 0C4h, 016h
+sariel_skip_opening_part2_pat   db 083h, 0C4h, 00Ch
+inject_def sariel_skip_opening_part2, 0, reiiden, 2865h, 009Bh, 3
+
+sariel_skip_opening_part3_org   db 0EBh, 019h
+sariel_skip_opening_part3_pat   db 0EBh, 046h
+inject_def sariel_skip_opening_part3, 0, reiiden, 2865h, 00B1h, 2
+
+; This portion of the opening animation isn't skipped (unless we're warping to
+; the hidden stage), since
+;   (a) a relatively brief opening animation should be tolerable,
+;   (b) the run will immediately start otherwise, which can be too fast for
+;       players to react, and
+;   (c) the disturbance of it in vanilla game won't be recreated then.
+sariel_skip_opening_part4_org   db 0FFh, 006h, 02Ah, 05Dh
+sariel_skip_opening_part4_pat   db 0E9h, 0AFh, 001h, NOP_1BYTE
+inject_def sariel_skip_opening_part4, 0, reiiden, 2865h, 3AFEh, 4
+
+sariel_init_org         db 09Ah, 008h, 016h, 000h, 000h, 0BBh, 006h, 000h
+sariel_init_pat         db 09Ah
+                        dw (offset sariel_init_proc), 0
+                        db 0EBh, 014h, NOP_1BYTE
+sariel_init_var         db 0, 0, 0, 1, 1, 0, 0, 0
+inject_def sariel_init, 1, reiiden, 2865h, 3CC1h, 8
+
+sariel_skip_fake_death_part1_org        db 0C7h, 006h, 02Ah, 05Dh, 000h, 000h
+sariel_skip_fake_death_part1_pat        db 0C7h, 006h, 02Ah, 05Dh, 0C8h, 000h
+inject_def sariel_skip_fake_death_part1, 0, reiiden, 2865h, 41F0h, 6
+
+sariel_skip_fake_death_part2_org        db 01Eh, 068h, 0E8h, 03Fh
+sariel_skip_fake_death_part2_pat        db 0EBh, 010h, NOP_2BYTES_SI
+inject_def sariel_skip_fake_death_part2, 0, reiiden, 2865h, 438Fh, 4
+
+; Yes, sp+4, not +0Eh, since we've already patched the sp+16h to sp+0Ch above.
+sariel_skip_fake_death_part3_org        db 01Eh, 068h, 059h, 015h, \
+                                           09Ah, 0F9h, 000h, 000h, 000h
+sariel_skip_fake_death_part3_pat        db 083h, 0C4h, 004h, 0EBh, 015h, \
+                                           NOP_4BYTES_SI
+sariel_skip_fake_death_part3_var        db 7 dup (0), 1, 1
+inject_def sariel_skip_fake_death_part3, 1, reiiden, 2865h, 0089h, 9
+
+sariel_hidden_stage_warp_org            db 0C7h, 006h, 028h, 05Dh, 006h, 000h
+sariel_hidden_stage_warp_pat            db NOP_3BYTES_SI, NOP_3BYTES_DI
+inject_def sariel_hidden_stage_warp, 0, reiiden, 2865h, 442Ah, 6
+
+sariel_lock_form_1_org  db 00Fh, 08Ch, 044h, 009h
+sariel_lock_form_1_pat  db 0E9h, 045h, 009h, NOP_1BYTE
+inject_def sariel_lock_form_1, 0, reiiden, 2865h, 3E36h, 4
+
+sariel_lock_form_2_org  db 00Fh, 08Ch, 051h, 008h
+sariel_lock_form_2_pat  db 0E9h, 052h, 008h, NOP_1BYTE
+inject_def sariel_lock_form_2, 0, reiiden, 2865h, 3F29h, 4
+
+sariel_lock_form_3_org  db 00Fh, 08Ch, 035h, 007h
+sariel_lock_form_3_pat  db 0E9h, 036h, 007h, NOP_1BYTE
+inject_def sariel_lock_form_3, 0, reiiden, 2865h, 4045h, 4
+
+sariel_lock_form_4_org  db 00Fh, 08Ch, 000h, 006h
+sariel_lock_form_4_pat  db 0E9h, 001h, 006h, NOP_1BYTE
+inject_def sariel_lock_form_4, 0, reiiden, 2865h, 417Ah, 4
+
+sariel_set_form_1_first_attack_org      db 0C7h, 006h, 0F5h, 014h, 000h, 000h
+sariel_set_form_1_first_attack_pat      db 09Ah
+                                        dw (offset sariel_form_1_first_atk), 0
+                                        db NOP_1BYTE
+inject_def sariel_set_form_1_first_attack, 0, reiiden, 2865h, 3CB5h, 6
+
+sariel_set_form_2_to_4_first_attack_org db 0C7h, 006h, 0F5h, 014h, 000h, 000h
+sariel_set_form_2_to_4_first_attack_pat db 09Ah
+                                        dw (offset sariel_form_2_to_4_first_atk)
+                                        dw 0
+                                        db NOP_1BYTE
+inject_def sariel_set_form_2_to_4_first_attack, 0, reiiden, 2865h, 4192h, 6
+
+sariel_hook_form_1_attack_org   db 083h, 03Eh, 0F5h, 014h, 002h, 075h, 004h
+sariel_hook_form_1_attack_pat   db 09Ah
+                                dw (offset sariel_select_form_1_attack), 0
+                                db 0EBh, 00Bh
+inject_def sariel_hook_form_1_attack 0, reiiden, 2865h, 3DDAh, 7
+
+sariel_hook_form_2_attack_org   db 02Bh, 006h, 0F5h, 014h, 0A3h, 0F5h, 014h
+sariel_hook_form_2_attack_pat   db 09Ah
+                                dw (offset sariel_select_form_2_attack), 0
+                                db NOP_2BYTES_SI
+inject_def sariel_hook_form_2_attack 0, reiiden, 2865h, 3ED8h, 7
+
+sariel_hook_form_3_attack_org   db 083h, 03Eh, 0F5h, 014h, 005h, 075h, 005h
+sariel_hook_form_3_attack_pat   db 09Ah
+                                dw (offset sariel_select_form_3_attack), 0
+                                db 0EBh, 00Ch
+inject_def sariel_hook_form_3_attack 0, reiiden, 2865h, 3FE8h, 7
+
+sariel_hook_form_4_attack_org   db 083h, 03Eh, 0F5h, 014h, 002h, 075h, 004h
+sariel_hook_form_4_attack_pat   db 09Ah
+                                dw (offset sariel_select_form_4_attack), 0
+                                db 0EBh, 00Bh
+inject_def sariel_hook_form_4_attack 0, reiiden, 2865h, 411Eh, 7
+
+sariel_do_skip_opening          db 0
+sariel_do_skip_opening_part4    db 0
+sariel_do_skip_fake_death       db 0
+sariel_max_attack_in_phases     db 6, 5, 4, 5
+SARIEL_PHASE_FORM1_DEFEATED     = 99
+
+sariel_get_first_atk_jump_table dw (offset sariel_get_first_atk_case_1), \
+                                   (offset sariel_get_first_atk_case_2), \
+                                   (offset sariel_get_first_atk_case_3), \
+                                   (offset sariel_get_first_atk_case_4)
+
+SARIEL_BOSS6_L_GRP_OFFSET               = 1541h
+SARIEL_BOSS6_H_GRP_OFFSET               = 154Dh
+SARIEL_BOSS6_A5_GRP_OFFSET              = 161Ch
+SARIEL_BG_IMAGES_OFFSET                 = 140Bh
+SARIEL_INITIAL_HP_RENDERED_OFFSET       = 6A97h
+SARIEL_PATTERNS_UNTIL_NEXT_OFFSET       = 14F9h
+SARIEL_PATTERN_CUR_OFFSET               = 14F5h
+
+; --------------------------------------------------------------------------
+; Function: sariel_draw_background
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc sariel_draw_background far
+local @@grp_put_pallete_show:dword, @@graph_accesspage_func:dword, \
+@@page_0_pallete:word, @@page_1_pallete:word
+        assume  ds:nothing
+
+        ; Set the offsets of the filenames of the pallete files of two pages
+        mov     ax, SARIEL_BOSS6_A5_GRP_OFFSET
+        mov     [word ptr @@page_0_pallete], ax
+        mov     [word ptr @@page_1_pallete], ax
+        cmp     [byte ptr sariel_do_skip_fake_death], 1
+        je      @@skip_set_regular_phase_background
+        mov     bx, [word ptr phase_slider.value]
+        shl     bx, 2
+        mov     ax, [word ptr ds:bx + SARIEL_BG_IMAGES_OFFSET - 4]
+        mov     [word ptr @@page_0_pallete], ax
+        mov     [word ptr @@page_1_pallete], ax
+@@skip_set_regular_phase_background:
+
+        ; Set the address of the procedures
+        mov     bx, [cur_psp]
+        lea     ax, [bx + GRP_PUT_PALLETE_SHOW_SEGMENT + 10h]
+        mov     [word ptr @@grp_put_pallete_show], GRP_PUT_PALLETE_SHOW_OFFSET
+        mov     [word ptr @@grp_put_pallete_show + 2], ax
+        lea     ax, [bx + GRAPH_ACCESSPAGE_FUNC_SEGMENT + 10h]
+        mov     [word ptr @@graph_accesspage_func], GRAPH_ACCESSPAGE_FUNC_OFFSET
+        mov     [word ptr @@graph_accesspage_func + 2], ax
+
+        ; Call the procedures
+        push    ds [word ptr @@page_0_pallete]
+        call    [dword ptr @@grp_put_pallete_show]      ; delayed sp+4
+        push    1
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        push    ds [word ptr @@page_1_pallete]
+        call    [dword ptr @@grp_put_pallete_show]      ; delayed sp+4
+        add     sp, 10                                  ; sp+10
+
+        ret
+        assume  ds:cseg
+endp sariel_draw_background
+
+; --------------------------------------------------------------------------
+; Function: sariel_init_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc sariel_init_proc far
+local @@irand:dword
+        assume  ds:nothing
+
+        mov     ax, [cur_psp]
+        add     ax, 10h + IRAND_SEGMENT
+        mov     [word ptr @@irand], IRAND_OFFSET
+        mov     [word ptr @@irand + 2], ax
+
+        cmp     [byte ptr sariel_phase_slider.value], 2
+        je      @@warp_to_hidden_phase
+
+        mov     ax, [word ptr phase_slider.value]
+        shl     ax, 1
+        dec     ax
+        mov     [byte ptr ds:BOSS_PHASE_OFFSET], al
+        call    [dword ptr @@irand]
+        cwd
+        mov     bx, [word ptr phase_slider.value]
+        movzx   bx, [byte ptr bx + (offset sariel_max_attack_in_phases) - 1]
+        idiv    bx
+        inc     dx
+        mov     [word ptr ds:SARIEL_PATTERNS_UNTIL_NEXT_OFFSET], dx
+        mov     [word ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
+        mov     [byte ptr ds:SARIEL_INITIAL_HP_RENDERED_OFFSET], 0
+        mov     ax, [word ptr hp_slider.value]
+        mov     [word ptr ds:BOSS_HP_OFFSET], ax
+
+        push    [word ptr phase_slider.value]
+        call    far sariel_get_first_atk
+        add     sp, 2
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        cmp     [byte ptr phase_slider.value], 1
+        je      @@skip_render_hp
+        call    render_hp
+@@skip_render_hp:
+        jmp     @@return
+
+@@warp_to_hidden_phase:
+        mov     [byte ptr BOSS_PHASE_OFFSET], SARIEL_PHASE_FORM1_DEFEATED
+        mov     ax, [word ptr hp_slider.value]
+        mov     [word ptr ds:BOSS_HP_OFFSET], ax
+
+@@return:
+        ret
+        assume  ds:cseg
+endp sariel_init_proc
+
+; --------------------------------------------------------------------------
+; Function: sariel_get_first_atk
+; Description: Get the first attack of the selected phase according to the
+;              practise settings.
+; Input: Argument 1 (word): The current phase.
+; Output (in AX): The first attack number.
+; --------------------------------------------------------------------------
+proc sariel_get_first_atk far
+arg @@cur_phase:word
+        assume  ds:nothing
+        push    bx
+
+        xor     ax, ax
+        mov     bx, [@@cur_phase]
+        shl     bx, 1
+        jmp     [word ptr bx - 2 + (offset sariel_get_first_atk_jump_table)]
+
+sariel_get_first_atk_case_1:
+        cmp     [byte ptr p1_attack.value], 0
+        je      @@return
+        mov     ax, [word ptr p1_attack.value]
+        dec     ax
+        jmp     @@return
+
+sariel_get_first_atk_case_2:
+        cmp     [byte ptr p2_attack.value], 0
+        je      @@return
+        mov     ax, [word ptr p2_attack.value]
+        dec     ax
+        jmp     @@return
+
+sariel_get_first_atk_case_3:
+        cmp     [byte ptr p3_attack.value], 0
+        je      @@return
+        ; First atk: 1->0, 2->1, 3->3.
+        mov     ax, [word ptr p3_attack.value]
+        cmp     ax, 3
+        je      @@case_3_ax_is_3
+        dec     ax
+@@case_3_ax_is_3:
+        jmp     @@return
+
+sariel_get_first_atk_case_4:
+        cmp     [byte ptr p4_attack.value], 0
+        je      @@return
+        mov     ax, [word ptr p4_attack.value]
+        dec     ax
+
+@@return:
+        pop     bx
+        ret
+        assume  ds:cseg
+endp sariel_get_first_atk
+
+; --------------------------------------------------------------------------
+; Function: sariel_form_1_first_atk
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc sariel_form_1_first_atk far
+        assume  ds:nothing
+        push    ax
+
+        push    1
+        call    far sariel_get_first_atk
+        add     sp, 2
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        pop     ax
+        ret
+        assume  ds:cseg
+endp sariel_form_1_first_atk
+
+; --------------------------------------------------------------------------
+; Function: sariel_form_2_to_4_first_atk
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc sariel_form_2_to_4_first_atk far
+        assume  ds:nothing
+        push    ax
+
+        ; In-game phase -> our phase: 1->1, 3->2, 5->3, 7->4
+        movzx   ax, [ds:BOSS_PHASE_OFFSET]
+        inc     ax
+        shr     ax, 1
+        push    ax
+        call    far sariel_get_first_atk
+        add     sp, 2
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        pop     ax
+        ret
+        assume  ds:cseg
+endp sariel_form_2_to_4_first_atk
+
+; --------------------------------------------------------------------------
+; Function: sariel_select_form_1_attack
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc sariel_select_form_1_attack far
+        assume  ds:nothing
+
+        mov     ax, [ds:SARIEL_PATTERN_CUR_OFFSET]
+        cmp     [byte ptr p1_attack.value], 0
+        jne     @@fixed_attack
+        ; Vanilla behaviour: 0->1, 1->2, 2->0
+        cmp     ax, 2
+        jne     @@ax_is_not_2
+        xor     ax, ax
+        jmp     @@set_pattern_cur
+@@ax_is_not_2:
+        inc     ax
+        jmp     @@set_pattern_cur
+@@fixed_attack:
+        ; Fixed attack: Don't change
+@@set_pattern_cur:
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        ret
+        assume  ds:cseg
+endp sariel_select_form_1_attack
+
+; --------------------------------------------------------------------------
+; Function: sariel_select_form_2_attack
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc sariel_select_form_2_attack far
+        assume  ds:nothing
+
+        mov     ax, [ds:SARIEL_PATTERN_CUR_OFFSET]
+        cmp     [byte ptr p2_attack.value], 0
+        jne     @@fixed_attack
+        ; Vanilla behaviour: 0->1, 1->0
+        mov     bx, 1
+        sub     bx, ax
+        xchg    ax, bx
+        jmp     @@set_pattern_cur
+@@fixed_attack:
+        ; Fixed attack: Don't change
+@@set_pattern_cur:
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        ret
+        assume  ds:cseg
+endp sariel_select_form_2_attack
+
+; --------------------------------------------------------------------------
+; Function: sariel_select_form_3_attack
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc sariel_select_form_3_attack far
+        assume  ds:nothing
+
+        mov     ax, [ds:SARIEL_PATTERN_CUR_OFFSET]
+        cmp     [byte ptr p3_attack.value], 0
+        jne     @@fixed_attack
+        ; Vanilla behaviour: 0->1, 1->2, ..., 4->5, 5->10 (??)
+        ; The 5->10 will never happen in the original game, but will cause issue
+        ; when we "lock form". Thus, we change it to 5->0.
+        cmp     ax, 5
+        jnz     @@ax_is_not_5
+        xor     ax, ax
+        jmp     @@set_pattern_cur
+@@ax_is_not_5:
+        inc     ax
+        jmp     @@set_pattern_cur
+@@fixed_attack:
+        ; Fixed attack=2: Switch between 1 and 2.
+        ; Fixed attack=1/3: Don't change the value.
+        cmp     [byte ptr p3_attack.value], 2
+        jne     @@set_pattern_cur
+        mov     bx, 3
+        sub     bx, ax
+        xchg    ax, bx
+
+@@set_pattern_cur:
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        ret
+        assume  ds:cseg
+endp sariel_select_form_3_attack
+
+; --------------------------------------------------------------------------
+; Function: sariel_select_form_4_attack
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc sariel_select_form_4_attack far
+        assume  ds:nothing
+
+        mov     ax, [ds:SARIEL_PATTERN_CUR_OFFSET]
+        cmp     [byte ptr p4_attack.value], 0
+        jne     @@fixed_attack
+        ; Vanilla behaviour: 0->1, 1->2, 2->0
+        cmp     ax, 2
+        jne     @@ax_is_not_2
+        xor     ax, ax
+        jmp     @@set_pattern_cur
+@@ax_is_not_2:
+        inc     ax
+        jmp     @@set_pattern_cur
+@@fixed_attack:
+        ; Fixed attack: Don't change
+@@set_pattern_cur:
+        mov     [ds:SARIEL_PATTERN_CUR_OFFSET], ax
+
+        ret
+        assume  ds:cseg
+endp sariel_select_form_4_attack
+
+; Mima Warps
+; ============================
+; Check https://github.com/H-J-Granger/ReC98/commit/a439c47ee95a8514bbcc127e8db7cbfbced00409
+; for the C version of the modification in this section.
+;
+; mima_init {
+;   1E33:17CB | C7 06 D8 54 00 00 -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is (offset mima_init_proc).
+; Original assembly:
+;   1E33:17CB | C7 06 F5 14 00 00 mov    [word ptr hit.invisible], 0
+; Modified assembly:
+;   1E33:17CB | 9A yy yy xx xx    callf  mima_init_proc
+;   1E33:17D0 | 90                nop
+;
+; mima_lock_phase_1 {
+;   1E33:185D | 83 3E D8 54 03 75 04 -> 9A yy yy xx xx EB 0A
+; } where "xxxx" is cseg, and "yyyy" is (offset mima_select_form_1_atk).
+; mima_lock_phase_2 {
+;   1E33:19A3 | 83 3E D8 54 03 75 04 -> 9A yy yy xx xx EB 0A
+; } where "xxxx" is cseg, and "yyyy" is (offset mima_select_form_2_atk).
+; The modifications of these patches (almost identical, take mima_lock_phase_1
+; as an example):
+; - 1E33:185D | 83 3E D8 54 03    cmp    word_49E78, 3
+; - 1E33:1862 | 75 04             jnz    short loc_2FB98
+; + 1E33:185D | 9A yy yy xx xx    callf  mima_select_form_1_atk
+; + 1E33:1862 | EB 0B             jmp    1E33:186F
+;   1E33:1864 | 33 C0             xor    ax, ax
+;   1E33:1866 | EB 04             jmp    short loc_2FB9C
+;   1E33:1868 | A1 D8 54          mov    ax, word_49E78
+;   1E33:186B | 40                inc    ax
+;   1E33:186C | A3 D8 54          mov    word_49E78, ax
+;   1E33:186F | ...
+;
+; mima_set_phase2_first_atk {
+;   1E33:195C | C7 06 D8 54 00 00 -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is (offset mima_set_phase2_first_atk_proc)
+; Original assembly:
+;   1E33:195C | C7 06 D8 54 00 00 mov    [word ptr pattern_cur], 0
+; Modified assembly:
+;   1E33:195C | 9A yy yy xx xx    callf  mima_set_phase2_first_atk_proc
+;   1E33:1961 | 90                nop.
+
+mima_init_org   db 0C7h, 006h, 0D8h, 054h, 000h, 000h
+mima_init_pat   db 09Ah
+                dw (offset mima_init_proc), 0
+                db NOP_1BYTE
+inject_def mima_init 0, reiiden, 1E33h, 17CBh, 6
+
+mima_lock_phase_1_org   db 083h, 03Eh, 0D8h, 054h, 003h, 075h, 004h
+mima_lock_phase_1_pat   db 09Ah
+                        dw (offset mima_select_form_1_atk), 0
+                        db 0EBh, 00Bh
+inject_def mima_lock_phase_1 0, reiiden, 1E33h, 185Dh, 7
+
+mima_lock_phase_2_org   db 083h, 03Eh, 0D8h, 054h, 003h, 075h, 004h
+mima_lock_phase_2_pat   db 09Ah
+                        dw (offset mima_select_form_2_atk), 0
+                        db 0EBh, 00Bh
+inject_def mima_lock_phase_2 0, reiiden, 1E33h, 19B5h, 7
+
+mima_set_phase2_first_atk_org   db 0C7h, 006h, 0D8h, 054h, 000h, 000h
+mima_set_phase2_first_atk_pat   db 09Ah
+                                dw (offset mima_set_phase2_first_atk_proc), 0
+                                db NOP_1BYTE
+inject_def mima_set_phase2_first_atk 0, reiiden, 1E33h, 195Ch, 6
+
+MIMA_PATTERN_CUR_OFFSET = 54D8h
+
+; --------------------------------------------------------------------------
+; Function: mima_init_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc mima_init_proc far
+        assume  ds:nothing
+        push    ax bx cx
+
+        mov     ax, [word ptr phase_slider.value]
+        shl     ax, 1
+        dec     ax
+        mov     [ds:BOSS_PHASE_OFFSET], al
+        mov     bx, offset p1_attack
+        cmp     ax, 3
+        jne     @@skip_set_p2_attack
+        mov     bx, offset p2_attack
+@@skip_set_p2_attack:
+        xor     cx, cx
+        mov     ax, [word ptr cs:bx + ui_slider.value]
+        test    ax, ax
+        jz      @@skip_set_first_atk
+        dec     ax
+        mov     cx, ax
+@@skip_set_first_atk:
+        mov     [ds:MIMA_PATTERN_CUR_OFFSET], cx
+        mov     ax, [word ptr hp_slider.value]
+        mov     [ds:BOSS_HP_OFFSET], ax
+
+        cmp     [byte ptr phase_slider.value], 1
+        je      @@skip_render_hp
+        call    render_hp
+@@skip_render_hp:
+
+        pop     cx bx ax
+        ret
+        assume  ds:cseg
+endp mima_init_proc
+
+; --------------------------------------------------------------------------
+; Function: mima_select_form_1_atk
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc mima_select_form_1_atk far
+        assume  ds:nothing
+        push    ax cx
+
+        mov     ax, [word ptr p1_attack.value]
+        test    ax, ax
+        jnz     @@skip_updating_mima_pattern_cur
+        mov     ax, [ds:MIMA_PATTERN_CUR_OFFSET]
+        xor     cx, cx
+        cmp     ax, 3
+        je      @@skip_setting_cx_as_ax_plus_1
+        mov     cx, ax
+        inc     cx
+@@skip_setting_cx_as_ax_plus_1:
+        mov     [ds:MIMA_PATTERN_CUR_OFFSET], ax
+@@skip_updating_mima_pattern_cur:
+
+        pop     cx ax
+        ret
+        assume  ds:cseg
+endp mima_select_form_1_atk
+
+; --------------------------------------------------------------------------
+; Function: mima_select_form_2_atk
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc mima_select_form_2_atk far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr p2_attack.value]
+        test    ax, ax
+        jnz     @@skip_updating_mima_pattern_cur
+        mov     ax, [ds:MIMA_PATTERN_CUR_OFFSET]
+        xor     cx, cx
+        cmp     ax, 3
+        je      @@skip_setting_cx_as_ax_plus_1
+        mov     cx, ax
+        inc     cx
+@@skip_setting_cx_as_ax_plus_1:
+        mov     [ds:MIMA_PATTERN_CUR_OFFSET], ax
+@@skip_updating_mima_pattern_cur:
+
+        pop     ax
+        ret
+        assume  ds:cseg
+endp mima_select_form_2_atk
+
+; --------------------------------------------------------------------------
+; Function: mima_set_phase2_first_atk_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc mima_set_phase2_first_atk_proc far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr p2_attack.value]
+        test    ax, ax
+        jz      @@skip_setting_ax
+        dec     ax
+@@skip_setting_ax:
+        mov     [ds:MIMA_PATTERN_CUR_OFFSET], ax
+
+        pop     ax
+        ret
+        assume  ds:cseg
+endp mima_set_phase2_first_atk_proc
+
+; Kikuri Warps
+; ============================
+; Check https://github.com/H-J-Granger/ReC98/commit/8e8d7823cad3bb362e87a3764071e3e137d7b369
+; and https://github.com/H-J-Granger/ReC98/commit/ba6c0e5308b5909a88a23c1de0b3704cdd1fcb6d
+; for the C version of the modification in this section.
+;
+; kikuri_inc_p1_iterations_done {
+;   232A:18D7 | 83 3E 2A 5D 00 75 04 -> 9A yy yy xx xx EB 04
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kikuri_inc_p1_iterations_done_proc).
+; kikuri_inc_p4_iterations_done {
+;   232A:1AA1 | 83 3E 2A 5D 00 75 04 -> 9A yy yy xx xx EB 04
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kikuri_inc_p4_iterations_done_proc).
+; The modifications of these patches (almost identical, take
+; kikuri_inc_p1_iterations_done as an example):
+; - 232A:18D7 | 83 3E 2A 5D 00    cmp     [byte ptr boss_phase_frame], 0
+; - 232A:18DC | 75 04             jnz     232A:18E2
+; + 232A:18D7 | 9A yy yy xx xx    callf   kikuri_inc_p1_iterations_done_proc
+; + 232A:18DC | EB 04             jmp     232A:18E2
+;   232A:18DE | FF 06 76 13       inc     [byte ptr kikuri_patterns_done]
+;   232A:18E2 | ...
+;
+; kikuri_chk_p1_iterations_done {
+;   232A:18F2 | 83 3E 76 13 06 -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kikuri_chk_p1_iterations_done_proc).
+; Original assembly: cmp [byte ptr kikuri_patterns_done], 6
+; Modified assembly: callf kikuri_chk_p1_iterations_done_proc
+;
+; kikuri_chk_p4_iterations_done {
+;   232A:18F2 | 83 3E 76 13 1D -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kikuri_chk_p4_iterations_done_proc).
+; Original assembly: cmp [byte ptr kikuri_patterns_done], 29
+; Modified assembly: callf kikuri_chk_p4_iterations_done_proc
+;
+; kikuri_inc_p3_frame {
+;   232A:19EA | FF 06 2A 5D FF 06 22 5D -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is (offset kikuri_inc_p3_frame_proc).
+; Original assembly:
+;   232A:19EA | FF 06 2A 5D       inc     [word ptr boss_phase_frame]
+;   232A:19EE | FF 06 76 13       inc     [word ptr hit.invincibility_frame]
+; Modified assembly:
+;   232A:19EA | 9A yy yy xx xx    callf   kikuri_inc_p3_frame_proc
+;   232A:19EF | 8D 74 00          lea     si, [si + 00h]  ; effectively nop
+;
+; kikuri_chk_p3_frame {
+;   232A:1A36 | 81 3E 2A 5D 40 06 -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is (offset kikuri_chk_p3_frame_proc).
+; Original assembly:
+;   232A:1A36 | 81 3E 2A 5D 40 06 cmp [byte ptr kikuri_patterns_done], 1600
+; Modified assembly:
+;   232A:1A36 | 9A yy yy xx xx    callf kikuri_inc_p3_frame_proc
+;   232A:1A3B | 90                nop
+;
+; kikuri_lock_p4_attack_part1 {
+;   232A:19D2 | C7 06 74 13 00 00 -> 8D 74 00 8D 7D 00
+; }
+; Original assembly:
+;   232A:19D2 | C7 06 74 13 00 00 mov   [word ptr phase.u1.phase_6_pattern], 0
+; Modified assembly:
+;   232A:19D2 | 8D 74 00          lea   si, [si + 00h]
+;   232A:19D5 | 8D 7D 00          lea   di, [di + 00h]
+;
+; kikuri_lock_p4_attack_part2 {
+;   232A:1AA1 | 83 3E 2A 5D 00 -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kikuri_lock_p4_attack_part2_proc).
+; Original assembly: cmp [byte ptr boss_phase_frame], 0
+; Modified assembly: callf kikuri_lock_p4_attack_part2_proc
+;
+; kikuri_skip_opening {
+;   232A:14F6 | FF 06 2A 5D A1 2A 5D BB 03 00 ->
+;             | 9A yy yy xx xx E9 D6 02 89 F6
+; } where "xxxx" is cseg, and "yyyy" is (offset kikuri_skip_opening_proc).
+; Original assembly:
+;   232A:14F6 | FF 06 2A 5D       inc     boss_phase_frame
+;   232A:14FA | A1 2A 5D          mov     ax, boss_phase_frame
+;   232A:14FD | BB 03 00          mov     bx, 3
+; Modified assembly:
+;   232A:14F6 | 9A yy yy xx xx    callf   kikuri_skip_opening_proc
+;   232A:14FB | E9 D6 02          jmp     232A:17D4   ; jump to stage 2 init
+;   232A:14FE | 89 F6             mov     si, si      ; effectively nop
+;
+; kikuri_p4_atk3_rank_fix {
+;   232A:123B | 83 3E 2A 5D 64 75 17 66 68 17 00 16 00 66 68 23 00 19 00 ->
+;             | 83 3E 2A 5D 65 75 17 66 68 3C 00 40 00 66 68 34 00 38 00
+; }
+; Modification:
+; - 332A:123B | 83 3E 2A 5D 64    cmp     boss_phase_frame, 64h
+; + 332A:123B | 83 3E 2A 5D 65    cmp     boss_phase_frame, 65h
+;   332A:1240 | 75 17             jnz     short 332A:1259
+; - 332A:1242 | 66 68 17 00 16 00 push    large 160017h
+; - 332A:1248 | 66 68 23 00 19 00 push    large 190023h
+; + 332A:1242 | 66 68 3C 00 40 00 push    large 3C0040h
+; + 332A:1248 | 66 68 34 00 38 00 push    large 340038h
+;   332A:124E | 1E                push    ds
+;   332A:124F | 68 17 5D          push    offset pattern_state.interval
+;   332A:1252 | 0E                push    cs
+;   332A:1253 | E8 EE ED          call    fn_332A_0044
+;   332A:1256 | 83 C4 0C          add     sp, 0Ch
+;   332A:1259 | ...
+;
+; kikuri_init {
+;   232A:17E9 | C6 06 26 5D 00 -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is (offset kikuri_init_proc).
+; Original assembly:
+
+kikuri_inc_p1_iterations_done_org       db 083h, 03Eh, 02Ah, 05Dh, 000h, 000h, \
+                                           075h, 004h
+kikuri_inc_p1_iterations_done_pat \
+        db 09Ah
+        dw (offset kikuri_inc_p1_iterations_done_proc), 0
+        db 0EBh, 004h
+inject_def kikuri_inc_p1_iterations_done 0, reiiden, 232Ah, 18D7h, 7
+
+kikuri_chk_p1_iterations_done_org       db 083h, 03Eh, 076h, 013h, 006h
+kikuri_chk_p1_iterations_done_pat \
+        db 09Ah
+        dw (offset kikuri_chk_p1_iterations_done_proc), 0
+inject_def kikuri_chk_p1_iterations_done 0, reiiden, 232Ah, 18F2h, 5
+
+kikuri_inc_p3_frame_org db 0FFh, 006h, 02Ah, 05Dh, 0FFh, 006h, 022h, 05Dh
+kikuri_inc_p3_frame_pat db 09Ah
+                        dw (offset kikuri_inc_p3_frame_proc), 0
+                        db NOP_3BYTES_SI
+inject_def kikuri_inc_p3_frame 0, reiiden, 232Ah, 19EAh, 8
+
+kikuri_chk_p3_frame_org db 081h, 03Eh, 02Ah, 05Dh, 040h, 006h
+kikuri_chk_p3_frame_pat db 09Ah
+                        dw (offset kikuri_chk_p3_frame_proc), 0
+                        db NOP_1BYTE
+inject_def kikuri_chk_p3_frame 0, reiiden, 232Ah, 1A36h, 6
+
+kikuri_inc_p4_iterations_done_org       db 083h, 03Eh, 02Ah, 05Dh, 000h, 000h, \
+                                           075h, 004h
+kikuri_inc_p4_iterations_done_pat \
+        db 09Ah
+        dw (offset kikuri_inc_p4_iterations_done_proc), 0
+        db 0EBh, 004h
+inject_def kikuri_inc_p4_iterations_done 0, reiiden, 232Ah, 1AA1h, 7
+
+kikuri_chk_p4_iterations_done_org       db 083h, 03Eh, 076h, 013h, 01Dh
+kikuri_chk_p4_iterations_done_pat \
+        db 09Ah
+        dw (offset kikuri_chk_p4_iterations_done_proc), 0
+inject_def kikuri_chk_p4_iterations_done 0, reiiden, 232Ah, 1AACh, 5
+
+kikuri_lock_p4_attack_part1_org         db 0C7h, 006h, 074h, 013h, 000h, 000h
+kikuri_lock_p4_attack_part1_pat         db NOP_3BYTES_SI, NOP_3BYTES_DI
+inject_def kikuri_lock_p4_attack_part1 0, reiiden, 232Ah, 19D2h, 6
+
+kikuri_lock_p4_attack_part2_org         db 083h, 03Eh, 02Ah, 05Dh, 000h
+kikuri_lock_p4_attack_part2_pat \
+        db 09Ah
+        dw (offset kikuri_lock_p4_attack_part2_proc), 0
+inject_def kikuri_lock_p4_attack_part2 0, reiiden, 232Ah, 1AA1h, 5
+
+kikuri_skip_opening_org db 0FFh, 006h, 02Ah, 05Dh, \
+                           0A1h, 02Ah, 05Dh, 0BBh, 003h, 000h
+kikuri_skip_opening_pat \
+        db 09Ah
+        dw (offset kikuri_skip_opening_proc), 0
+        db 0E9h, 0D6h, 002h, NOP_2BYTES_SI
+inject_def kikuri_skip_opening 0, reiiden, 232Ah, 14F6h, 10
+
+; In the vanilla game, the rank of this attack isn't set up correctly, and the
+; attack eventually reuse the rank of the last attack (which will always be
+; Attack 2). We will set up the rank (to the ones in Attack 2) here explicitly
+; since this attack may not follows Attack 2 in the practise mode.
+kikuri_p4_atk3_rank_fix_org     db 083h, 03Eh, 02Ah, 05Dh, 064h, \
+                                   075h, 017h, \
+                                   066h, 068h, 017h, 000h, 016h, 000h, \
+                                   066h, 068h, 023h, 000h, 019h, 000h
+kikuri_p4_atk3_rank_fix_pat     db 083h, 03Eh, 02Ah, 05Dh, 065h, \
+                                   075h, 017h, \
+                                   066h, 068h, 03Ch, 000h, 040h, 000h, \
+                                   066h, 068h, 034h, 000h, 038h, 000h
+inject_def kikuri_p4_atk3_rank_fix 0, reiiden, 232Ah, 123Bh, 19
+
+kikuri_init_org         db 0C6h, 006h, 026h, 05Dh, 000h
+kikuri_init_pat         db 09Ah
+                        dw (offset kikuri_init_proc), 0
+inject_def kikuri_init 0, reiiden, 232Ah, 17E9h, 5
+
+kikuri_p1_iterations_done       db 0
+kikuri_p3_boss_phase_frame      dw 0
+kikuri_p4_iterations_done       db 0
+
+kikuri_do_skip_opening  db 0
+kikuri_internal_phases  db 2, 4, 5, 6
+
+; The bytes of the two structures of the souls when P3 is started. Note that due
+; to the duration of P2 can be slightly increased by hitting Kikuri at the right
+; moment, the position-related data can differ from an actual gameplay. Not a
+; big deal, I guess...
+; When P4 is started, the data of the souls is also set to these values.
+; The type of the following bytes is CBossEntity[2].
+kikuri_p3_souls db \
+        098h, 000h, 05Eh, 000h, 098h, 000h, 05Eh, 000h, 004h, 000h, 020h, \
+        000h, 020h, 000h, 040h, 002h, 040h, 000h, 090h, 001h, 000h, 000h, \
+        000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 003h, \
+        000h, 000h, 000h, 001h, 000h, 032h, 000h, 000h, 000h, 000h, 000h, \
+        000h, 000h, 000h, 000h, 000h, 000h, 0C8h, 001h, 05Eh, 000h, 0C8h, \
+        001h, 05Eh, 000h, 004h, 000h, 020h, 000h, 020h, 000h, 040h, 002h, \
+        040h, 000h, 090h, 001h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, \
+        000h, 000h, 000h, 000h, 000h, 003h, 000h, 000h, 000h, 001h, 000h, \
+        032h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h, 000h
+
+KIKURI_PHASE_OFFSET                             = 5A1Eh
+KIKURI_P4_ATTACK_OFFSET                         = 1374h
+KIKURI_INITIAL_HP_RENDERED_OFFSET               = 5D26h
+KIKURI_SOULS_RAW_OFFSET                         = 5A29h
+KIKURI_ITERATIONS_DONE_OFFSET                   = 1376h
+KIKURI_MAIN_HIT_INVINCIBILITY_FRAME_OFFSET      = 5D22h
+
+; --------------------------------------------------------------------------
+; Function: kikuri_inc_p1_iterations_done_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc kikuri_inc_p1_iterations_done_proc far
+        assume  ds:nothing
+
+        cmp     [byte ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
+        jnz     @@return
+        inc     [word ptr ds:KIKURI_ITERATIONS_DONE_OFFSET]
+        cmp     [byte ptr cs:TIME_LOCK_STATE], 0
+        jne     @@return
+        inc     [byte ptr cs:kikuri_p1_iterations_done]
+
+@@return:
+        ret
+        assume  ds:cseg
+endp kikuri_inc_p1_iterations_done_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_chk_p1_iterations_done_proc
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in (SF==OF)): whether it has been 6 iterations with timelock off or
+;                       not
+; --------------------------------------------------------------------------
+proc kikuri_chk_p1_iterations_done_proc far
+        assume  ds:nothing
+        cmp     [byte ptr cs:kikuri_p1_iterations_done], 6
+        ret
+        assume  ds:cseg
+endp kikuri_chk_p1_iterations_done_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_inc_p3_frame_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc kikuri_inc_p3_frame_proc far
+        assume  ds:nothing
+
+        cmp     [byte ptr cs:TIME_LOCK_STATE], 0
+        jne     @@skip_increasing_frame
+        inc     [word ptr cs:kikuri_p3_boss_phase_frame]
+@@skip_increasing_frame:
+        ; Hooked instructions
+        inc     [word ptr ds:BOSS_PHASE_FRAME_OFFSET]
+        inc     [word ptr ds:KIKURI_MAIN_HIT_INVINCIBILITY_FRAME_OFFSET]
+
+        ret
+        assume  ds:cseg
+endp kikuri_inc_p3_frame_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_chk_p3_frame_proc
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in (ZF || (SF==OF)): whether it has been 1601 frames with timelock off
+;                              or not
+; --------------------------------------------------------------------------
+proc kikuri_chk_p3_frame_proc far
+        assume  ds:nothing
+        cmp     [word ptr cs:kikuri_p3_boss_phase_frame], 1600
+        ret
+        assume  ds:cseg
+endp kikuri_chk_p3_frame_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_inc_p4_iterations_done_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc kikuri_inc_p4_iterations_done_proc far
+        assume  ds:nothing
+
+        cmp     [byte ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
+        jnz     @@return
+        inc     [word ptr ds:KIKURI_ITERATIONS_DONE_OFFSET]
+        cmp     [byte ptr cs:TIME_LOCK_STATE], 0
+        jne     @@return
+        inc     [byte ptr cs:kikuri_p4_iterations_done]
+
+@@return:
+        ret
+        assume  ds:cseg
+endp kikuri_inc_p4_iterations_done_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_chk_p4_iterations_done_proc
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in (ZF || (SF==OF)): whether it has been 30 iterations with timelock
+;                              off or not
+; --------------------------------------------------------------------------
+proc kikuri_chk_p4_iterations_done_proc far
+        assume  ds:nothing
+        cmp     [byte ptr cs:kikuri_p1_iterations_done], 29
+        ret
+        assume  ds:cseg
+endp kikuri_chk_p4_iterations_done_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_lock_p4_attack_part2_proc
+; Description: (See the comment above)
+; Input: Nothing
+; Output (in ZF): whether boss_phase_frame is 0 or not.
+; --------------------------------------------------------------------------
+proc kikuri_lock_p4_attack_part2_proc far
+        assume  ds:nothing
+
+        mov     al, [byte ptr cs:p4_attack.value]
+        test    al, al
+        jz      @@skip_setting_p4_attack
+        dec     al
+        mov     [ds:KIKURI_P4_ATTACK_OFFSET], al
+@@skip_setting_p4_attack:
+
+        ; Hooked instruction
+        cmp     [byte ptr ds:BOSS_PHASE_FRAME_OFFSET], 0
+
+        ret
+        assume  ds:cseg
+endp kikuri_lock_p4_attack_part2_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_skip_opening_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc kikuri_skip_opening_proc far
+local @@graph_accesspage_func:dword, \
+@@graph_copy_accessed_page_to_other:dword, @@ptn_put_8:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        ; Set up the addresses of the functions to be called
+        mov     ax, [cs:cur_psp]
+        mov     cx, ax
+        add     ax, 10h + GRAPH_ACCESSPAGE_FUNC_SEGMENT
+        mov     [word ptr @@graph_accesspage_func + 2], ax
+        mov     [word ptr @@graph_accesspage_func], GRAPH_ACCESSPAGE_FUNC_OFFSET
+        mov     ax, cx
+        add     ax, 10h + GRAPH_COPY_ACCESSED_PAGE_TO_OTHER_SEGMENT
+        mov     [word ptr @@graph_copy_accessed_page_to_other + 2], ax
+        mov     [word ptr @@graph_copy_accessed_page_to_other], \
+                GRAPH_COPY_ACCESSED_PAGE_TO_OTHER_OFFSET
+        mov     ax, cx
+        add     ax, 10h + PTN_PUT_8_SEGMENT
+        mov     [word ptr @@ptn_put_8 + 2], ax
+        mov     [word ptr @@ptn_put_8], PTN_PUT_8_OFFSET
+
+        ; Copy the content of VRAM page 1 to page 0 (doing what the long
+        ; animation effectively does, but faster)
+        push    1
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        call    [dword ptr @@graph_copy_accessed_page_to_other]
+        push    0
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        add     sp, 4                                   ; sp+4
+
+        ; Put the orb sprite and the Reimu sprite, as the skipped loop is
+        ; responsible of putting them.
+        push    PTN_MIKO_L PLAYER_TOP [word ptr ds:PLAYER_LEFT_OFFSET]
+        call    [dword ptr @@ptn_put_8]                 ; delayed sp+6
+        push    PTN_ORB [word ptr ds:ORB_CUR_TOP_OFFSET]
+        push    [word ptr ds:ORB_CUR_LEFT_OFFSET]
+        call    [dword ptr @@ptn_put_8]                 ; delayed sp+6
+        add     sp, 12                                  ; sp+12
+
+        ; The skipped loop clears these variables before `break`-ing
+        mov     [word ptr cs:KIKURI_MAIN_HIT_INVINCIBILITY_FRAME_OFFSET], 0
+        mov     [word ptr cs:BOSS_PHASE_FRAME_OFFSET], 0
+
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp kikuri_skip_opening_proc
+
+; --------------------------------------------------------------------------
+; Function: kikuri_init_proc
+; Description: (See the comment above)
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc kikuri_init_proc far
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        mov     ax, [word ptr cs:hp_slider.value]
+        mov     [word ptr ds:BOSS_HP_OFFSET], ax
+        movzx   bx, [byte ptr cs:phase_slider.value]
+        mov     al, [cs:bx + (offset kikuri_internal_phases) - 1]
+        mov     [ds:KIKURI_PHASE_OFFSET], al
+        cmp     al, 6
+        jne     @@skip_setting_phase_4_pattern
+        mov     al, [byte ptr cs:p4_attack.value]
+        test    al, al
+        jz      @@skip_decreasing_al
+        dec     al
+@@skip_decreasing_al:
+        mov     [ds:KIKURI_P4_ATTACK_OFFSET], al
+@@skip_setting_phase_4_pattern:
+
+        ; Hooked instruction
+        mov     [byte ptr ds:KIKURI_INITIAL_HP_RENDERED_OFFSET], 0
+
+        cmp     [byte ptr cs:phase_slider.value], 1
+        je      @@skip_render_hp
+        call    render_hp
+@@skip_render_hp:
+
+        cmp     [byte ptr cs:phase_slider.value], 3
+        jl      @@skip_initializing_souls
+        push    ds              ; save DS
+        ; Copy 64h bytes from kikuri_p3_souls to souls_raw
+        mov     ax, ds
+        mov     es, ax
+        mov     ax, cs
+        mov     ds, ax
+        mov     cx, 64h
+        mov     si, (offset kikuri_p3_souls)
+        mov     di, KIKURI_SOULS_RAW_OFFSET
+        cld
+        rep movsb
+        pop     ds              ; restore DS
+@@skip_initializing_souls:
+
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp kikuri_init_proc
+
+; Kongara warps
+
+kongara_init_org                        db 0C6h, 006h, 02Eh, 05Dh, 001h
+kongara_init_pat                        db 09Ah
+                                        dw (offset kongara_init_proc), 0
+inject_def kongara_init 0, reiiden, 2CDDh, 20CBh, 5
+
+kongara_inc_p1_patterns_done_org        db 0A1h, 058h, 016h, 0A3h, 08Dh, 06Bh
+kongara_inc_p1_patterns_done_pat \
+        db 09Ah
+        dw (offset kongara_inc_p1_patterns_done_proc), 0
+        db NOP_1BYTE
+inject_def kongara_inc_p1_patterns_done 0, reiiden, 2CDDh, 218Dh, 6
+
+kongara_chk_p1_patterns_done_org        db 083h, 03Eh, 05Ah, 016h, 007h
+kongara_chk_p1_patterns_done_pat \
+        db 09Ah
+        dw (offset kongara_chk_p1_patterns_done_proc), 0
+inject_def kongara_chk_p1_patterns_done 0, reiiden, 2CDDh, 223Bh, 5
+
+kongara_inc_p2_patterns_done_org        db 0A1h, 058h, 016h, 0A3h, 08Dh, 06Bh
+kongara_inc_p2_patterns_done_pat \
+        db 09Ah
+        dw (offset kongara_inc_p2_patterns_done_proc), 0
+        db NOP_1BYTE
+inject_def kongara_inc_p2_patterns_done 0, reiiden, 2CDDh, 240Dh, 6
+
+kongara_chk_p2_patterns_done_org        db 083h, 03Eh, 05Ah, 016h, 009h
+kongara_chk_p2_patterns_done_pat \
+        db 09Ah
+        dw (offset kongara_chk_p2_patterns_done_proc), 0
+inject_def kongara_chk_p2_patterns_done 0, reiiden, 2CDDh, 248Bh, 5
+
+kongara_inc_p3_patterns_done_org        db 0A1h, 058h, 016h, 0A3h, 08Dh, 06Bh
+kongara_inc_p3_patterns_done_pat \
+        db 09Ah
+        dw (offset kongara_inc_p3_patterns_done_proc), 0
+        db NOP_1BYTE
+inject_def kongara_inc_p3_patterns_done 0, reiiden, 2CDDh, 2650h, 6
+
+kongara_chk_p3_patterns_done_org        db 083h, 03Eh, 05Ah, 016h, 006h
+kongara_chk_p3_patterns_done_pat \
+        db 09Ah
+        dw (offset kongara_chk_p3_patterns_done_proc), 0
+inject_def kongara_chk_p3_patterns_done 0, reiiden, 2CDDh, 26CEh, 5
+
+kongara_skip_opening1_org       db 057h, 09Ah, 008h, 000h, 073h, 021h, \
+                                   059h, 003h, 0FEh
+kongara_skip_opening1_pat       db 09Ah
+                                dw (offset kongara_skip_opening1_proc), 0
+                                db 0E9h, 0CFh, 000h, NOP_1BYTE
+kongara_skip_opening1_var       db 0, 0, 0, 0, 1, 1, 0, 0, 0
+inject_def kongara_skip_opening1 1, reiiden, 2CDDh, 01D2h, 9
+
+kongara_skip_opening2_org       db 06Ah, 028h, 09Ah, 004h, 000h, 036h, 01Eh, \
+                                   083h, 0C4h, 00Ah, 033h, 0F6h
+kongara_skip_opening2_pat       db 083h, 0C4h, 008h, 09Ah
+                                dw (offset kongara_skip_opening2_proc), 0
+                                db 0E9h, 091h, 000h, NOP_1BYTE
+kongara_skip_opening2_var       db 5 dup(0), 1, 1, 5 dup(0)
+inject_def kongara_skip_opening2 1, reiiden, 2CDDh, 030Eh, 12
+
+kongara_skip_opening3_org       db 033h, 0FFh, 0EBh, 03Ah, 0A0h, 00Bh, 007h
+kongara_skip_opening3_pat       db 09Ah
+                                dw (offset kongara_skip_opening3_proc), 0
+                                db 0EBh, 03Ch
+inject_def kongara_skip_opening3 0, reiiden, 2CDDh, 03E2h, 7
+
+kongara_set_p1_attack_org       db 09Ah, 008h, 016h, 000h, 010h, \
+                                   0BBh, 003h, 000h
+kongara_set_p1_attack_pat       db 09Ah
+                                dw (offset kongara_set_p1_attack_proc), 0
+                                db 0EBh, 020h, NOP_1BYTE
+kongara_set_p1_attack_var       db 0, 0, 0, 1, 1, 0, 0, 0
+inject_def kongara_set_p1_attack 1, reiiden, 2CDDh, 2196h, 8
+
+kongara_set_p2_attack_org       db 09Ah, 008h, 016h, 000h, 010h, \
+                                   0BBh, 004h, 000h
+kongara_set_p2_attack_pat       db 09Ah
+                                dw (offset kongara_set_p2_attack_proc), 0
+                                db 0EBh, 020h, NOP_1BYTE
+kongara_set_p2_attack_var       db 0, 0, 0, 1, 1, 0, 0, 0
+inject_def kongara_set_p2_attack 1, reiiden, 2CDDh, 23E6h, 8
+
+kongara_set_p3_attack_org       db 09Ah, 008h, 016h, 000h, 010h, \
+                                   0BBh, 003h, 000h
+kongara_set_p3_attack_pat       db 09Ah
+                                dw (offset kongara_set_p3_attack_proc), 0
+                                db 0EBh, 020h, NOP_1BYTE
+kongara_set_p3_attack_var       db 0, 0, 0, 1, 1, 0, 0, 0
+inject_def kongara_set_p3_attack 1, reiiden, 2CDDh, 2629h, 8
+
+kongara_set_p4_attack_org       db 09Ah, 008h, 016h, 000h, 010h, \
+                                   0BBh, 00Ch, 000h
+kongara_set_p4_attack_pat       db 09Ah
+                                dw (offset kongara_set_p4_attack_proc), 0
+                                db 0EBh, 020h, NOP_1BYTE
+kongara_set_p4_attack_var       db 0, 0, 0, 1, 1, 0, 0, 0
+inject_def kongara_set_p4_attack 1, reiiden, 2CDDh, 291Fh, 8
+
+kongara_do_skip_opening         db 0
+kongara_p1_patterns_done        db 0
+kongara_p2_patterns_done        db 0
+kongara_p3_patterns_done        db 0
+
+; Every nibble here stands for a byte stored in `z_Palettes`.
+kongara_palettes_after_decelerating_packed \
+        db 000h, 005h, 055h, 0C2h, 021h, 006h, 065h, 098h, 08Ah, 0CBh, 0CFh, \
+           0FFh, 013h, 0A0h, 089h, 0F0h, 00Ah, 000h, 000h, 00Fh, 0F0h, 0EBh, \
+           0AEh, 0EEh
+
+KONGARA_PATTERN_CUR_OFFSET      = 1658h
+KONGARA_PATTERN_PREV_OFFSET     = 6B8Dh
+KONGARA_BOSS8_GRZ_OFFSET        = 16C3h
+
+; The siddham seed syllables animation, unfortunately, is bottlenecked by the
+; actual speed of reading the .GRP files and writing to the VRAM. Thus, I
+; suppose skipping this animation requires tons of patching code and probably
+; an observable lag before the Kongara fight. We should better leave the siddham
+; appearing animation as it is...
+
+proc kongara_init_proc far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr hp_slider.value]
+        mov     [ds:BOSS_HP_OFFSET], ax
+        mov     ax, [word ptr phase_slider.value]
+        shl     ax, 1
+        dec     ax
+        mov     [ds:BOSS_PHASE_OFFSET], ax
+        cmp     ax, 1
+        je      @@skip_render_hp
+        call    render_hp
+@@skip_render_hp:
+
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_init_proc
+
+proc kongara_skip_opening1_proc far
+local @@z_palette_set_all_show:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        ; Set the address of the procedure to be called
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h + Z_PALETTE_SET_ALL_SHOW_SEGMENT
+        mov     [word ptr @@z_palette_set_all_show + 2], ax
+        mov     [word ptr @@z_palette_set_all_show], \
+                Z_PALETTE_SET_ALL_SHOW_OFFSET
+
+        push    offset kongara_palettes_after_decelerating_packed
+        call    load_packed_palettes                    ; delayed sp+2
+        push    ds Z_PALETTES_OFFSET
+        call    [dword ptr @@z_palette_set_all_show]    ; delayed sp+4
+        add     sp, 6
+
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp kongara_skip_opening1_proc
+
+proc kongara_skip_opening2_proc far
+local @@graph_copy_accessed_page_to_other:dword, @@graph_accesspage_func:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        ; Set the address of the procedures to be called
+        mov     bx, [cs:cur_psp]
+        lea     ax, [bx + GRAPH_COPY_ACCESSED_PAGE_TO_OTHER_SEGMENT + 10h]
+        mov     [word ptr @@graph_copy_accessed_page_to_other], \
+                GRAPH_COPY_ACCESSED_PAGE_TO_OTHER_OFFSET
+        mov     [word ptr @@graph_copy_accessed_page_to_other + 2], ax
+        lea     ax, [bx + GRAPH_ACCESSPAGE_FUNC_SEGMENT + 10h]
+        mov     [word ptr @@graph_accesspage_func], GRAPH_ACCESSPAGE_FUNC_OFFSET
+        mov     [word ptr @@graph_accesspage_func + 2], ax
+
+        push    1
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        call    [dword ptr @@graph_copy_accessed_page_to_other]
+        push    0
+        call    [dword ptr @@graph_accesspage_func]     ; delayed sp+2
+        add     sp, 4                                   ; sp+4
+
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp kongara_skip_opening2_proc
+
+proc kongara_skip_opening3_proc far
+local @@z_palette_set_all_show:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        ; Set the address of the procedure to be called
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h + Z_PALETTE_SET_ALL_SHOW_SEGMENT
+        mov     [word ptr @@z_palette_set_all_show + 2], ax
+        mov     [word ptr @@z_palette_set_all_show], \
+                Z_PALETTE_SET_ALL_SHOW_OFFSET
+
+        ; Set the palette of the siddham seed syllables to (0, 9, 15)
+        mov     [word ptr ds:Z_PALETTES_OFFSET + (size rgb_t) * SIDDHAM_COL], \
+                0900h
+        mov     [byte ptr ds:Z_PALETTES_OFFSET + \
+                             (size rgb_t) * SIDDHAM_COL + 2], 0Ah
+
+        push    ds Z_PALETTES_OFFSET
+        call    [dword ptr @@z_palette_set_all_show]
+        add     sp, 4
+
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp kongara_skip_opening3_proc
+
+proc kongara_inc_p1_patterns_done_proc far
+        assume  ds:nothing
+        push    ax
+        cmp     [byte ptr cs:TIME_LOCK_STATE], 0
+        jne     @@skip_inc_counter
+        inc     [byte ptr cs:kongara_p1_patterns_done]
+@@skip_inc_counter:
+        ; Hooked instructions
+        mov     ax, [ds:KONGARA_PATTERN_CUR_OFFSET]
+        mov     [ds:KONGARA_PATTERN_PREV_OFFSET], ax
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_inc_p1_patterns_done_proc
+
+proc kongara_chk_p1_patterns_done_proc far
+        assume  ds:nothing
+        cmp     [byte ptr kongara_p1_patterns_done], 7
+        ret
+        assume  ds:cseg
+endp kongara_chk_p1_patterns_done_proc
+
+proc kongara_inc_p2_patterns_done_proc far
+        assume  ds:nothing
+        push    ax
+        cmp     [byte ptr cs:TIME_LOCK_STATE], 0
+        jne     @@skip_inc_counter
+        inc     [byte ptr cs:kongara_p2_patterns_done]
+@@skip_inc_counter:
+        ; Hooked instructions
+        mov     ax, [ds:KONGARA_PATTERN_CUR_OFFSET]
+        mov     [ds:KONGARA_PATTERN_PREV_OFFSET], ax
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_inc_p2_patterns_done_proc
+
+proc kongara_chk_p2_patterns_done_proc far
+        assume  ds:nothing
+        cmp     [byte ptr kongara_p2_patterns_done], 9
+        ret
+        assume  ds:cseg
+endp kongara_chk_p2_patterns_done_proc
+
+proc kongara_inc_p3_patterns_done_proc far
+        assume  ds:nothing
+        push    ax
+        cmp     [byte ptr cs:TIME_LOCK_STATE], 0
+        jne     @@skip_inc_counter
+        inc     [byte ptr cs:kongara_p3_patterns_done]
+@@skip_inc_counter:
+        ; Hooked instructions
+        mov     ax, [ds:KONGARA_PATTERN_CUR_OFFSET]
+        mov     [ds:KONGARA_PATTERN_PREV_OFFSET], ax
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_inc_p3_patterns_done_proc
+
+proc kongara_chk_p3_patterns_done_proc far
+        assume  ds:nothing
+        cmp     [byte ptr kongara_p3_patterns_done], 6
+        ret
+        assume  ds:cseg
+endp kongara_chk_p3_patterns_done_proc
+
+proc kongara_vanilla_set_attack_proc far
+arg @@count_on_first_try:word, @@count_on_second_try:word
+local @@irand:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        mov     ax, [cs:cur_psp]
+        add     ax, 10h + IRAND_SEGMENT
+        mov     [word ptr @@irand], IRAND_OFFSET
+        mov     [word ptr @@irand + 2], ax
+
+        call    [dword ptr @@irand]
+        mov     bx, [@@count_on_first_try]
+        cwd
+        idiv    bx
+        cmp     dx, [ds:KONGARA_PATTERN_PREV_OFFSET]
+        jne     @@skip_second_try
+        call    [dword ptr @@irand]
+        mov     bx, [@@count_on_second_try]
+        cwd
+        idiv    bx
+@@skip_second_try:
+        mov     [ds:KONGARA_PATTERN_CUR_OFFSET], dx
+
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp kongara_vanilla_set_attack_proc
+
+proc kongara_set_p1_attack_proc far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr cs:p1_attack.value]
+        test    ax, ax
+        jz      @@original_behaviour
+        dec     ax
+        mov     [ds:KONGARA_PATTERN_CUR_OFFSET], ax
+        jmp     @@return
+
+@@original_behaviour:
+        push    3 3
+        call    kongara_vanilla_set_attack_proc
+        add     sp, 4
+
+@@return:
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_set_p1_attack_proc
+
+proc kongara_set_p2_attack_proc far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr cs:p2_attack.value]
+        test    ax, ax
+        jz      @@original_behaviour
+        dec     ax
+        mov     [ds:KONGARA_PATTERN_CUR_OFFSET], ax
+        jmp     @@return
+
+@@original_behaviour:
+        push    4 4
+        call    kongara_vanilla_set_attack_proc
+        add     sp, 4
+
+@@return:
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_set_p2_attack_proc
+
+proc kongara_set_p3_attack_proc far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr cs:p3_attack.value]
+        test    ax, ax
+        jz      @@original_behaviour
+        dec     ax
+        mov     [ds:KONGARA_PATTERN_CUR_OFFSET], ax
+        jmp     @@return
+
+@@original_behaviour:
+        push    2 3
+        call    kongara_vanilla_set_attack_proc
+        add     sp, 4
+
+@@return:
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_set_p3_attack_proc
+
+proc kongara_set_p4_attack_proc far
+        assume  ds:nothing
+        push    ax
+
+        mov     ax, [word ptr cs:p4_attack.value]
+        test    ax, ax
+        jz      @@original_behaviour
+        dec     ax
+        mov     [ds:KONGARA_PATTERN_CUR_OFFSET], ax
+        jmp     @@return
+
+@@original_behaviour:
+        push    2 12
+        call    kongara_vanilla_set_attack_proc
+        add     sp, 4
+
+@@return:
+        pop     ax
+        ret
+        assume  ds:cseg
+endp kongara_set_p4_attack_proc
+
+; OP.EXE modifications
+; ==============================================================
+;
+; practise_menu_part1 {
+;   0A1C:0612 | 9A 0C 00 00 00 -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; }, where "xxxx" is cseg, and "yyyy" is
+; (offset hooked_resident_create_and_stuff_set).
+; Original assembly: callf resident_create_and_stuff_set
+; Modified assembly: callf hooked_resident_create_and_stuff_set
+; Check https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L343-L349
+; for the C version of the original code.
+;
+; practise_menu_part2 {
+;   0A1C:0664 | 26 C6 47 14 00 -> EB 18 8D 7D 00
+; }
+; Modification:
+;   0A1C:0660 | C4 1E 56 1C       les    bx, [dword ptr resident]
+; - 0A1C:0664 | 26 C6 47 14 00    mov    [byte ptr es:bx + resdient_t.route],
+;             |                          ROUTE_MAKAI
+; + 0A1C:0664 | EB 18             jmp    short 0A1C:067E
+; + 0A1C:0666 | 8D 7D 00          lea    di, [di+00h]
+;   0A1C:0669 | 26 C7 47 3F 00 00 mov    [word ptr es:bx +
+;             |                                    resident_t.stage_id], 0000h
+;   0A1C:066F | A0 93 00          mov    al, [ds:opts + cfg_options_t.
+;             |                                         credit_lives_extra]
+;   0A1C:0672 | 04 02             add    al, 02h
+;   0A1C:0674 | 26 88 47 15       mov    [byte ptr es:bx + route_t.rem_lives],
+;             |                          al
+;   0A1C:0678 | 26 C7 47 49 00 00 mov    [word ptr es:bx + route_t.point_value],
+;             |                          0
+;   0A1C:067E | ...
+; Check https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L378-L380
+; for the C version of the original code.
+
+practise_menu_part1_org db 09Ah, 00Ch, 000h, 000h, 000h
+practise_menu_part1_pat db 09Ah
+                        dw offset cseg:hooked_resident_create_and_stuff_set, 0
+practise_menu_part1_var db 0, 0, 0, 1, 1
+inject_def practise_menu_part1, 1, op, 0A1Ch, 0612h, 5
+
+practise_menu_part2_org db 026h, 0C6h, 047h, 014h, 000h
+practise_menu_part2_pat db 0EBh, 018h, NOP_3BYTES_DI
+inject_def practise_menu_part2, 0, op, 0A1Ch, 0664h, 5
+
+skip_vanilla_set_rank_org       db 026h, 0C7h, 047h, 019h, 0FCh, 0FFh
+skip_vanilla_set_rank_pat       db NOP_3BYTES_SI, NOP_3BYTES_DI
+inject_def skip_vanilla_set_rank, 0, op, 0A1Ch, 06D1h, 6
+
+hook_start_continue_org         db 026h, 0C7h, 047h, 049h, 000h, 000h
+hook_start_continue_pat         db 09Ah
+                                dw (offset hook_start_continue_proc), 0
+                                db NOP_1BYTE
+inject_def hook_start_continue, 0, op, 0A1Ch, 0751h, 6
+
+; The segment and offset of the variable `resident` (of type resident_t far)
+; defined in
+; https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/core/resstuff.cpp#L11 .
+RESSTUFF_CPP_RESIDENT_SEG       EQU 1229h
+RESSTUFF_CPP_RESIDENT_OFF       EQU 1C56h
+
+; The offset of the variable `opts` (of type cfg_options_t far) defined in
+; https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L67-L72 .
+; (Its segment is the same as `resident`)
+OP_01_CPP_OPTS_OFF              EQU 0090h
+
+; --------------------------------------------------------------------------
+; Function: hooked_resident_create_and_stuff_set
+; Description: (See the comment above)
+; Input: (See the code in ReC98)
+; Output: Nothing
+; --------------------------------------------------------------------------
+proc hooked_resident_create_and_stuff_set far
+arg @@rank:word, @@bgm_mode:word, @@rem_bombs:word, @@credit_lives_extra:word, \
+    @@rand:dword
+local @@route:byte, @@saved_df:byte
+        assume  ds:nothing
+        ; Push all the registers that may be modified by the near procedures.
+        pushad
+        push    ds
+        pushfd
+
+        push    [dword ptr @@rand] [@@credit_lives_extra] [@@rem_bombs]
+        push    [@@bgm_mode] [@@rank]
+        call    [dword ptr practise_menu_part1_org + 1]
+        add     sp, 0Ch
+
+        ; Meet the assumptions of the .COM procedures
+        mov     ax, cs
+        mov     ds, ax
+        assume  ds:cseg
+        cld
+
+        call    show_practise_menu
+
+        ; Calculate selected route
+        mov     bx, 0
+        mov     ax, [word ptr section_slider.value]
+        test    ax, ax
+        jz      @@skip_route_checking
+        inc     ax
+        and     ax, 1
+        mov     bx, ax
+@@skip_route_checking:
+        mov     [@@route], bl
+
+        mov     al, [current_ui_boss]
+        mov     [current_practise_boss], al
+
+        ; Set variable `resident`
+        mov     ah, 62h
+        int     21h
+        lea     ax, [bx + 10h + RESSTUFF_CPP_RESIDENT_SEG]
+        mov     es, ax
+        les     bx, [dword ptr es:RESSTUFF_CPP_RESIDENT_OFF]
+
+        cmp     [word ptr playing_mode_slider.value], 0
+        je      @@original_mode
+        mov     al, [@@route]
+        mov     [byte ptr es:bx + resident_t.route], al
+        mov     al, [real_stage]
+        dec     al
+        mov     [byte ptr es:bx + resident_t.stage_id], al
+        mov     al, [byte ptr life_slider.value]
+        mov     [byte ptr es:bx + resident_t.rem_lives], al
+        mov     al, [byte ptr bomb_slider.value]
+        mov     [byte ptr es:bx + resident_t.rem_bombs], al
+        mov     ax, [word ptr rank_slider.value]
+        mov     [word ptr es:bx + resident_t.pellet_speed], ax
+        push    bx es
+        mov     ax, [word ptr piv_slider.value]
+        dec     ax      ; The stored point_value is the *last* PIV.
+        push    ax
+        call    piv_param_to_raw
+        add     sp, 2
+        pop     es bx
+        mov     [word ptr es:bx + resident_t.point_value], ax
+
+        jmp     @@end_of_resident_field_setting
+@@original_mode:
+        mov     [byte ptr current_practise_boss], 0
+        ; Simulate the original behaviour
+        mov     [byte ptr es:bx + resident_t.route], ROUTE_MAKAI
+        mov     [word ptr es:bx + resident_t.stage_id], 0
+        mov     ax, [@@credit_lives_extra]
+        add     al, 2
+        mov     [byte ptr es:bx + resident_t.rem_lives], al
+@@end_of_resident_field_setting:
+
+        call    on_game_start
+
+        popfd
+        pop     ds
+        assume  ds:nothing
+        popad
+        ret
+        assume  ds:cseg
+endp hooked_resident_create_and_stuff_set
+
+proc hook_start_continue_proc far
+        assume  ds:nothing
+        mov     [byte ptr current_practise_boss], 0
+        ; Hooked instruction
+        mov     [word ptr es:bx + resident_t.point_value], 0
+        ret
+        assume  ds:cseg
+endp hook_start_continue_proc
+
+; FUUIN.EXE modifications
+; ==============================================================
+
+enter_ending_org        db 09Ah, 005h, 000h, 094h, 01Bh
+enter_ending_pat        db 09Ah
+                        dw offset enter_ending_proc, 0
+enter_ending_var        db 0, 0, 0, 1, 1
+inject_def enter_ending, 1, fuuin, 09F4h, 0208h, 5
+
+END_AND_VERDICT_AND_REGIST_ANIMATE_SEGMENT      = 0B94h
+END_AND_VERDICT_AND_REGIST_ANIMATE_OFFSET       = 0005h
+VERDICT_ANIMATE_AND_REGIST_MENU_SEGMENT         = 0B94h
+VERDICT_ANIMATE_AND_REGIST_MENU_OFFSET          = 0B06h
+
+proc enter_ending_proc far
+local @@end_and_verdict_and_regist_animate:dword, \
+@@verdict_animate_and_regist_menu:dword
+        assume  ds:nothing
+        pushad
+        pushfd
+
+        mov     bx, [cur_psp]
+        lea     ax, [bx + 10 + END_AND_VERDICT_AND_REGIST_ANIMATE_SEGMENT]
+        mov     [word ptr @@end_and_verdict_and_regist_animate + 2], ax
+        mov     [word ptr @@end_and_verdict_and_regist_animate], \
+                END_AND_VERDICT_AND_REGIST_ANIMATE_OFFSET
+        lea     ax, [bx + 10 + VERDICT_ANIMATE_AND_REGIST_MENU_SEGMENT]
+        mov     [word ptr @@verdict_animate_and_regist_menu + 2], ax
+        mov     [word ptr @@verdict_animate_and_regist_menu], \
+                VERDICT_ANIMATE_AND_REGIST_MENU_OFFSET
+
+        cmp     [byte ptr playing_mode_slider.value], 1
+        je      @@skip_ending_calling
+        call    [dword ptr @@end_and_verdict_and_regist_animate]
+        jmp     @@return
+@@skip_ending_calling:
+        call    [dword ptr @@verdict_animate_and_regist_menu]
+
+@@return:
+        popfd
+        popad
+        ret
+        assume  ds:cseg
+endp enter_ending_proc
+
+inject_failed   db 0
+
+invincible_codes        dw (offset invincible_part1), \
+                           (offset invincible_part2), 0FFFFh
+inf_lives_codes         dw (offset inf_lives_part1), \
+                           (offset inf_lives_part2), 0FFFFh
+inf_bombs_codes         dw (offset inf_bombs_part1), \
+                           (offset inf_bombs_part2), 0FFFFh
+shingyoku_practise      dw (offset shingyoku_p2_attack), \
+                           (offset shingyoku_init), \
+                           (offset shingyoku_skip_hp_animation_part2), 0FFFFh
+yuugenmagan_practise    dw (offset yuugenmagan_timelock_p1_part1), \
+                           (offset yuugenmagan_timelock_p1_part2), \
+                           (offset yuugenmagan_timelock_p2_part1), \
+                           (offset yuugenmagan_timelock_p2_part2), \
+                           (offset yuugenmagan_timelock_p3_part1), \
+                           (offset yuugenmagan_timelock_p3_part2), \
+                           (offset yuugenmagan_timelock_p4_part1), \
+                           (offset yuugenmagan_timelock_p4_part2), \
+                           (offset yuugenmagan_init), 0FFFFh
+elis_practise           dw (offset elis_init), \
+                           (offset elis_p1_attack_init), \
+                           (offset elis_p2_attack_init), \
+                           (offset elis_p1_attack), (offset elis_p2_attack), \
+                           (offset elis_p3g_attack), (offset elis_p3b_attack), \
+                           0FFFFh
+sariel_practise         dw (offset sariel_init), \
+                           (offset sariel_hidden_stage_warp), \
+                           (offset sariel_set_form_1_first_attack), \
+                           (offset sariel_set_form_2_to_4_first_attack), \
+                           (offset sariel_hook_form_1_attack), \
+                           (offset sariel_hook_form_2_attack), \
+                           (offset sariel_hook_form_3_attack), \
+                           (offset sariel_hook_form_4_attack), 0FFFFh
+mima_practise           dw (offset mima_init), (offset mima_lock_phase_1), \
+                           (offset mima_lock_phase_2), \
+                           (offset mima_set_phase2_first_atk), 0FFFFh
+kikuri_practise         dw (offset kikuri_inc_p1_iterations_done), \
+                           (offset kikuri_chk_p1_iterations_done), \
+                           (offset kikuri_inc_p3_frame), \
+                           (offset kikuri_chk_p3_frame), \
+                           (offset kikuri_inc_p4_iterations_done), \
+                           (offset kikuri_chk_p4_iterations_done), \
+                           (offset kikuri_init), \
+                           (offset kikuri_lock_p4_attack_part1), \
+                           (offset kikuri_lock_p4_attack_part2), \
+                           (offset kikuri_p4_atk3_rank_fix), 0FFFFh
+kongara_practise        dw (offset kongara_init), \
+                           (offset kongara_inc_p1_patterns_done), \
+                           (offset kongara_chk_p1_patterns_done), \
+                           (offset kongara_inc_p2_patterns_done), \
+                           (offset kongara_chk_p2_patterns_done), \
+                           (offset kongara_inc_p3_patterns_done), \
+                           (offset kongara_chk_p3_patterns_done), \
+                           (offset kongara_set_p1_attack), \
+                           (offset kongara_set_p2_attack), \
+                           (offset kongara_set_p3_attack), \
+                           (offset kongara_set_p4_attack), 0FFFFh
+elis_skip_opening       dw (offset elis_skip_opening_part1), \
+                           (offset elis_skip_opening_part2), 0FFFFh
+sariel_skip_opening     dw (offset sariel_skip_opening_part1), \
+                           (offset sariel_skip_opening_part2), \
+                           (offset sariel_skip_opening_part3), 0FFFFh
+sariel_skip_fake_death  dw (offset sariel_skip_fake_death_part1), \
+                           (offset sariel_skip_fake_death_part2), \
+                           (offset sariel_skip_fake_death_part3), 0FFFFh
+sariel_lock_form        dw (offset sariel_lock_form_1), \
+                           (offset sariel_lock_form_2), \
+                           (offset sariel_lock_form_3), \
+                           (offset sariel_lock_form_4), 0FFFFh
+kongara_skip_opening    dw (offset kongara_skip_opening1), \
+                           (offset kongara_skip_opening2), \
+                           (offset kongara_skip_opening3)
+reiiden_unconditionals  dw (offset stage_num_animate), \
+                           (offset harry_up_animate), \
+                           (offset esc_in_hit_quit_bugfix1), \
+                           (offset esc_in_hit_quit_bugfix2), \
+                           (offset display_orb_while_hit), \
+                           (offset lock_rank_patch), 0FFFFh
+
+op_unconditionals       dw (offset practise_menu_part1), \
+                           (offset practise_menu_part2), \
+                           (offset skip_vanilla_set_rank), \
+                           (offset hook_start_continue), 0FFFFh
+fuuin_unconditionals    dw (offset enter_ending), 0FFFFh
+
+boss_practise_arr       dw (offset shingyoku_practise), \
+                           (offset yuugenmagan_practise), \
+                           (offset mima_practise), \
+                           (offset elis_practise), \
+                           (offset kikuri_practise), \
+                           (offset sariel_practise), \
+                           (offset kongara_practise)
+
+; --------------------------------------------------------------------------
+; Function: inject
+; Description: Check the filename of the current program, and inject the
+;              code if needed.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc inject near
+arg @@updated:word
+local @@saved_psp:word, @@saved_filename_ptr:dword
+        push    si di
+
+        mov     ax, [@@updated]
+        or      al, [inject_failed]
+        test    ax, ax
+        jz      @@return
+
+        mov     ah, 62h
+        int     21h     ; This function doesn't use any DOS-internal stacks and
+                        ; thus can be called at any time.
+        mov     [@@saved_psp], bx  ; Stored PSP segment
+        mov     [cs:cur_psp], bx
+        mov     es, bx
+        mov     es, [es:2Ch]  ; Get environment segment
+        xor     di, di
+@@find_2_continuous_zero_loop:
+        mov     cx, [word ptr es:di]
+        inc     di
+        test    cx, cx
+        jnz     @@find_2_continuous_zero_loop
+        ; Now, ES:DI is pointing to the full path of the executing program
+        add     di, 3
+        lea     dx, [di - 1]    ; DX: last encountered 3C
+@@scan_for_backslash_loop:
+        mov     cl, [byte ptr es:di]
+        cmp     cl, '\'
+        jne     @@not_backslash
+        mov     dx, di
+@@not_backslash:
+        inc     di
+        test    cl, cl
+        jnz     @@scan_for_backslash_loop
+        inc     dx  ; the filename of the executing program
+
+        mov     si, [@@saved_psp]
+        mov     [word ptr @@saved_filename_ptr], dx
+        mov     [word ptr @@saved_filename_ptr + 2], es
+        push    es dx ds (offset reiiden_exe)
+        call    strcmp_ignore_case
+        add     sp, 8
+        test    ax, ax
+        jnz     @@skip_reiiden_exe_patches
+
+        movzx   ax, [byte ptr fx_state + 1]
+        push    si ax (offset invincible_codes)
+        call    inject_multiple                 ; delayed sp+6
+        movzx   ax, [byte ptr fx_state + 3]
+        push    si ax (offset inf_lives_codes)
+        call    inject_multiple                 ; delayed sp+6
+        movzx   ax, [byte ptr fx_state + 5]
+        push    si ax (offset inf_bombs_codes)
+        call    inject_multiple                 ; delayed sp+6
+        add     sp, 18                          ; sp+18
+
+        movzx   ax, [byte ptr fx_state + 7]
+        push    si ax (offset time_lock)
+        call    inject_one                      ; delayed sp+6
+        movzx   ax, [byte ptr fx_state + 9]
+        push    si ax (offset inf_card_combo)
+        call    inject_one                      ; delayed sp+6
+        movzx   ax, [byte ptr fx_state + 11]
+        push    si ax (offset inf_item_combo)
+        call    inject_one                      ; delayed sp+6
+        add     sp, 18                          ; sp+18
+
+        cmp     [byte ptr current_practise_boss], 0
+        je      @@skip_boss_inject
+        mov     bx, [word ptr section_slider.value]
+        shl     bx, 1
+        push    si 1 [word ptr bx + (offset boss_practise_arr)]
+        call    inject_multiple
+        add     sp, 6
+
+        movzx   ax, [shingyoku_do_skip_opening]
+        push    si ax (offset shingyoku_skip_opening)
+        call    inject_one                      ; delayed sp+6
+        movzx   ax, [shingyoku_do_skip_p1]
+        push    si ax (offset shingyoku_skip_hp_animation_part1)
+        call    inject_one                      ; delayed sp+6
+        movzx   ax, [elis_do_skip_opening]
+        push    si ax (offset elis_skip_opening)
+        call    inject_multiple                 ; delayed sp+6
+        movzx   ax, [kikuri_do_skip_opening]
+        push    si ax (offset kikuri_skip_opening)
+        call    inject_one                      ; delayed sp+6
+        add     sp, 24                          ; sp+24
+
+        movzx   ax, [sariel_do_skip_opening]
+        push    si ax (offset sariel_skip_opening)
+        call    inject_multiple                 ; delayed sp+6
+        movzx   ax, [sariel_do_skip_opening_part4]
+        push    si ax (offset sariel_skip_opening_part4)
+        call    inject_one                      ; delayed sp+6
+        movzx   ax, [lock_form.value]
+        push    si ax (offset sariel_lock_form)
+        call    inject_multiple                 ; delayed sp+6
+        add     sp, 18                          ; sp+18
+
+        movzx   ax, [sariel_do_skip_fake_death]
+        push    si ax (offset sariel_skip_fake_death)
+        call    inject_multiple                 ; delayed sp+6
+        movzx   ax, [kongara_do_skip_opening]
+        push    si ax (offset kongara_skip_opening)
+        call    inject_multiple                 ; delayed sp+6
+        add     sp, 12                          ; sp+12
+@@skip_boss_inject:
+
+        push    si 1 (offset reiiden_unconditionals)
+        call    inject_multiple
+        add     sp, 6
+@@skip_reiiden_exe_patches:
+
+        push    [dword ptr @@saved_filename_ptr] ds (offset op_exe)
+        call    strcmp_ignore_case
+        add     sp, 8
+        test    ax, ax
+        jnz     @@skip_op_exe_patches
+
+        push    si 1 (offset op_unconditionals)
+        call    inject_multiple
+        add     sp, 6
+@@skip_op_exe_patches:
+
+        push    [dword ptr @@saved_filename_ptr] ds (offset fuuin_exe)
+        call    strcmp_ignore_case
+        add     sp, 8
+        test    ax, ax
+        jnz     @@skip_fuuin_exe_patches
+
+        push    si 1 (offset fuuin_unconditionals)
+        call    inject_multiple
+        add     sp, 6
+@@skip_fuuin_exe_patches:
+
+@@return:
+        pop     di si
+        ret
+endp inject
+
+; --------------------------------------------------------------------------
+; Function: maintain_bs_menu_ui
+; Description: Maintain the UI of the backspace menu.
+; Input: Nothing
+; Output (in AX): 1 if the FX status has been updated, 0 otherwise
+; --------------------------------------------------------------------------
+proc maintain_bs_menu_ui near
+local @@update:word, @@prev_bs_state:byte, @@prev_fx_state:byte:FX_COUNT, \
+@@return_val:word
+        mov     al, [byte ptr bs_state + 1]
+        mov     [@@prev_bs_state], al
+        xor     dx, dx
+@@save_fx_state_loop:
+        mov     bx, offset fx_state + 1
+        add     bx, dx
+        add     bx, dx
+        mov     al, [byte ptr ds:bx]
+        lea     bx, [@@prev_fx_state]
+        add     bx, dx
+        mov     [byte ptr ss:bx], al
+        inc     dx
+        cmp     dx, FX_COUNT
+        jne     @@save_fx_state_loop
+
+        mov     [word ptr @@update], 0
+        mov     [word ptr @@return_val], 0
+        mov     ax, 0401h
+        int     18h
+        shr     ah, 6
+        and     ah, 1
+        cmp     [byte ptr bs_state], ah
+        jge     @@skip_flipping_bs_state
+        xor     [byte ptr bs_state + 1], 1  ; [bs_state] == 0, prev == 1, flip
+        mov     [@@update], 1
+@@skip_flipping_bs_state:
+        mov     [byte ptr bs_state], ah
+        cmp     [byte ptr bs_state + 1], 1
+        jne     @@skip_fx_checking  ; if the BS menu is hidden, ignore FX inputs
+        mov     ax, 040Ch
+        int     18h
+        shr     ah, 2
+        mov     bx, offset fx_state
+        mov     dx, 0
+@@check_single_fx:
+        mov     ch, ah
+        and     ch, 1
+        cmp     [byte ptr bx], ch
+        jge     @@skip_flipping_fx_state
+        xor     [byte ptr bx + 1], 1  ; current state == 0, prev == 1, flip
+        mov     [@@update], 1
+        mov     [@@return_val], 1
+@@skip_flipping_fx_state:
+        mov     [byte ptr bx], ch
+        shr     ah, 1
+        add     bx, 2
+        inc     dx
+        cmp     dx, FX_COUNT
+        jne     @@check_single_fx
+@@skip_fx_checking:
+
+        ; Update the BackSpace Menu
+        cmp     [@@update], 1
+        jne     @@end_of_bs_menu_update
+        mov     al, [@@prev_bs_state]
+        cmp     al, [byte ptr bs_state + 1]
+        jl      @@show_bs_menu
+        jg      @@restore_bs_covered
+        ; @@update has changed, but bs_state doesn't change. Thus, this is a
+        ; FX update.
+        jmp     @@show_bs_menu_without_storing
+@@show_bs_menu:
+        ; Store the covered TRAM space
+        call    store_covered_tram
+@@show_bs_menu_without_storing:
+        ; Show the BS menu
+        call    show_bs_menu
+        jmp     @@end_of_bs_menu_update
+@@restore_bs_covered:
+        call    restore_covered_tram
+@@end_of_bs_menu_update:
+        mov     ax, [@@return_val]
+        ret
+endp maintain_bs_menu_ui
+
+; --------------------------------------------------------------------------
+; Function: link_components
+; Description: Link the given component list. Note that the front/tail
+;              component of the window object is not modified.
+; Input:  Argument 1 (word): offset to an 0FFFFh-ending array of component
+;                            offsets.
+; Output: Nothing
+; --------------------------------------------------------------------------
+proc link_components near
+arg @@component_arr:word
+        push    si di
+        mov     bx, [@@component_arr]
+@@main_loop:
+        mov     si, [bx]
+        mov     di, [bx + 2]
+        cmp     di, 0FFFFh
+        je      @@return
+        mov     [word ptr si + ui_component_common.next_component_off], di
+        mov     [word ptr di + ui_component_common.prev_component_off], si
+        add     bx, 2
+        jmp     @@main_loop
+@@return:
+        pop     di si
+        ret
+endp link_components
+
+enum ui_boss_t  UI_REGULAR, UI_SHINGYOKU, UI_YUUGENMAGAN, UI_ELIS, UI_SARIEL, \
+                UI_MIMA, UI_KIKURI, UI_KONGARA
+
+current_ui_boss db 0
+prev_phase      db 0
+first_time_showing_prac_menu db 1
+do_link_only    db 0
+
+YUUGENMAGAN_INITIAL_HP          = 16
+KIKURI_INITIAL_HP               = 14
+KONGARA_INITIAL_HP              = 18
+yuugenmagan_min_hp_in_phases    db 17, 16, 13, 11, 9, 1
+elis_min_hp_in_phases           db 15, 10, 6, 1
+sariel_init_hp_in_phases        db 18, 6
+mima_min_hp_in_phases           db 13, 7, 1
+kikuri_min_hp_in_phases         db 11, 7, 7, 1
+kikuri_default_hp_in_phases     db 14, 10, 10, 6
+kongara_min_hp_in_phases        db 16, 13, 10, 1
+kongara_default_hp_in_phases    db 18, 15, 12, 9
+
+regular_stage_linking   dw (offset stage_slider), (offset life_slider), 0FFFFh
+shingyoku_linking       dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset p2_attack), \
+                           (offset skip_opening), (offset life_slider), 0FFFFh
+yuugenmagan_linking     dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset life_slider), 0FFFFh
+elis_linking            dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset p1_attack), \
+                           (offset p2_attack), (offset p3_attack), \
+                           (offset p4_attack), (offset skip_opening), \
+                           (offset life_slider), 0FFFFh
+sariel_linking          dw (offset stage_slider), \
+                           (offset sariel_phase_slider), \
+                           (offset phase_slider), (offset lock_form), \
+                           (offset hp_slider), (offset p1_attack), \
+                           (offset p2_attack), (offset p3_attack), \
+                           (offset p4_attack), (offset skip_opening), \
+                           (offset life_slider), 0FFFFh
+mima_linking            dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset p1_attack), \
+                           (offset p2_attack), (offset life_slider), 0FFFFh
+kikuri_linking          dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset p4_attack), \
+                           (offset skip_opening), (offset life_slider), 0FFFFh
+kongara_linking         dw (offset stage_slider), (offset phase_slider), \
+                           (offset hp_slider), (offset p1_attack), \
+                           (offset p2_attack), (offset p3_attack), \
+                           (offset p4_attack), (offset skip_opening), \
+                           (offset life_slider), 0FFFFh
+
+; --------------------------------------------------------------------------
+; Function: update_prac_window_components_from_its_values
+; Description: As the name suggests, the components of the practise window is
+;              relavant to its value (e.g. only the game mode slider is visible
+;              when its value is 'Original'). This procedure updates it.
+; Warning: This function assumes the next component (if any) of the playing
+;          mode slider is always the section slider, and the last component (if
+;          any) is always the lock rank tickbox.
+; Input:  Nothing
+; Output: Nothing
+; --------------------------------------------------------------------------
+proc update_prac_window_components_from_its_values near
+        ; Set the values of a phase slider.
+macro set_phase_attack_value phase_index, attack_count
+        mov     [byte ptr p&phase_index&_attack.value], 0
+        mov     [byte ptr p&phase_index&_attack.min_value], 0
+        mov     [byte ptr p&phase_index&_attack.max_value], &attack_count
+endm
+
+        ; Dealing with the game mode slider. AL: whether the game mode is
+        ; 'Original', AH: whether the window only contains the game mode slider.
+        cmp     [byte ptr playing_mode_slider.value], 0
+        setz    al
+        cmp     [playing_mode_slider.next_component_off], 0FFFFh
+        setz    ah
+        cmp     ah, al
+        je      @@end_of_updating_game_mode_slider  ; skip if already up to date
+        ; If the playing mode is 'Original', remove all other components on the
+        ; list. Note that we don't modify the data of the removed components.
+        test    al, al
+        jz      @@skip_unlinking_every_other_slider
+        mov     [playing_mode_slider.next_component_off], 0FFFFh
+        mov     [practise_menu_window.tail_component_off], \
+                        (offset playing_mode_slider)
+        jmp     @@end_of_updating_game_mode_slider
+@@skip_unlinking_every_other_slider:
+        ; If the playing mode is 'Custom', link the section slider right after
+        ; the playing mode slider. Destroys AX.
+        mov     [playing_mode_slider.next_component_off], \
+                        (offset section_slider)
+        mov     [practise_menu_window.tail_component_off], (offset lock_rank)
+@@end_of_updating_game_mode_slider:
+
+        ; Regular stage
+        cmp     [byte ptr stage_slider.value], 5
+        je      @@add_bosses
+        cmp     [byte ptr current_ui_boss], UI_REGULAR
+        je      @@skip_regular_stage
+        mov     [byte ptr current_ui_boss], UI_REGULAR
+        push    (offset regular_stage_linking)
+        call    link_components
+        add     sp, 2
+@@skip_regular_stage:
+        jmp     @@skip_adding_bosses
+
+@@add_bosses:
+        ; Set the initialize flag
+        mov     [byte ptr boss_init_flag], 1
+        ; Set the default values of the UI components among bosses
+        mov     [word ptr phase_slider.label_off], (offset phase_slider_label)
+        mov     [word ptr p1_attack.label_off], (offset p1_attack_label)
+        mov     [word ptr p2_attack.label_off], (offset p2_attack_label)
+        mov     [word ptr p3_attack.label_off], (offset p3_attack_label)
+        mov     [word ptr p4_attack.label_off], (offset p4_attack_label)
+
+        mov     bx, [word ptr section_slider.value]
+        shl     bx, 1
+        jmp     [word ptr bx + (offset @@jumptable_1)]
+
+        ; Shingyoku
+@@maintain_shingyoku_specific_ui:
+        ;   Link the UI components that are relevant to Shingyoku
+        push    (offset shingyoku_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_1
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_1:
+        cmp     [byte ptr current_ui_boss], UI_SHINGYOKU
+        je      @@skip_shingyoku_init
+        mov     [byte ptr current_ui_boss], UI_SHINGYOKU
+        ;   Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 2
+        set_phase_attack_value 2, 4
+        mov     [word ptr p2_cur_first_attack_str], \
+                (offset p2_attack_shingyoku_1)
+        mov     [byte ptr prev_phase], 0
+@@skip_shingyoku_init:
+        ;   TODO: Maybe make the following HP handling code into a procedure?
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr phase_slider.value], al
+        je      @@skip_shingyoku_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     al, 8
+        mov     [byte ptr hp_slider.min_value], 7
+        cmp     [byte ptr phase_slider.value], 2
+        jne     @@skip_shingyoku_p2_hp
+        mov     [byte ptr hp_slider.min_value], 1
+        mov     al, 6
+@@skip_shingyoku_p2_hp:
+        mov     [byte ptr hp_slider.max_value], al
+        mov     [byte ptr hp_slider.value], al
+@@skip_shingyoku_init_hp:
+        mov     al, [byte ptr phase_slider.value]
+        mov     [byte ptr prev_phase], al
+        ;   Raise the "Skip P1" flags if the selected phase is P2
+        cmp     [byte ptr phase_slider.value], 2
+        sete    bl
+        mov     [shingyoku_do_skip_p1], bl
+        mov     [shingyoku_rerender_hp_flag], bl
+        ;   Raise the "skip opening" flag if either P1 isn't selected or the
+        ;   "Skip Opening Animation" tickbox is ticked.
+        cmp     [byte ptr phase_slider.value], 1
+        setne   al
+        cmp     [skip_opening.value], 1
+        sete    ah
+        or      al, ah
+        mov     [byte ptr shingyoku_do_skip_opening], al
+        jmp     @@skip_adding_bosses
+
+        ; Yuugenmagan
+@@maintain_yuugenmagan_specific_ui:
+        ;   Link the UI components that are relevant to Yuugenmagan
+        push    (offset yuugenmagan_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_2
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_2:
+        cmp     [byte ptr current_ui_boss], UI_YUUGENMAGAN
+        je      @@skip_yuugenmagan_init
+        mov     [byte ptr current_ui_boss], UI_YUUGENMAGAN
+        ;   Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 5
+        mov     [byte ptr prev_phase], 0
+@@skip_yuugenmagan_init:
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr phase_slider.value], al
+        je      @@skip_yuugenmagan_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     bx, [word ptr phase_slider.value]
+        mov     al, [byte ptr (offset yuugenmagan_min_hp_in_phases) + bx]
+        mov     ah, [byte ptr (offset yuugenmagan_min_hp_in_phases) - 1 + bx]
+        dec     ah
+        mov     [byte ptr hp_slider.min_value], al
+        mov     [byte ptr hp_slider.max_value], YUUGENMAGAN_INITIAL_HP
+        mov     [byte ptr hp_slider.value], ah
+@@skip_yuugenmagan_init_hp:
+        mov     al, [byte ptr phase_slider.value]
+        mov     [byte ptr prev_phase], al
+        jmp     @@skip_adding_bosses
+
+        ; Elis
+@@maintain_elis_specific_ui:
+        ;   Initialize special UI labels
+        mov     [word ptr p3_attack.label_off], (offset p3_bat_attack_label)
+        mov     [word ptr p4_attack.label_off], (offset p3_girl_attack_label)
+        ;   Link the UI components that are relevant to Elis
+        push    (offset elis_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_3
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_3:
+        cmp     [byte ptr current_ui_boss], UI_ELIS
+        je      @@skip_elis_init
+        mov     [byte ptr current_ui_boss], UI_ELIS
+        ;   Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 3
+        mov     [word ptr p1_cur_first_attack_str], (offset p1_attack_elis_1)
+        mov     [word ptr p2_cur_first_attack_str], (offset p2_attack_elis_1)
+        mov     [word ptr p3_cur_first_attack_str], (offset p3b_attack_elis_1)
+        mov     [word ptr p4_cur_first_attack_str], (offset p3g_attack_elis_1)
+        set_phase_attack_value 1, 4
+        set_phase_attack_value 2, 4
+        set_phase_attack_value 3, 4
+        set_phase_attack_value 4, 3
+        mov     [byte ptr prev_phase], 0
+@@skip_elis_init:
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr phase_slider.value], al
+        je      @@skip_elis_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     bx, [word ptr phase_slider.value]
+        mov     al, [byte ptr (offset elis_min_hp_in_phases) + bx]
+        mov     ah, [byte ptr (offset elis_min_hp_in_phases) - 1 + bx]
+        dec     ah
+        mov     [byte ptr hp_slider.min_value], al
+        mov     [byte ptr hp_slider.max_value], ah
+        mov     [byte ptr hp_slider.value], ah
+@@skip_elis_init_hp:
+        mov     al, [byte ptr phase_slider.value]
+        mov     [byte ptr prev_phase], al
+        ;   Raise the "skip opening" flag if either P1 isn't selected or the
+        ;   "Skip Opening Animation" tickbox is ticked.
+        cmp     [byte ptr phase_slider.value], 1
+        setne   al
+        cmp     [skip_opening.value], 1
+        sete    ah
+        or      al, ah
+        mov     [byte ptr elis_do_skip_opening], al
+        jmp     @@skip_adding_bosses
+
+        ; Sariel
+@@maintain_sariel_specific_ui:
+        ;   Initialize special UI labels
+        mov     [word ptr phase_slider.label_off], (offset form_slider_label)
+        mov     [word ptr p1_attack.label_off], (offset form_1_attack_label)
+        mov     [word ptr p2_attack.label_off], (offset form_2_attack_label)
+        mov     [word ptr p3_attack.label_off], (offset form_3_attack_label)
+        mov     [word ptr p4_attack.label_off], (offset form_4_attack_label)
+        ;   Link the UI components that are relevant to Sariel
+        push    (offset sariel_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_4
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_4:
+        cmp     [byte ptr current_ui_boss], UI_SARIEL
+        je      @@skip_sariel_init
+        mov     [byte ptr current_ui_boss], UI_SARIEL
+        ;   Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 4
+        mov     [word ptr p1_cur_first_attack_str], (offset f1_attack_sariel_1)
+        mov     [word ptr p2_cur_first_attack_str], (offset f2_attack_sariel_1)
+        mov     [word ptr p3_cur_first_attack_str], (offset f3_attack_sariel_1)
+        mov     [word ptr p4_cur_first_attack_str], (offset f4_attack_sariel_1)
+        set_phase_attack_value 1, 3
+        set_phase_attack_value 2, 2
+        set_phase_attack_value 3, 3
+        set_phase_attack_value 4, 3
+        mov     [byte ptr prev_phase], 0
+@@skip_sariel_init:
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr sariel_phase_slider.value], al
+        je      @@skip_sariel_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     bx, [word ptr sariel_phase_slider.value]
+        mov     al, [byte ptr bx + (offset sariel_init_hp_in_phases) - 1]
+        mov     [byte ptr hp_slider.value], al
+        mov     [byte ptr hp_slider.max_value], al
+        mov     [byte ptr hp_slider.min_value], 1
+@@skip_sariel_init_hp:
+        mov     al, [byte ptr sariel_phase_slider.value]
+        mov     [byte ptr prev_phase], al
+        ;   Raise the "skip opening" flag if either:
+        ;     1. Regular Phase isn't selected,
+        ;     2. Form 1 isn't selected, or
+        ;     3. "Skip Opening Animation" tickbox is ticked.
+        cmp     [byte ptr sariel_phase_slider.value], 1
+        setne   al
+        or      al, [skip_opening.value]
+        cmp     [byte ptr phase_slider.value], 1
+        setne   ah
+        or      al, ah
+        mov     [byte ptr sariel_do_skip_opening], al
+        ;   Raise the "skip fake death" flag if Hidden Phase is selected and
+        ;   the "Skip Opening Animation" tickbox is ticked. Raise the "skip
+        ;   Opening Part4" flag only if the Hidden Phase is selected.
+        cmp     [byte ptr sariel_phase_slider.value], 2
+        sete    al
+        mov     [byte ptr sariel_do_skip_opening_part4], al
+        and     al, [skip_opening.value]
+        mov     [byte ptr sariel_do_skip_fake_death], al
+        jmp     @@skip_adding_bosses
+
+        ; Mima
+@@maintain_mima_specific_ui:
+        ;   Link the UI components that are relevant to Mima
+        push    (offset mima_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_5
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_5:
+        ;   Initialize special UI labels
+        cmp     [byte ptr current_ui_boss], UI_MIMA
+        je      @@skip_mima_init
+        mov     [byte ptr current_ui_boss], UI_MIMA
+        ;   Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 2
+        mov     [word ptr p1_cur_first_attack_str], (offset p1_attack_mima_1)
+        mov     [word ptr p2_cur_first_attack_str], (offset p2_attack_mima_1)
+        set_phase_attack_value 1, 4
+        set_phase_attack_value 2, 4
+        mov     [byte ptr prev_phase], 0
+@@skip_mima_init:
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr phase_slider.value], al
+        je      @@skip_mima_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     bx, [word ptr phase_slider.value]
+        mov     al, [byte ptr (offset mima_min_hp_in_phases) + bx]
+        mov     ah, [byte ptr (offset mima_min_hp_in_phases) - 1 + bx]
+        dec     ah
+        mov     [byte ptr hp_slider.min_value], al
+        mov     [byte ptr hp_slider.max_value], ah
+        mov     [byte ptr hp_slider.value], ah
+@@skip_mima_init_hp:
+        mov     al, [byte ptr phase_slider.value]
+        mov     [byte ptr prev_phase], al
+        jmp     @@skip_adding_bosses
+
+        ; Kikuri
+@@maintain_kikuri_specific_ui:
+        ;   Link the UI components that are relevant to Kikuri
+        push    (offset kikuri_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_6
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_6:
+        ;   Initialize special UI labels
+        cmp     [byte ptr current_ui_boss], UI_KIKURI
+        je      @@skip_kikuri_init
+        mov     [byte ptr current_ui_boss], UI_KIKURI
+        ;     Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 4
+        mov     [word ptr p4_cur_first_attack_str], (offset p4_attack_kikuri_1)
+        set_phase_attack_value 4, 4
+        mov     [byte ptr prev_phase], 0
+@@skip_kikuri_init:
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr phase_slider.value], al
+        je      @@skip_kikuri_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     bx, [word ptr phase_slider.value]
+        mov     al, [byte ptr (offset kikuri_min_hp_in_phases) - 1 + bx]
+        mov     ah, [byte ptr (offset kikuri_default_hp_in_phases) - 1 + bx]
+        mov     [byte ptr hp_slider.min_value], al
+        mov     [byte ptr hp_slider.max_value], KIKURI_INITIAL_HP
+        mov     [byte ptr hp_slider.value], ah
+@@skip_kikuri_init_hp:
+        mov     al, [byte ptr phase_slider.value]
+        mov     [byte ptr prev_phase], al
+        ;   Raise the "skip opening" flag if either Phase 1 isn't selected, or
+        ;   the "Skip Opening Animation" tickbox is ticked.
+        cmp     [byte ptr phase_slider.value], 1
+        setne   al
+        or      al, [skip_opening.value]
+        mov     [kikuri_do_skip_opening], al
+        jmp     @@skip_adding_bosses
+
+        ; Kongara
+@@maintain_kongara_specific_ui:
+        ;   Link the UI components that are relevant to Kongara
+        push    (offset kongara_linking)
+        call    link_components
+        add     sp, 2
+        cmp     [byte ptr do_link_only], 1
+        jne     @@skip_returning_because_of_link_only_7
+        mov     [byte ptr do_link_only], 0
+        jmp     @@return
+@@skip_returning_because_of_link_only_7:
+        ;   Initialize special UI labels
+        cmp     [byte ptr current_ui_boss], UI_KONGARA
+        je      @@skip_kongara_init
+        mov     [byte ptr current_ui_boss], UI_KONGARA
+        ;     Initialize UI values
+        mov     [byte ptr phase_slider.value], 1
+        mov     [byte ptr phase_slider.max_value], 4
+        mov     [word ptr p1_cur_first_attack_str], (offset attack_kongara_1)
+        mov     [word ptr p2_cur_first_attack_str], (offset attack_kongara_4)
+        mov     [word ptr p3_cur_first_attack_str], (offset attack_kongara_8)
+        mov     [word ptr p4_cur_first_attack_str], (offset attack_kongara_1)
+        set_phase_attack_value 1, 3
+        set_phase_attack_value 2, 4
+        set_phase_attack_value 3, 3
+        set_phase_attack_value 4, 12
+        mov     [byte ptr prev_phase], 0
+@@skip_kongara_init:
+        mov     al, [byte ptr prev_phase]
+        cmp     [byte ptr phase_slider.value], al
+        je      @@skip_kongara_init_hp
+        ;   Set the parameters of the HP slider according to the phase selected
+        mov     bx, [word ptr phase_slider.value]
+        mov     al, [byte ptr (offset kongara_min_hp_in_phases) - 1 + bx]
+        mov     ah, [byte ptr (offset kongara_default_hp_in_phases) - 1 + bx]
+        mov     [byte ptr hp_slider.min_value], al
+        mov     [byte ptr hp_slider.max_value], KONGARA_INITIAL_HP
+        mov     [byte ptr hp_slider.value], ah
+@@skip_kongara_init_hp:
+        mov     al, [byte ptr phase_slider.value]
+        mov     [byte ptr prev_phase], al
+        ;   Raise the "skip opening" flag if either Phase 1 isn't selected, or
+        ;   the "Skip Opening Animation" tickbox is ticked.
+        cmp     [byte ptr phase_slider.value], 1
+        setne   al
+        or      al, [skip_opening.value]
+        mov     [kongara_do_skip_opening], al
+@@skip_adding_bosses:
+
+@@return:
+        ret
+
+@@jumptable_1   dw (offset @@maintain_shingyoku_specific_ui), \
+                   (offset @@maintain_yuugenmagan_specific_ui), \
+                   (offset @@maintain_mima_specific_ui), \
+                   (offset @@maintain_elis_specific_ui), \
+                   (offset @@maintain_kikuri_specific_ui), \
+                   (offset @@maintain_sariel_specific_ui), \
+                   (offset @@maintain_kongara_specific_ui)
+endp update_prac_window_components_from_its_values
+
+; --------------------------------------------------------------------------
+; Function: maintain_prac_menu_ui
+; Description: As the name suggests, the components of the practise window is
+;              relavant to its value (e.g. only the game mode slider is visible
+;              when its value is 'Original'). This procedure updates it.
+; Warning: This function assumes the next component (if any) of the playing
+;          mode slider is always the section slider, and the last component (if
+;          the playing mode is 'Custom') is always the bomb slider (does it?).
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc maintain_prac_menu_ui near
+local @@to_redraw:byte, \
+@@arrow_state_rising_edge:byte  ; bit 2,3,4,5: up, left, right, down
+        cmp     [prac_menu_state], 0
+        je      @@return
+
+        mov     [byte ptr @@to_redraw], 0
+
+        ; Check and respond to arrow key presses
+        mov     ax, 0407h
+        int     18h
+        mov     bl, [arrow_state]
+        not     bl
+        and     bl, ah
+        mov     [@@arrow_state_rising_edge], bl
+        mov     [arrow_state], ah
+
+        mov     si, offset practise_menu_window
+        mov     di, [si + ui_window.cur_component_off]
+        cmp     [byte ptr di + ui_component_common.ui_type], UI_SLIDER_NUM
+        jne     @@skip_left_right
+        test    [byte ptr @@arrow_state_rising_edge], 08h
+        jz      @@skip_left
+        push    0 di
+        call    slider_change_value
+        add     sp, 4
+@@skip_left:
+        test    [byte ptr @@arrow_state_rising_edge], 10h
+        jz      @@skip_right
+        push    1 di
+        call    slider_change_value
+        add     sp, 4
+@@skip_right:
+@@skip_left_right:
+        test    [byte ptr @@arrow_state_rising_edge], 04h
+        jz      @@skip_up
+        push    0 si
+        call    window_switch_cur
+        add     sp, 4
+@@skip_up:
+        test    [byte ptr @@arrow_state_rising_edge], 20h
+        jz      @@skip_down
+        push    1 si
+        call    window_switch_cur
+        add     sp, 4
+@@skip_down:
+        test    [byte ptr @@arrow_state_rising_edge], 3Ch
+        setnz   al
+        mov     [@@to_redraw], al
+
+        ; Check and respond to the Space key press
+        mov     di, [si + ui_window.cur_component_off]
+        cmp     [byte ptr di + ui_component_common.ui_type], UI_TICKBOX_NUM
+        jne     @@skip_space_check
+        mov     ax, 0406h
+        int     18h
+        mov     bl, [space_state]
+        not     bl
+        and     bl, ah
+        mov     [space_state], ah
+        test    bl, 10h
+        jz      @@skip_space
+        xor     [byte ptr di + ui_tickbox.value], 1
+        mov     [byte ptr @@to_redraw], 1
+@@skip_space:
+@@skip_space_check:
+
+        test    [byte ptr @@to_redraw], 1
+        jz      @@skip_redraw
+        call    update_prac_window_components_from_its_values
+        push    si
+        call    draw_window
+        add     sp, 2
+@@skip_redraw:
+
+        ; Check and respond to 'Z' key presses (start the game). We first wait
+        ; for a release of 'Z', then detect its pressing.
+        mov     ax, 0405h
+        int     18h
+        cmp     [key_z_up_once], 0
+        je      @@z_hasnt_been_released
+        and     ah, 02h
+        jz      @@skip_z_press
+        mov     [prac_menu_state], 0
+        mov     [key_z_up_once], 0
+        jmp     @@end_z_press
+@@z_hasnt_been_released:
+        and     ah, 02h
+        jnz     @@skip_set_key_z_up_once
+        mov     [key_z_up_once], 1
+@@skip_set_key_z_up_once:
+@@end_z_press:
+@@skip_z_press:
+
+@@return:
+        ret
+endp maintain_prac_menu_ui
+
+; --------------------------------------------------------------------------
+; Function: store_covered_tram
+; Description: Store the TRAM space (text and attribute) covered by the
+;              backspace menu.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc store_covered_tram near
+        push    ds si di
+
+        mov     ax, ds
+        mov     es, ax
+        mov     ax, TRAM_SEG
+        mov     ds, ax
+        assume  ds:nothing
+        xor     si, si
+        mov     di, offset bs_covered_tram
+@@store_tram_loop:
+        mov     cx, BS_MENU_WIDTH
+        rep movsw
+        add     si, 0A0h - 2 * BS_MENU_WIDTH
+        cmp     si, (0A0h * BS_MENU_HEIGHT)
+        jne     @@store_tram_loop
+        mov     ax, TRAM_ATTR_SEG
+        mov     ds, ax
+        xor     si, si
+        mov     di, offset bs_covered_tram_attr
+@@store_tram_attr_loop:
+        mov     cx, BS_MENU_WIDTH
+        rep movsw
+        add     si, 0A0h - 2 * BS_MENU_WIDTH
+        cmp     si, (0A0h * BS_MENU_HEIGHT)
+        jne     @@store_tram_attr_loop
+
+        pop     di si ds
+        assume  ds:cseg
+        ret
+endp store_covered_tram
+
+; --------------------------------------------------------------------------
+; Function: resstore_covered_tram
+; Description: Restore the TRAM space (text and attribute) covered by the
+;              backspace menu from data saved by store_covered_tram.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc restore_covered_tram near
+        push    di si
+
+        mov     ax, TRAM_SEG
+        mov     es, ax
+        xor     di, di
+        mov     si, (offset bs_covered_tram)
+@@restore_tram_loop:
+        mov     cx, BS_MENU_WIDTH
+        rep movsw
+        add     di, 0A0h - (2 * BS_MENU_WIDTH)
+        cmp     di, (0A0h * BS_MENU_HEIGHT)
+        jne     @@restore_tram_loop
+        mov     ax, TRAM_ATTR_SEG
+        mov     es, ax
+        xor     di, di
+        mov     si, offset bs_covered_tram_attr
+@@restore_tram_attr_loop:
+        mov     cx, BS_MENU_WIDTH
+        rep movsw
+        add     di, 0A0h - (2 * BS_MENU_WIDTH)
+        cmp     di, (0A0h * BS_MENU_HEIGHT)
+        jne     @@restore_tram_attr_loop
+
+        pop     si di
+        ret
+endp restore_covered_tram
+
+; --------------------------------------------------------------------------
+; Function: resstore_covered_tram
+; Description: Restore the TRAM space (text and attribute) covered by the
+;              backspace menu from data saved by store_covered_tram.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc show_bs_menu near
+        cmp     [byte ptr bs_state + 1], 0
+        je      @@return
+
+        push    TEXT_WHITE BS_MENU_HEIGHT BS_MENU_WIDTH 0 0
+        call    print_frame
+        add     sp, 10
+
+        mov     dx, 1
+@@main_loop:
+        mov     bx, offset fx_state - 1
+        add     bx, dx
+        add     bx, dx
+        mov     cx, TEXT_WHITE
+        test    [byte ptr bx], 1
+        jz      @@set_text_white
+        mov     cx, TEXT_GREEN
+@@set_text_white:
+        mov     bx, offset fx_text - 2
+        add     bx, dx
+        add     bx, dx
+        push    dx
+        push    cx dx 1 ds [word ptr bx]
+        call    print_str
+        add     sp, 10
+        pop     dx
+        inc     dx
+        cmp     dx, FX_COUNT + 1
+        jne     @@main_loop
+@@return:
+        ret
+endp show_bs_menu
+
+; --------------------------------------------------------------------------
+; Function: show_practise_menu
+; Description: Show the practise menu and get its input. Won't return after a
+;              'Z' key is pressed.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc show_practise_menu near
+        push    (offset practise_menu_window)
+        call    init_window
+        add     sp, 2
+
+        ; Draw the background shadow
+        movzx   ax, [byte ptr practise_menu_window.height]
+        shl     ax, 4
+        push    ax
+        movzx   ax, [byte ptr practise_menu_window.width]
+        push    ax
+        movzx   ax, [byte ptr practise_menu_window.top_left_y]
+        shl     al, 4
+        push    ax
+        movzx   ax, [byte ptr practise_menu_window.top_left_x]
+        push    ax
+        call    draw_background_shadow
+        add     sp, 8
+
+        mov     [word ptr prac_menu_state], 1
+        mov     [byte ptr arrow_state], 0
+
+        push    (offset playing_mode_slider) 0FFFFh
+        push    (offset practise_menu_window)
+        call    window_insert_component                         ; delayed sp+6
+        push    (offset section_slider) (offset playing_mode_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component                         ; delayed sp+6
+        push    (offset stage_slider) (offset section_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component                         ; delayed sp+6
+        push    (offset life_slider) (offset stage_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component                         ; delayed sp+6
+        add     sp, 24                                          ; sp+24
+        push    (offset bomb_slider) (offset life_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component                         ; delayed sp+6
+        push    (offset piv_slider) (offset bomb_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component                         ; delayed sp+6
+        push    (offset rank_slider) (offset piv_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component                         ; delayed sp+6
+        push    (offset lock_rank) (offset rank_slider)
+        push    (offset practise_menu_window)
+        call    window_insert_component                         ; delayed sp+6
+        add     sp, 24                                          ; sp+24
+
+        cmp     [byte ptr first_time_showing_prac_menu], 1
+        je      @@skip_setting_do_link_only
+        mov     [byte ptr do_link_only], 1
+@@skip_setting_do_link_only:
+        mov     [byte ptr first_time_showing_prac_menu], 0
+        call    update_prac_window_components_from_its_values
+        push    offset practise_menu_window
+        call    draw_window
+        add     sp, 2
+
+@@wait_for_z_pressed_loop:
+        xor     ax, ax
+@@stall:                        ; stall for a while between two checks of memory
+        inc     ax
+        test    ax, 100h
+        jnz     @@stall
+        cmp     [word ptr prac_menu_state], 1
+        je      @@wait_for_z_pressed_loop
+
+        ret
+endp show_practise_menu
+
+; ============================================================================
+;                                PRACTISE MENU UI
+; ============================================================================
+include "..\src\tui\tsrtuidt.asm"
+include "..\src\tui\tsrtui.asm"
+
+practise_menu_window    ui_window {     \
+        top_left_x              = 38,   \
+        top_left_y              = 6,    \
+        width                   = 40,   \
+        height                  = 19,   \
+        default_slider_width    = 24    \
+}
+
+playing_mode_original_str       db 'Original', 0
+playing_mode_custom_str         db 'Custom', 0
+proc playing_mode_text_func near
+arg @@in_lo:word, @@in_hi:word
+        mov     ax, offset playing_mode_custom_str
+        cmp     [@@in_lo], 0
+        jne     @@skip_set_playing_mode_original
+        mov     ax, offset playing_mode_original_str
+@@skip_set_playing_mode_original:
+        ret
+endp playing_mode_text_func
+playing_mode_label      db 'Mode', 0
+playing_mode_slider     ui_slider {                             \
+        value           = 0,                                    \
+        min_value       = 0,                                    \
+        max_value       = 1,                                    \
+        label_off       = offset playing_mode_label,            \
+        text_func_off   = offset cseg:playing_mode_text_func,   \
+        window_off      = offset practise_menu_window           \
+}
+; TODO: Maybe compress this a little bit.
+section_str_arr                 dw \
+        (offset section_str_1_5), \
+        (offset section_str_makai_6_10), (offset section_str_jigoku_6_10), \
+        (offset section_str_makai_11_15), (offset section_str_jigoku_11_15), \
+        (offset section_str_makai_16_20), (offset section_str_jigoku_16_20)
+section_str_1_5                 db '1-5', 0
+section_str_makai_6_10          db ' Makai 6-10', 0
+section_str_jigoku_6_10         db 'Jigoku 6-10', 0
+section_str_makai_11_15         db ' Makai 11-15', 0
+section_str_jigoku_11_15        db 'Jigoku 11-15', 0
+section_str_makai_16_20         db ' Makai 16-20', 0
+section_str_jigoku_16_20        db 'Jigoku 16-20', 0
+proc section_text_func near
+arg @@in_lo:word, @@in_hi:word
+        mov     bx, [@@in_lo]
+        add     bx, bx
+        mov     ax, [bx + (offset section_str_arr)]
+        ret
+endp section_text_func
+section_label   db 'Section', 0
+section_slider  ui_slider {                                     \
+        value           = 0,                                    \
+        min_value       = 0,                                    \
+        max_value       = 6,                                    \
+        label_off       = offset section_label,                 \
+        text_func_off   = offset cseg:section_text_func,        \
+        window_off      = offset practise_menu_window           \
+}
+real_stage      db 0
+proc stage_text_func near
+arg @@in_lo:word, @@in_hi:word
+        ; Real stage number = (Route slider value + 1) / 2 * 5 + display value
+        mov     ax, [word ptr section_slider.value]
+        inc     ax
+        sar     ax, 1
+        imul    ax, 5
+        add     ax, [@@in_lo]
+        mov     [real_stage], al
+        push    0 ax
+        call    dword_to_dec
+        add     sp, 4
+        ret
+endp stage_text_func
+stage_slider_label      db 'Stage', 0
+stage_slider    ui_slider {                             \
+        value           = 1,                            \
+        min_value       = 1,                            \
+        max_value       = 5,                            \
+        label_off       = offset stage_slider_label,    \
+        text_func_off   = offset cseg:stage_text_func,  \
+        window_off      = offset practise_menu_window   \
+}
+life_slider_label       db 'Life', 0
+life_slider     ui_slider {                             \
+        value           = 6,                            \
+        min_value       = 0,                            \
+        max_value       = 6,                            \
+        label_off       = offset life_slider_label,     \
+        text_func_off   = offset cseg:dword_to_dec,     \
+        window_off      = offset practise_menu_window   \
+}
+bomb_slider_label       db 'Bomb', 0
+bomb_slider     ui_slider {                             \
+        value           = 5,                            \
+        min_value       = 0,                            \
+        max_value       = 5,                            \
+        label_off       = offset bomb_slider_label,     \
+        text_func_off   = offset cseg:dword_to_dec,     \
+        window_off      = offset practise_menu_window   \
+}
+proc piv_param_to_raw near
+arg @@input:word
+        mov     bx, [@@input]
+        cmp     bl, 15
+        jne     @@not_65530
+        mov     ax, 65530
+        jmp     @@return
+@@not_65530:
+        mov     ax, 1000
+        cmp     bl, 10
+        jb      @@skip_tweaking_for_10k_or_above
+        mov     ax, 10000
+        sub     bl, 9
+@@skip_tweaking_for_10k_or_above:
+        imul    bx
+@@return:
+        ret
+endp piv_param_to_raw
+proc piv_text_func near
+arg @@in_lo:word, @@in_hi:word
+        push    [@@in_lo]
+        call    piv_param_to_raw        ; delayed sp+2
+        push    0 ax
+        call    dword_to_dec            ; delayed sp+4
+        add     sp, 6                   ; sp+6
+        ret
+endp piv_text_func
+piv_slider_label        db 'PIV', 0
+piv_slider     ui_slider {                              \
+        value           = 1,                            \
+        min_value       = 1,                            \
+        max_value       = 15,                           \
+        label_off       = offset piv_slider_label,      \
+        text_func_off   = offset cseg:piv_text_func,    \
+        window_off      = offset practise_menu_window   \
+}
+rank_slider_label       db 'Rank', 0
+rank_slider     ui_slider {                             \
+        value           = 20,                           \
+        min_value       = -15,                          \
+        max_value       = 20,                           \
+        label_off       = offset rank_slider_label,     \
+        text_func_off   = offset cseg:dword_to_dec,     \
+        window_off      = offset practise_menu_window   \
+}
+lock_rank_label         db 'Lock Rank', 0
+lock_rank       ui_tickbox {                            \
+        label_off       = offset lock_rank_label,       \
+        window_off      = offset practise_menu_window   \
+}
+form_slider_label       db 'Form', 0
+phase_slider_label      db 'Phase', 0
+phase_slider    ui_slider {                             \
+        value           = 1,                            \
+        min_value       = 1,                            \
+        max_value       = 2,                            \
+        label_off       = offset phase_slider_label,    \
+        text_func_off   = offset cseg:dword_to_dec,     \
+        window_off      = offset practise_menu_window   \
+}
+sariel_regular_phase_text       db 'Regular', 0
+sariel_hidden_phase_text        db 'Hidden', 0
+proc sariel_phase_text_func near
+arg @@in_lo:word, @@in_hi:word
+        mov     ax, (offset sariel_regular_phase_text)
+        cmp     [word ptr @@in_lo], 2
+        jne     @@skip_set_hidden
+        mov     ax, (offset sariel_hidden_phase_text)
+@@skip_set_hidden:
+        ret
+endp sariel_phase_text_func
+sariel_phase_slider     ui_slider {                             \
+        value           = 1,                                    \
+        min_value       = 1,                                    \
+        max_value       = 2,                                    \
+        label_off       = offset phase_slider_label,            \
+        text_func_off   = offset cseg:sariel_phase_text_func,   \
+        window_off      = offset practise_menu_window           \
+}
+hp_slider_label         db 'HP', 0
+hp_slider       ui_slider {                             \
+        value           = 1,                            \
+        min_value       = 1,                            \
+        max_value       = 2,                            \
+        label_off       = offset hp_slider_label,       \
+        text_func_off   = offset cseg:dword_to_dec,     \
+        window_off      = offset practise_menu_window   \
+}
+skip_opening_label      db 'Skip Opening Animation', 0
+skip_opening    ui_tickbox {                            \
+        value           = 1,                            \
+        label_off       = offset skip_opening_label,    \
+        window_off      = offset practise_menu_window   \
+}
+lock_form_label         db 'Lock Form', 0
+lock_form       ui_tickbox {                            \
+        label_off       = offset lock_form_label,       \
+        window_off      = offset practise_menu_window   \
+}
+
+;                          Cannot pass this line -> |
+; longest_attack_str    db '123456789012345678901234'
+vanilla_attack          db 'Vanilla', 0
+p2_attack_shingyoku_1   db 'Chasing', 0
+p2_attack_shingyoku_2   db 'Random downwards', 0
+p2_attack_shingyoku_3   db 'Crossing', 0
+p2_attack_shingyoku_4   db 'Random sling', 0
+p1_attack_elis_1        db 'Lasers', 0
+p1_attack_elis_2        db 'Missles', 0
+p1_attack_elis_3        db 'Pellets', 0
+p1_attack_elis_4        db 'Teleport', 0
+p2_attack_elis_1        db 'Rings', 0
+p2_attack_elis_2        db 'Pellets from spheres', 0
+p2_attack_elis_3        db 'Pellets from rifts', 0
+p2_attack_elis_4        db 'Teleport', 0
+p3b_attack_elis_1       db '5-way', 0   ; aiming for E/N/H, downward for L
+p3b_attack_elis_2       db '2-way aiming', 0
+p3b_attack_elis_3       db 'Rain', 0
+p3b_attack_elis_4       db '2,3-way aiming', 0
+p3g_attack_elis_1       db 'Symmetric', 0
+p3g_attack_elis_2       db 'Rain', 0
+p3g_attack_elis_3       db 'Aiming', 0
+f1_attack_sariel_1      db 'Lasers', 0
+f1_attack_sariel_2      db 'Pellets from vortices', 0
+f1_attack_sariel_3      db 'Pellets from birds', 0
+f2_attack_sariel_1      db 'Aiming bombs', 0
+f2_attack_sariel_2      db 'Aiming pellets', 0
+f3_attack_sariel_1      db 'Lasers', 0
+f3_attack_sariel_2      db 'Rain & Lasers', 0
+f3_attack_sariel_3      db 'Spiral', 0
+f4_attack_sariel_1      db 'Pellets from birds', 0
+f4_attack_sariel_2      db 'Spread', 0
+f4_attack_sariel_3      db 'Rain', 0
+p1_attack_mima_1        db 'Aimed pellets', 0
+p1_attack_mima_2        db 'Aimed missles', 0
+p1_attack_mima_3        db 'Static', 0
+p1_attack_mima_4        db 'Chasing pellets', 0
+p2_attack_mima_1        db 'Pillars', 0
+p2_attack_mima_2        db 'Missles', 0
+p2_attack_mima_3        db 'Slow spray', 0
+p2_attack_mima_4        db 'Lasers', 0
+p4_attack_kikuri_1      db 'Spiral', 0
+p4_attack_kikuri_2      db 'Aiming lasers', 0
+p4_attack_kikuri_3      db 'Rain', 0
+p4_attack_kikuri_4      db 'Vertical lasers', 0
+; P1 uses Attack 1~3, P2 uses 4~7, P3 uses 8~10, P4 uses them all
+attack_kongara_1        db 'Crossing diamonds & rain', 0
+attack_kongara_2        db 'Symmetric', 0
+attack_kongara_3        db '2 snakes & spread', 0
+attack_kongara_4        db 'Aiming rows', 0
+attack_kongara_5        db 'Aiming spray', 0
+attack_kongara_6        db '4 snakes', 0
+attack_kongara_7        db 'Rain from the edges', 0
+attack_kongara_8        db 'Rain from slash', 0
+attack_kongara_9        db 'Lasers & 3-way', 0
+attack_kongara_10       db 'Triangular slash', 0
+attack_kongara_11       db 'Semicircle rain', 0
+attack_kongara_12       db 'Aiming slash', 0
+p1_cur_first_attack_str dw (offset p1_attack_elis_1)
+p2_cur_first_attack_str dw (offset p2_attack_shingyoku_1)
+p3_cur_first_attack_str dw (offset p3b_attack_elis_1)
+p4_cur_first_attack_str dw (offset p3g_attack_elis_1)
+; Returns 'Vanilla' if [@@val] is 0, the ([@@val]-1)-th string starting from
+; @@first_str otherwise.
+proc attack_text_func near
+arg @@val:word, @@first_str:word
+local @@last_str:word, @@remain:word
+        push    si
+
+        cmp     [byte ptr @@val], 0
+        jne     @@not_0
+        mov     ax, (offset vanilla_attack)
+        jmp     @@return
+@@not_0:
+        mov     si, [@@first_str]
+        mov     ax, [@@val]
+        mov     [@@remain], ax
+@@main_loop:
+        mov     [@@last_str], si
+        dec     [word ptr @@remain]
+        cmp     [word ptr @@remain], 0
+        jne     @@not_found_yet
+        mov     ax, [@@last_str]
+        jmp     @@return
+@@not_found_yet:
+        push    ds si
+        call    string_length
+        add     sp, 4
+        add     si, ax
+        inc     si
+        jmp     @@main_loop
+
+@@return:
+        pop     si
+        ret
+endp attack_text_func
+proc p1_text_func near
+arg @@in_lo:word, @@in_hi:word
+        push    [word ptr p1_cur_first_attack_str] [word ptr @@in_lo]
+        call    attack_text_func
+        add     sp, 4
+        ret
+endp p1_text_func
+proc p2_text_func near
+arg @@in_lo:word, @@in_hi:word
+        push    [word ptr p2_cur_first_attack_str] [word ptr @@in_lo]
+        call    attack_text_func
+        add     sp, 4
+        ret
+endp p2_text_func
+proc p3_text_func near
+arg @@in_lo:word, @@in_hi:word
+        push    [word ptr p3_cur_first_attack_str] [word ptr @@in_lo]
+        call    attack_text_func
+        add     sp, 4
+        ret
+endp p3_text_func
+proc p4_text_func near
+arg @@in_lo:word, @@in_hi:word
+        push    [word ptr p4_cur_first_attack_str] [word ptr @@in_lo]
+        call    attack_text_func
+        add     sp, 4
+        ret
+endp p4_text_func
+p1_attack_label         db 'P1 Atk', 0
+form_1_attack_label     db 'F1 Atk', 0
+p1_attack       ui_slider {                             \
+        label_off       = offset p1_attack_label,       \
+        text_func_off   = offset cseg:p1_text_func,     \
+        window_off      = offset practise_menu_window   \
+}
+p2_attack_label         db 'P2 Atk', 0
+form_2_attack_label     db 'F2 Atk', 0
+p2_attack       ui_slider  {                            \
+        label_off       = offset p2_attack_label,       \
+        text_func_off   = offset cseg:p2_text_func,     \
+        window_off      = offset practise_menu_window   \
+}
+p3_attack_label         db 'P3 Atk', 0
+p3_bat_attack_label     db 'P3 (bat)', 0
+form_3_attack_label     db 'F3 Atk', 0
+p3_attack       ui_slider  {                            \
+        label_off       = offset p3_attack_label,       \
+        text_func_off   = offset cseg:p3_text_func,     \
+        window_off      = offset practise_menu_window   \
+}
+p4_attack_label         db 'P4 Atk', 0
+p3_girl_attack_label    db 'P3 (girl)', 0
+form_4_attack_label     db 'F4 Atk', 0
+p4_attack       ui_slider  {                            \
+        label_off       = offset p4_attack_label,       \
+        text_func_off   = offset cseg:p4_text_func,     \
+        window_off      = offset practise_menu_window   \
+}
+
+; Initialize the component linked list of a window object, then print it onto
+; the screen.
+; Argument 1: The offset of the window object
+proc init_window near
+arg @@window_off:word
+        ; Initialize the component linked list
+        mov     bx, [@@window_off]
+        xor     ax, ax
+        dec     ax
+        mov     [bx + ui_window.first_component_off], ax
+        mov     [bx + ui_window.tail_component_off], ax
+        mov     [bx + ui_window.cur_component_off], ax
+
+        ; Print the frame onto the screen
+        push    TEXT_WHITE
+        movzx   ax, [byte ptr bx + ui_window.height]
+        push    ax
+        mov     al, [bx + ui_window.width]
+        push    ax
+        mov     al, [bx + ui_window.top_left_y]
+        push    ax
+        mov     al, [bx + ui_window.top_left_x]
+        push    ax
+        call    print_frame
+        add     sp, 10
+        ret
+endp init_window
+
+struc int18_47_argument_block_t
+        3plane_drawing_mode     db 00h
+        unused_1                db ?
+        1plane_drawing_mode     db 00h
+        rect_type               db ?
+        unused_2                db 4 dup (?)
+        start_x_coord           dw ?
+        start_y_coord           dw ?
+        unused_3                db 10 dup (?)
+        end_x_coord             dw ?
+        end_y_coord             dw ?
+        line_style              dw 0FFFFh
+        unused_4                db 6 dup (?)
+        graphic_type            db 1
+        working_area            db 20h dup (?)
+ends int18_47_argument_block_t
+
+int18_47_argument_block int18_47_argument_block_t {}
+
+struc dos_parameter_list_t
+        ax_val          dw 0
+        bx_val          dw 0
+        cx_val          dw 0
+        dx_val          dw 0
+        si_val          dw 0
+        di_val          dw 0
+        ds_val          dw 0
+        es_val          dw 0
+        reserved        dw 0
+        computer_id     dw 0
+        process_id      dw 0
+ends dos_parameter_list_t
+dos_parameter_list dos_parameter_list_t {}
+
+; ------------------------------ Helper functions ----------------------------
+
+; For some reason, Turbo Assembler refuses to take the following path as a
+; relative path to the include path specified in the command option, so we'll
+; have to make it relative to the build path.
+include "..\src\asmutils\strcmpnc.asm"
+include "..\src\asmutils\sprnthex.asm"
+include "..\src\asmutils\tramprnt.asm"
+include "..\src\asmutils\memcpy.asm"
+include "..\src\asmutils\prntfrme.asm"
+include "..\src\asmutils\strlen.asm"
+
+label end_of_resident byte
+; ===========================================================================
+;                            NON-RESIDENT PART
+; ===========================================================================
+
+dos_version_low_message         db 'The version of DOS is too low. DOS 3+ is ',\
+                                   'required.', 13, 10, '$'
+successfully_installed          db 'Successfully installed thprac98.', 13, 10, \
+                                   '$'
+failed_to_install               db 'Failed to install thprac98: ', 13, 10, '$'
+cannot_get_cef                  db 'Cannot get the address of Critical ', \
+                                   'Error Flag. Error Code: '
+cannot_get_cef_num              db '??h.', 13, 10, '$'
+cannot_get_mux_id               db 'Cannot register in INT 2Fh.', 13, 10, '$'
+already_installed               db 'Thprac98 has already been installed. ', \
+                                   13, 10, '$'
+failed_to_uninstall             db 'Failed to uninstall thprac98: ', 13, 10, '$'
+successfully_uninstalled        db 'Successfully uninstalled thprac98.', 13, \
+                                   10, '$'
+not_installed                   db "Thprac98 hasn't been installed. ", 13, 10, \
+                                   '$'
+int_vector_hooked               db 'INT '
+int_vector_hooked_num           db '??h is hooked by someone else.', 13, 10, '$'
+cannot_find_mcb                 db "Can't find the MCB of the previous TSR ", \
+                                   "in the MCB chain.", 13, 10, '$'
+unknown_parameter               db 'Unknown paramter.', 13, 10, '$'
+memory_used                     db 13, 10, 'Memory used: $'
+memory_used_num_buffer          db 11 dup ('?')
+memory_used2                    db ' bytes.', 13, 10, '$'
+
+patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
+                           (offset harry_up_animate_pat + 3), \
+                           (offset practise_menu_part1_pat + 3), \
+                           (offset esc_in_hit_quit_bugfix1_pat + 3), \
+                           (offset esc_in_hit_quit_bugfix2_pat + 3), \
+                           (offset lock_rank_patch_pat + 3), \
+                           (offset hook_start_continue_pat + 3)
+                        dw (offset enter_ending_pat + 3)
+                        dw (offset shingyoku_p2_attack_pat + 3), \
+                           (offset shingyoku_init_pat + 3), \
+                           (offset shingyoku_skip_hp_animation_part2_pat + 3)
+                        dw (offset yuugenmagan_timelock_p1_part1_pat + 3), \
+                           (offset yuugenmagan_timelock_p1_part2_pat + 3), \
+                           (offset yuugenmagan_timelock_p2_part1_pat + 3), \
+                           (offset yuugenmagan_timelock_p2_part2_pat + 3), \
+                           (offset yuugenmagan_timelock_p3_part1_pat + 3), \
+                           (offset yuugenmagan_timelock_p3_part2_pat + 3), \
+                           (offset yuugenmagan_timelock_p4_part1_pat + 3), \
+                           (offset yuugenmagan_timelock_p4_part2_pat + 3), \
+                           (offset yuugenmagan_init_pat + 3)
+                        dw (offset elis_init_pat + 3), \
+                           (offset elis_p1_attack_init_pat + 3), \
+                           (offset elis_p1_attack_pat + 3), \
+                           (offset elis_p2_attack_init_pat + 3), \
+                           (offset elis_p2_attack_pat + 3), \
+                           (offset elis_p3b_attack_pat + 3), \
+                           (offset elis_p3g_attack_pat + 3)
+                        dw (offset sariel_skip_opening_part1_pat + 3), \
+                           (offset sariel_init_pat + 3), \
+                           (offset sariel_set_form_1_first_attack_pat + 3), \
+                           (offset sariel_set_form_2_to_4_first_attack_pat + \
+                                   3), \
+                           (offset sariel_hook_form_1_attack_pat + 3), \
+                           (offset sariel_hook_form_2_attack_pat + 3), \
+                           (offset sariel_hook_form_3_attack_pat + 3), \
+                           (offset sariel_hook_form_4_attack_pat + 3)
+                        dw (offset mima_init_pat + 3), \
+                           (offset mima_lock_phase_1_pat + 3), \
+                           (offset mima_lock_phase_2_pat + 3), \
+                           (offset mima_set_phase2_first_atk_pat + 3)
+                        dw (offset kikuri_inc_p1_iterations_done_pat + 3), \
+                           (offset kikuri_chk_p1_iterations_done_pat + 3), \
+                           (offset kikuri_inc_p3_frame_pat + 3), \
+                           (offset kikuri_chk_p3_frame_pat + 3), \
+                           (offset kikuri_inc_p4_iterations_done_pat + 3), \
+                           (offset kikuri_chk_p4_iterations_done_pat + 3), \
+                           (offset kikuri_skip_opening_pat + 3), \
+                           (offset kikuri_init_pat + 3), \
+                           (offset kikuri_lock_p4_attack_part2_pat + 3)
+                        dw (offset kongara_init_pat + 3), \
+                           (offset kongara_skip_opening1_pat + 3), \
+                           (offset kongara_skip_opening2_pat + 6), \
+                           (offset kongara_skip_opening3_pat + 3), \
+                           (offset kongara_inc_p1_patterns_done_pat + 3), \
+                           (offset kongara_chk_p1_patterns_done_pat + 3), \
+                           (offset kongara_inc_p2_patterns_done_pat + 3), \
+                           (offset kongara_chk_p2_patterns_done_pat + 3), \
+                           (offset kongara_inc_p3_patterns_done_pat + 3), \
+                           (offset kongara_chk_p3_patterns_done_pat + 3), \
+                           (offset kongara_set_p1_attack_pat + 3), \
+                           (offset kongara_set_p2_attack_pat + 3), \
+                           (offset kongara_set_p3_attack_pat + 3), \
+                           (offset kongara_set_p4_attack_pat + 3), 0FFFFh
+
+COMMAND_PARAM_LEN_OFFSET        = 80h
+COMMAND_PARAM_OFFSET            = 81h
+
+include 'hookint.asm'   ; Hook Interrupts
+
+; --------------------------------------------------------------------------
+; Function: print_memory_used
+; Description: Print the ammount of memory used by the TSR.
+; Input/Output: Nothing
+; --------------------------------------------------------------------------
+proc print_memory_used near
+        push    di
+
+        ; Print "Memory used: "
+        mov     ah, 09h
+        mov     dx, (offset memory_used)
+        int     21h
+
+        ; DX:AX = ceil((offset end_of_resident + 0x100) / 16) * 16
+        mov     ax, (offset end_of_resident + 10Fh)
+        and     al, 0F0h
+        xor     dx, dx
+
+        ; Print DX:AX as decimal into the string. We want to make sure that
+        ; DS:DI is a '$'-ended ASCII string reading as "xxx bytes.".
+        mov     di, (offset memory_used2 - 1)
+        test    ax, ax
+        jnz     @@not_zero
+        mov     [byte ptr di], '0'
+        jmp     @@end_of_printing_dec
+@@not_zero:
+        mov     cx, 10
+@@decimal_expand_loop:
+        idiv    cx
+        mov     [byte ptr di], dl
+        add     [byte ptr di], '0'
+        dec     di
+        xor     dx, dx
+        test    ax, ax
+        jnz     @@decimal_expand_loop
+@@end_of_printing_dec:
+        inc     di
+
+        ; Print "xxx bytes."
+        mov     dx, di
+        mov     ah, 09h
+        int     21h
+
+        pop     di
+        ret
+endp print_memory_used
+
+; --------------------------------------------------------------------------
+; Function: my_main
+; Description: Our main function. We need this to use the local variables.
+; Input:  Nothing
+; Output: The value of AX:
+;               00h: Success
+;               1Xh: Installation failure
+;                       11h: Cannot register in INT 2Fh
+;                       12h: Thprac98 has already been installed
+;                       13h: Cannot get the Critical Error Flag
+;               2Xh: Uninstallation failure
+;                       21h: Some interrupt has been hooked by someone else,
+;                            cannot uninstall
+;                       22h: Thprac98 hasn't been installed
+;                       23h: Can't find the MCB of the previous TSR in the
+;                            MCB chain
+;               F1h: DOS version <3
+;               FFh: Unknown parameter
+;         The value of DX:
+;               00h: Perform INT 21h/4Ch to exit (with an errorlevel of AX)
+;               01h: Perform INT 21h/3100h to terminate and stay resident
+; --------------------------------------------------------------------------
+proc my_main near
+local @@told_to_uninstall:byte, @@int_no_hooked:word
+        ; Check if we're using DOS 3+
+        mov     ah, 30h
+        int     21h
+        cmp     al, 3
+        jae     @@using_dos_3_plus
+        mov     dx, offset dos_version_low_message
+        mov     ah, 09h
+        int     21h
+        mov     ax, 0F1h
+        jmp     @@return
+@@using_dos_3_plus:
+
+        ; Check the parameter
+        mov     [@@told_to_uninstall], 0
+        mov     al, [cs:COMMAND_PARAM_LEN_OFFSET]
+        test    al, al
+        jz      @@end_of_parameter_check        ; param == "": to install
+        mov     [@@told_to_uninstall], 1
+        cmp     [byte ptr cs:COMMAND_PARAM_OFFSET + 1], '/'
+        jne     @@unknown_parameter
+        cmp     [byte ptr cs:COMMAND_PARAM_OFFSET + 2], 'U'
+        je      @@end_of_parameter_check
+        cmp     [byte ptr cs:COMMAND_PARAM_OFFSET + 2], 'u'
+        je      @@end_of_parameter_check
+@@unknown_parameter:  ; param[1] != '/' || (param[2] != 'U' && param[2] != 'u')
+        mov     dx, offset unknown_parameter
+        mov     ah, 09h
+        int     21h
+        mov     ax, 0FFh
+        jmp     @@return
+@@end_of_parameter_check:
+
+        cmp     [@@told_to_uninstall], 1
+        je      @@uninstall
+
+        ; ----------- Install the TSR -----------
+
+        ; Save the current segment
+        mov     [stored_cseg], cs
+
+        ; Get the address of two flags for DOS calls in TSR
+        mov     ah, 34h
+        int     21h             ; Get InDOS flag address in ES:BX
+        mov     [word ptr indos_flag_addr], bx
+        mov     [word ptr indos_flag_addr + 2], es
+        push    ds              ; Save DS (used in INT 21h/5D06h to return)
+        mov     ax, 5D06h
+        int     21h             ; Get Critical Error Flag address in DS:SI
+        jnc     @@successfully_get_critical_error_flag_addr
+        pop     ds              ; Restore DS (branch 1)
+        push    ax (offset cannot_get_cef_num)
+        call    sprint_byte
+        add     sp, 4
+        mov     dx, offset failed_to_install
+        mov     ah, 09h
+        int     21h
+        mov     dx, offset cannot_get_cef
+        mov     ah, 09h
+        int     21h
+        mov     ax, 13h
+        jmp     @@return
+@@successfully_get_critical_error_flag_addr:
+        mov     [word ptr cs:critical_error_flag_addr], si
+        mov     [word ptr cs:critical_error_flag_addr + 2], ds
+        pop     ds              ; Restore DS (branch 2)
+
+        ; Set up some injected code that can only be determined in the runtime
+        mov     bx, (offset patch_cs_positions)
+@@set_cs_loop:
+        cmp     [word ptr bx], 0FFFFh
+        je      @@skip_set_cs_loop
+        mov     si, [bx]
+        mov     [si], cs
+        add     bx, 2
+        jmp     @@set_cs_loop
+@@skip_set_cs_loop:
+
+        ; Initialize the Keyboard BIOS
+        mov     ah, 03h
+        int     18h
+
+        ; Hook the interrupts, and print an error message if an error occurs
+        call    hook_interrupts
+        test    ax, ax
+        jz      @@hook_interrupt_success
+        push    ax
+        mov     dx, offset failed_to_install
+        mov     ah, 09h
+        int     21h
+        pop     ax
+        test    ax, 01h
+        jne     @@skip_printing_cannot_get_mux_id
+        push    ax
+        mov     dx, offset cannot_get_mux_id
+        mov     ah, 09h
+        int     21h
+        pop     ax
+@@skip_printing_cannot_get_mux_id:
+        test    ax, 02h
+        jne     @@skip_printing_already_installed
+        push    ax
+        mov     dx, offset already_installed
+        mov     ah, 09h
+        int     21h
+        pop     ax
+@@skip_printing_already_installed:
+        jmp     @@return
+@@hook_interrupt_success:
+
+        ; Release the environment block. We assume the INT 21h/49h call always
+        ; success, since the environment MCB will always on the chain, if our
+        ; .COM file is loaded by DOS.
+        mov     ax, [es:ENV_SEG_OFF]
+        mov     es, ax
+        mov     ah, 49h
+        int     21h
+
+        ; Print 'Successfully installed'
+        mov     dx, (offset successfully_installed)
+        mov     ah, 09h
+        int     21h
+
+        ; Print 'Memory used: xxx byte'
+        call    print_memory_used
+
+        jmp     @@terminate_and_stay_resident
+
+@@uninstall:
+        ; ---------- Uninstall the TSR ----------
+
+        call    uninstall_previous_tsr
+        mov     [@@int_no_hooked], dx
+        test    ax, ax
+        jz      @@uninstall_previous_tsr_success
+        push    ax
+        mov     dx, offset failed_to_uninstall
+        mov     ah, 09h
+        int     21h
+        pop     ax
+        cmp     ax, 01h
+        jne     @@skip_printing_int_vector_hooked
+        push    ax
+        push    [@@int_no_hooked] (offset int_vector_hooked_num)
+        call    sprint_byte
+        add     sp, 4
+        mov     dx, offset int_vector_hooked
+        mov     ah, 09h
+        int     21h
+        pop     ax
+@@skip_printing_int_vector_hooked:
+        cmp     ax, 02h
+        jne     @@skip_printing_not_installed
+        push    ax
+        mov     dx, offset not_installed
+        mov     ah, 09h
+        int     21h
+        pop     ax
+@@skip_printing_not_installed:
+        cmp     ax, 03h
+        jne     @@skip_printing_cannot_find_mcb
+        push    ax
+        mov     dx, offset cannot_find_mcb
+        mov     ah, 09h
+        int     21h
+        pop     ax
+@@skip_printing_cannot_find_mcb:
+        jmp     @@return
+@@uninstall_previous_tsr_success:
+
+        ; Print 'Successfully uninstalled'
+        mov     dx, (offset successfully_uninstalled)
+        mov     ah, 09h
+        int     21h
+        jmp     @@return_0
+
+@@terminate_and_stay_resident:
+        mov     dx, 01h
+        jmp     @@return
+@@return_0:
+        xor     dx, dx
+@@return:
+        ret
+endp my_main
+
+; Return value:
+real_start:
+        call    my_main
+        test    dx, dx
+        jz      @@return_with_int21_4c
+
+        ; Terminate and stay resident. The parameter to INT 21h/3100h (via DX)
+        ; is the numbers of paragraph to stay resident. Adding the 100h bytes
+        ; of PSP, we have DX = ceil(((offset end_of_resident) + 100h) / 16.0).
+        mov     dx, offset end_of_resident + 10Fh
+        shr     dx, 4
+        mov     ax, 3100h
+        int     21h
+
+@@return_with_int21_4c:
+        mov     ah, 4Ch
+        int     21h
+ends cseg
+end start

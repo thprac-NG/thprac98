@@ -50,6 +50,14 @@ if not %2.==. goto :endNoArg
   %shell% tlink /tdc th01.obj
   if errorlevel 1 goto :errRet
   echo [INFO] Successfully built th01.com.
+
+  echo [INFO] Building th02.com...
+  call ..\src\bld\bldasms.bat games\th02
+  if errorlevel 1 goto :errRet
+  %shell% tlink /tdc th02.obj
+  if errorlevel 1 goto :errRet
+  echo [INFO] Successfully built th02.com.
+
   if %2.==com. goto :cleanExt
 
   if exist comembed.exe goto :skipCmbd
@@ -73,6 +81,7 @@ if not %2.==. goto :endNoArg
   goto :bldExe
   :mainRet
   copy main.exe thprac98.exe
+  copy entrance.map mainentr.map
 
   if %2.==fast. goto :skpStHdr
     :: Modify the header of thprac98.exe
@@ -92,6 +101,7 @@ if not %2.==. goto :endNoArg
   :skpStHdr
 
   echo [INFO] Embedding .COM files...
+  copy mainentr.map entrance.map
   %shell% comembed.exe 2
   if errorlevel 1 goto :errRet
 

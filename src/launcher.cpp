@@ -29,6 +29,27 @@ game_t games[GAME_COUNT] = {
         {{0xa1d59ff3lu, 0xf26c4246lu, 0xd707f261lu, 0x758687fclu}}
       }
     }
+  },
+  {
+    load_th02,
+    {
+      {
+        "ZUN.COM",
+        {{0xd3ddd984lu, 0xc6c8be2elu, 0xba3b704blu, 0xdf9cecc4lu}}
+      },
+      {
+        "OP.EXE",
+        {{0x9d83b29flu, 0x11380fb5lu, 0xd4980b9dlu, 0x0ecd70fblu}}
+      },
+      {
+        "MAIN.EXE",
+        {{0x77e0ce96lu, 0x46e6a813lu, 0x7622e70alu, 0x09f9a9f3lu}}
+      },
+      {
+        "MAINE.EXE",
+        {{0xb371f9e6lu, 0xf9c03673lu, 0x893fe5fclu, 0x1e038057lu}}
+      }
+    }
   }
 };
 // clang-format on
@@ -90,12 +111,6 @@ void append_md5(md5_result_t& out, const uint32_t message[16]) {
     c = b;
     b += (f << shift_ammount[i]) | (f >> (32 - shift_ammount[i]));
   }
-  // printf("%08lx %08lx %08lx %08lx\r\n", a, b, c, d);
-  // static int tttcounter = 0;
-  // if (tttcounter % 10 == 0) {
-  //   getchar();
-  // }
-  // tttcounter++;
 
   out.data[0] += a;
   out.data[1] += b;
@@ -145,6 +160,9 @@ int check_file_md5(md5_result_t& out, char const far* filename) {
 }
 
 void launch_game(const char far* path) {
+  // TODO: Check the file size of OP.EXE to narrow down the possible game title
+  // count to <=1. Checking the file size using file handles can be done using
+  // LSEEK.
   static char new_path[70];
   static char tmp_str[85];
   int i = 0, j = 0, k = 0;
@@ -161,8 +179,7 @@ void launch_game(const char far* path) {
     return;
   }
   while (path_len < 64 && (ch = path[path_len]) != '\0') {
-    new_path[path_len] = toupper(ch);
-    ++path_len;
+    new_path[path_len++] = toupper(ch);
   }
   if (path_len == 64) {
     printf(
@@ -171,10 +188,11 @@ void launch_game(const char far* path) {
         path);
     return;
   }
-  if (new_path[path_len - 1] != '\\') {
-    new_path[path_len++] = '\\';
-  }
   new_path[path_len] = '\0';
+  if (new_path[path_len - 1] == '\\') {
+    new_path[--path_len] = '\0';
+  }
+  printf("New_path: `%s`\n", (const char far*)(new_path));
 
   for (i = 0; i < GAME_COUNT; ++i) {
     if (games[i].load == NULL) {
@@ -185,7 +203,7 @@ void launch_game(const char far* path) {
       if (games[i].executables[j].filename == NULL) {
         continue;
       }
-      snprintf(tmp_str, sizeof(tmp_str), "%s%s", (const char far*)(new_path),
+      snprintf(tmp_str, sizeof(tmp_str), "%s\\%s", (const char far*)(new_path),
                (const char far*)(games[i].executables[j].filename));
       printf("Checking file %s...\r\n", (const char far*)(tmp_str));
       if (check_file_md5(md5, tmp_str)) {

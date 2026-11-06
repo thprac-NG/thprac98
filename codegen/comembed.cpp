@@ -12,7 +12,7 @@
   "// use codegen/comembed.cpp to regenerate this file." ENDL    \
   "// clang-format off" ENDL ENDL
 
-const int COM_FILE_COUNT = 1;
+const int COM_FILE_COUNT = 2;
 int com_file_size[COM_FILE_COUNT + 1];
 
 char tmp_str[60];
@@ -21,13 +21,15 @@ int init_com_file_size(void) {
   int i = 0;
   FILE *fin = NULL;
   long tmp = 0;
+  int ret = 0;
   for (i = 1; i <= COM_FILE_COUNT; ++i) {
     snprintf(tmp_str, sizeof(tmp_str), "th0%d.com", i);
     fin = fopen(tmp_str, "r");
     if (fin == NULL) {
       printf("Cannot open file %s.\r\n", (const char far *)(tmp_str));
       print_errno();
-      return 1;
+      ret = 1;
+      goto safe_return;
     }
     fseek(fin, 0, SEEK_END);
     tmp = ftell(fin);
@@ -35,12 +37,20 @@ int init_com_file_size(void) {
       printf(
           "th0%d.com is too large: Expecting a size <= %d, but found %ld.\r\n",
           i, INT_MAX, tmp);
-      return 1;
+      ret = 1;
+      goto safe_return;
     }
-    com_file_size[i] = tmp;
+    com_file_size[i] = (int)(tmp);
     fclose(fin);
+    fin = NULL;
   }
-  return 0;
+  ret = 0;
+safe_return:
+  if (fin != NULL) {
+    fclose(fin);
+    fin = NULL;
+  }
+  return ret;
 }
 
 // TODO: Add failure detection of fprintf.
@@ -50,54 +60,59 @@ int generate_tsrdata(char far *path) {
 
   ret = init_com_file_size();
   if (ret) {
-    return ret;
+    goto safe_return;
   }
 
-  // Generate tsrdata.hpp
+  // Generate TSRDATA.HPP
   if (snprintf(tmp_str, sizeof(tmp_str), "%s/tsrdata.hpp",
                (const char far *)(path), i) == sizeof(tmp_str)) {
     printf("Argument too long: length of `%s/tsrdata.hpp' should be <%d.\r\n",
            (const char far *)(path), i, sizeof(tmp_str));
-    return 1;
+    ret = 1;
+    goto safe_return;
   }
   fout = fopen(tmp_str, "w");
   if (fout == NULL) {
     printf("Cannot open file %s.\r\n", (const char far *)(tmp_str));
     print_errno();
-    return 1;
+    ret = 1;
+    goto safe_return;
   }
   fprintf(fout, THPRAC98_AUTOGEN_WARNING_TEXT);
+  fprintf(fout, "#ifndef THPRAC98_SRC_TSRDATA_HPP_" ENDL);
+  fprintf(fout, "#define THPRAC98_SRC_TSRDATA_HPP_" ENDL ENDL);
   for (i = 1; i <= COM_FILE_COUNT; ++i) {
-    fprintf(fout, "extern unsigned char th0%d_com_data[%d];\r\n", i,
+    fprintf(fout, "extern unsigned char th0%d_com_data[%d];" ENDL, i,
             com_file_size[i]);
   }
+  fprintf(fout, ENDL "#endif  // #ifndef THPRAC98_SRC_TSRDATA_HPP_" ENDL);
   fclose(fout);
+  fout = NULL;
 
-  // Generate tsrdata.cpp
+  // Generate TSRDATA.CPP
   if (snprintf(tmp_str, sizeof(tmp_str), "%s/tsrdata.cpp",
                (const char far *)(path), i) == sizeof(tmp_str)) {
     printf("Argument too long: length of `%s/tsrdata.cpp' should be <%d.\r\n",
            (const char far *)(path), i, sizeof(tmp_str));
-    return 1;
+    ret = 1;
+    goto safe_return;
   }
   fout = fopen(tmp_str, "w");
   if (fout == NULL) {
     printf("Cannot open file %s.\r\n", (const char far *)(tmp_str));
-    print_errno();
-    return 1;
+    goto safe_return;
   }
   fprintf(fout, THPRAC98_AUTOGEN_WARNING_TEXT);
-  fputs("#include \"src/tsrdata.hpp\"\r\n", fout);
+  fprintf(fout, "#include \"src/tsrdata.hpp\"" ENDL ENDL);
   for (i = 1; i <= COM_FILE_COUNT; ++i) {
-    fprintf(fout, "unsigned char th0%d_com_data[%d] = {\r\n", i,
+    fprintf(fout, "unsigned char th0%d_com_data[%d] = {" ENDL, i,
             com_file_size[i]);
     snprintf(tmp_str, sizeof(tmp_str), "th0%d.com", i);
     fin = fopen(tmp_str, "r");
     if (fin == NULL) {
       printf("Cannot open file %s.\r\n", (const char far *)(tmp_str));
       print_errno();
-      fclose(fout);
-      return 1;
+      goto safe_return;
     }
     col = 3;
     fprintf(fout, INDENT);
@@ -112,14 +127,28 @@ int generate_tsrdata(char far *path) {
     }
     fprintf(fout, ENDL "};" ENDL ENDL);
     fclose(fin);
+    fin = NULL;
   }
   fclose(fout);
-  return 0;
+  fout = NULL;
+  ret = 0;
+safe_return:
+  if (fin != NULL) {
+    fclose(fin);
+    fin = NULL;
+  }
+  if (fout != NULL) {
+    fclose(fout);
+    fout = NULL;
+  }
+  return ret;
 }
 
 #define BACKPATCH_LABEL_LENGTH 13  // TH01_COM_INFO
 
 const int BUFFER_SIZE = BACKPATCH_LABEL_LENGTH + 5;
+// Two sliding windows, storing the latest `BUFFER_SIZE` hexadecimal digits/
+// characters read from the file.
 char xdigit_buffer[BUFFER_SIZE], char_buffer[BUFFER_SIZE];
 void buffer_push(char *const buffer, const char ch) {
   int i = 0;
@@ -158,7 +187,7 @@ int backpatch_com_offset(void) {
 
   ret = init_com_file_size();
   if (ret) {
-    return ret;
+    goto safe_return;
   }
 
   for (i = 1; i <= COM_FILE_COUNT; ++i) {
@@ -174,7 +203,8 @@ int backpatch_com_offset(void) {
     if (fin == NULL) {
       printf("Cannot open file %s.\r\n", (const char far *)(tmp_str));
       print_errno();
-      return 1;
+      ret = 1;
+      goto safe_return;
     }
     com_hash = 0;
     discard_hash_multiplicator = 1;
@@ -183,30 +213,44 @@ int backpatch_com_offset(void) {
       discard_hash_multiplicator = (discard_hash_multiplicator << 8) % HASH_MOD;
     }
 
-    // Find the first occurence of the .COM file using the pre-calculated hash
+    // Find the first occurence of the .COM file using the pre-calculated hash.
+    // We use a sliding window of length (n+1), which is the same as the length
+    // of the .COM file, and we detect if the hash of the window is the same as
+    // the target. We accomplish this by first calculating the hash of the
+    // window at the frontmost position, and update it each time it has been
+    // advanced for a character. When this happens, we have to subtract the
+    // contribution of the first character from the hash value, which is its
+    // ASCII value multiplied by 256^n modulo `HASH_MOD`, and then add the
+    // contribution of the incoming character, which is simply its ASCII value.
+    // The variable `discard_hash_multiplicator` stores (256^n mod HASH_MOD).
     fin2 = fopen("thprac98.exe", "r");
     if (fin2 == NULL) {
       puts("Cannot open file thprac98.exe.");
       print_errno();
-      fclose(fin);
-      return 1;
+      ret = 1;
+      goto safe_return;
     }
+    // fin2: opened for the pointer for the incoming character in the sliding
+    //       window of THPRAC98.EXE.
     fin3 = fopen("thprac98.exe", "r");
     if (fin3 == NULL) {
       puts("Cannot open file thprac98.exe.");
       print_errno();
-      fclose(fin);
-      fclose(fin2);
-      return 1;
+      ret = 1;
+      goto safe_return;
     }
+    // fin3: opened for the pointer for the discarding character in the sliding
+    //       window of THPRAC98.EXE.
     cur_hash = 0;
     com_data_pos = -1;
     for (j2 = 0; com_data_pos == (unsigned long)(-1); ++j2) {
+      // accept the incoming character
       ch = fgetc(fin2);
       if (ch == EOF) {
         break;
       }
       cur_hash = ((cur_hash << 8) + ch) % HASH_MOD;
+      // discard a character if the window reached the length
       if (j2 >= com_file_size[i]) {
         ch = fgetc(fin3);
         cur_hash += HASH_MOD - ch * discard_hash_multiplicator % HASH_MOD;
@@ -215,6 +259,8 @@ int backpatch_com_offset(void) {
         }
       }
       if (cur_hash == com_hash) {
+        // The two hash values match. We perform a string compare here, just to
+        // be safe.
         com_data_pos = j2;
         fseek(fin, 0, SEEK_SET);
         for (k = 0; k < com_file_size[i]; ++k) {
@@ -225,23 +271,28 @@ int backpatch_com_offset(void) {
           }
         }
         fseek(fin3, ftell(fin2) - com_file_size[i], SEEK_SET);
+        // If the string compare failed, fin3 will be back to it's position
+        // before the compare, and com_data_pos will stays at -1.
       }
     }
-    fclose(fin);
-    fclose(fin2);
     fclose(fin3);
+    fclose(fin2);
+    fclose(fin);
+    fin = fin2 = fin3 = NULL;
     if (com_data_pos == (unsigned long)(-1)) {
       printf("Cannot find occurence of th0%d.com in thprac98.exe.\r\n", i);
       print_errno();
-      return 1;
+      ret = 1;
+      goto safe_return;
     }
 
-    // Find where to backpatch the size & offset of th0x.com in the file
+    // Find where to backpatch the size & offset of TH0X.COM in the file
     fin = fopen("entrance.map", "r");
     if (fin == NULL) {
       puts("Cannot open file entrance.map.");
       print_errno();
-      return 1;
+      ret = 1;
+      goto safe_return;
     }
     snprintf(tmp_str, sizeof(tmp_str), "TH0%d_COM_INFO", i);
     while ((ch = fgetc(fin)) != EOF) {
@@ -273,21 +324,25 @@ int backpatch_com_offset(void) {
       }
     }
     fclose(fin);
+    fin = NULL;
     if (!found_label) {
       printf("Cannot find label %s in entrance.map.\r\n",
              (const char far *)(tmp_str));
-      return 1;
+      ret = 1;
+      goto safe_return;
     }
     if (com_info_seg != 0) {
       printf("Incorrect segment of label %s: Expecting 0000h, found %04Xh.\r\n",
              (const char far *)(tmp_str), com_info_seg);
-      return 1;
+      ret = 1;
+      goto safe_return;
     }
     fin = fopen("thprac98.exe", "r+");
     if (fin == NULL) {
       puts("Cannot open file thprac98.exe.");
       print_errno();
-      return 1;
+      ret = 1;
+      goto safe_return;
     }
     fseek(fin, 0x08, SEEK_SET);
     header_size = fgetc(fin);
@@ -300,33 +355,49 @@ int backpatch_com_offset(void) {
       if (ch == EOF) {
         puts("An error occured when modifying thprac98.exe.");
         print_errno();
-        return 1;
+        ret = 1;
+        goto safe_return;
       }
       magic_check |= (unsigned long)(ch) << (j << 3);
     }
     if (magic_check != 0x99618848l) {
       printf(
-          "Magic number doesn't match at offset %08lX of thprac98.exe: "
-          "Expected %08lX, but found %08lX.\r\n",
+          "Magic number doesn't match at offset %08lX of thprac98.exe: \r\n"
+          "Expecting %08lXh, but found %08lXh.\r\n",
           (unsigned long)(com_info_off), 0x99618848l, magic_check);
-      fclose(fin);
-      return 1;
+      ret = 1;
+      goto safe_return;
     }
     com_data_pos -= com_file_size[i] - 1;
     fseek(fin, com_info_off, SEEK_SET);
-    fputc(com_data_pos & 0xFF, fin);
-    fputc((com_data_pos >> 8) & 0xFF, fin);
-    fputc((com_data_pos >> 16) & 0xFF, fin);
-    fputc((com_data_pos >> 24) & 0xFF, fin);
+    fputc((int)(com_data_pos) & 0xFF, fin);
+    fputc((int)(com_data_pos >> 8) & 0xFF, fin);
+    fputc((int)(com_data_pos >> 16) & 0xFF, fin);
+    fputc((int)(com_data_pos >> 24) & 0xFF, fin);
     fputc(com_file_size[i] & 0xFF, fin);
     fputc((com_file_size[i] >> 8) & 0xFF, fin);
     fclose(fin);
+    fin = NULL;
     printf(
-        "Patched dword %08lX and word %04X into offset %08lX in "
+        "Patched dword %08lXh and word %04Xh into offset %08lXh in "
         "THPRAC98.EXE.\r\n",
         com_data_pos, com_file_size[i], com_info_off);
   }
-  return 0;
+  ret = 0;
+safe_return:
+  if (fin != NULL) {
+    fclose(fin);
+    fin = NULL;
+  }
+  if (fin2 != NULL) {
+    fclose(fin2);
+    fin2 = NULL;
+  }
+  if (fin3 != NULL) {
+    fclose(fin3);
+    fin3 = NULL;
+  }
+  return ret;
 }
 
 #undef BACKPATCH_LABEL_LENGTH
