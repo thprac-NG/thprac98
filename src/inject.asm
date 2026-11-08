@@ -8,11 +8,16 @@
 ;       inject_code_t
 ; Global variables:
 ;       int8_t must_match[1]
+;       bool inject_right_after_load_once
 ; Procedures:
 ;       void near inject_one(inject_code_t near* inject_code, bool16 to_inject,
 ;                            void __seg* psp_seg);
 ;       void near inject_multiple(inject_code_t near* near* inject_codes,
 ;                                 bool16 to_inject, void __seg* psp_seg);
+
+; Set this flag if wish to call the inject procedure right after the next
+; INT 21h/4Bh call. The flag will be unset after the call.
+inject_right_after_load_once    db 0
 
 must_match      db -1
 
@@ -122,7 +127,7 @@ endp inject_one
 ;         Argument 3 (word): the PSP segment of the current program
 ; Output: None
 ; --------------------------------------------------------------------------
-proc inject_multiple
+proc inject_multiple near
 arg @@inject_codes:word, @@flag:word, @@cur_psp:word
         push    si
 
@@ -130,7 +135,7 @@ arg @@inject_codes:word, @@flag:word, @@cur_psp:word
 @@main_loop:
         cmp     [word ptr si], 0FFFFh
         je      @@skip_main_loop
-        ; push    [dword ptr @@flag]      ; equivantly, push [@@cur_psp] [@@flag]
+        ; push    [dword ptr @@flag]     ; equivantly, push [@@cur_psp] [@@flag]
         push    [word ptr @@cur_psp] [word ptr @@flag]
         push    [word ptr si]
         call    inject_one

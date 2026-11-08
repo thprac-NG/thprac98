@@ -14,13 +14,13 @@ org 100h
 start:
         jmp     real_start
 
-ENV_SEG_OFF     EQU 2Ch
+ENV_SEG_OFF     = 2Ch
 
-BS_MENU_WIDTH   EQU 21
-BS_MENU_HEIGHT  EQU 8
-FX_COUNT        EQU (BS_MENU_HEIGHT - 2)  ; Should be no greater than 6,
-                                          ; otherwise INT18h/04h won't work
-                                          ; properly.
+BS_MENU_WIDTH   = 21
+BS_MENU_HEIGHT  = 8
+FX_COUNT        = (BS_MENU_HEIGHT - 2)  ; Should be no greater than 6,
+                                        ; otherwise INT18h/04h won't work
+                                        ; properly.
 
 f1_text         db 'F1: Invincible', 0
 f2_text         db 'F2: Inf. Lives', 0
@@ -161,6 +161,8 @@ Z_PALETTE_SET_ALL_SHOW_SEGMENT  = 0E92h
 Z_PALETTE_SET_ALL_SHOW_OFFSET   = 01F0h
 GRZ_LOAD_SINGLE_SEGMENT         = 106Fh
 GRZ_LOAD_SINGLE_OFFSET          = 0A8Ch
+GAME_SWITCH_BINARY_SEGMENT      = 0E7Bh
+GAME_SWITCH_BINARY_OFFSET       = 00A2h
 
 ; REIIDEN.EXE modifications
 ; ==============================================================
@@ -312,6 +314,13 @@ inject_def inf_item_combo, 0, reiiden, 17CAh, 07BDh, 6
 ; Check https://github.com/H-J-Granger/ReC98/commit/8f0bb34d93327208999f406c654679b7a4ebdfb0
 ; for the C version of this modification.
 ;
+; skip_ending_when_practise {
+;   0B50:29AF | 9A A2 00 7B 1E -> 9A yy yy xx xx
+;             |          ^^ ^^ (*1)
+; }
+; Original assembly: callf game_switch_binary
+; Modified assembly: callf lock_rank_patch_proc
+;
 ; lock_rank_patch {
 ;   0B50:27A4 | 83 3E 84 22 01 -> 9A yy yy xx xx
 ; }
@@ -355,6 +364,12 @@ lock_rank_patch_org     db 083h, 03Eh, 084h, 022h, 001h
 lock_rank_patch_pat     db 09Ah
                         dw (offset lock_rank_patch_proc), 0
 inject_def lock_rank_patch 0, reiiden, 0B50h, 27A4h, 5
+
+skip_ending_when_practise_org   db 09Ah, 0A2h, 000h, 07Bh, 01Eh
+skip_ending_when_practise_pat   db 09Ah
+                                dw (offset skip_ending_when_practise_proc), 0
+skip_ending_when_practise_var   db 0, 0, 0, 1, 1
+inject_def skip_ending_when_practise 0, reiiden, 0B50h, 294Fh, 5
 
 ; --------------------------------------------------------------------------
 ; Function: my_0b50_0775
@@ -494,6 +509,26 @@ proc lock_rank_patch_proc far
         ret
         assume  ds:cseg
 endp lock_rank_patch_proc
+
+proc skip_ending_when_practise_proc far
+local @@game_switch_binary_off:word, @@game_switch_binary_seg:word
+        assume  ds:nothing
+
+        cmp     [byte ptr cs:playing_mode_slider.value], 1
+        jne     @@skip_set_inject_right_after_load_once
+        mov     [byte ptr cs:inject_right_after_load_once], 1
+@@skip_set_inject_right_after_load_once:
+
+        ; Hooked instruction
+        mov     bx, [cs:cur_psp]
+        lea     ax, [bx + 10h + GAME_SWITCH_BINARY_SEGMENT]
+        mov     [@@game_switch_binary_seg], ax
+        mov     [@@game_switch_binary_off], GAME_SWITCH_BINARY_OFFSET
+        call    [dword ptr @@game_switch_binary_off]
+
+        ret
+        assume  ds:cseg
+endp skip_ending_when_practise_proc
 
 ; Shingyoku Warps
 ; ======================
@@ -3197,13 +3232,13 @@ inject_def hook_start_continue, 0, op, 0A1Ch, 0751h, 6
 ; The segment and offset of the variable `resident` (of type resident_t far)
 ; defined in
 ; https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/core/resstuff.cpp#L11 .
-RESSTUFF_CPP_RESIDENT_SEG       EQU 1229h
-RESSTUFF_CPP_RESIDENT_OFF       EQU 1C56h
+RESSTUFF_CPP_RESIDENT_SEG       = 1229h
+RESSTUFF_CPP_RESIDENT_OFF       = 1C56h
 
 ; The offset of the variable `opts` (of type cfg_options_t far) defined in
 ; https://github.com/H-J-Granger/ReC98/blob/b6ba5b0a529edbb31efdf8c0e939263804f8ee47/th01/op_01.cpp#L67-L72 .
 ; (Its segment is the same as `resident`)
-OP_01_CPP_OPTS_OFF              EQU 0090h
+OP_01_CPP_OPTS_OFF              = 0090h
 
 ; --------------------------------------------------------------------------
 ; Function: hooked_resident_create_and_stuff_set
@@ -3329,11 +3364,11 @@ local @@end_and_verdict_and_regist_animate:dword, \
         pushfd
 
         mov     bx, [cur_psp]
-        lea     ax, [bx + 10 + END_AND_VERDICT_AND_REGIST_ANIMATE_SEGMENT]
+        lea     ax, [bx + 10h + END_AND_VERDICT_AND_REGIST_ANIMATE_SEGMENT]
         mov     [word ptr @@end_and_verdict_and_regist_animate + 2], ax
         mov     [word ptr @@end_and_verdict_and_regist_animate], \
                 END_AND_VERDICT_AND_REGIST_ANIMATE_OFFSET
-        lea     ax, [bx + 10 + VERDICT_ANIMATE_AND_REGIST_MENU_SEGMENT]
+        lea     ax, [bx + 10h + VERDICT_ANIMATE_AND_REGIST_MENU_SEGMENT]
         mov     [word ptr @@verdict_animate_and_regist_menu + 2], ax
         mov     [word ptr @@verdict_animate_and_regist_menu], \
                 VERDICT_ANIMATE_AND_REGIST_MENU_OFFSET
@@ -3430,7 +3465,8 @@ reiiden_unconditionals  dw (offset stage_num_animate), \
                            (offset esc_in_hit_quit_bugfix1), \
                            (offset esc_in_hit_quit_bugfix2), \
                            (offset display_orb_while_hit), \
-                           (offset lock_rank_patch), 0FFFFh
+                           (offset lock_rank_patch), \
+                           (offset skip_ending_when_practise_proc), 0FFFFh
 
 op_unconditionals       dw (offset practise_menu_part1), \
                            (offset practise_menu_part2), \
@@ -4938,7 +4974,8 @@ patch_cs_positions      dw (offset stage_num_animate_pat + 3), \
                            (offset esc_in_hit_quit_bugfix1_pat + 3), \
                            (offset esc_in_hit_quit_bugfix2_pat + 3), \
                            (offset lock_rank_patch_pat + 3), \
-                           (offset hook_start_continue_pat + 3)
+                           (offset hook_start_continue_pat + 3), \
+                           (offset skip_ending_when_practise_pat + 3)
                         dw (offset enter_ending_pat + 3)
                         dw (offset shingyoku_p2_attack_pat + 3), \
                            (offset shingyoku_init_pat + 3), \

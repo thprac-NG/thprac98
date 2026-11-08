@@ -163,17 +163,38 @@ endp my_int1c
 ; --------------------------------------------------------------------------
 ; Function: my_int21
 ; Description: Our hooked INT 21h procedure, setting the `int21_4b_just_loaded`
-;              field every time INT21h/4Bh is called.
+;              field every time INT21h/4Bh is called, and inject the code right
+;              after the call if flag `inject_right_after_load_once` is set.
 ; Input:  Registers to pass to the original INT 21h.
 ; Output: (Never returns)
 ; --------------------------------------------------------------------------
 proc my_int21 far
         assume  ds:nothing
         cmp     ah, 4Bh
-        jne     @@skip_setting_just_loaded_field
-        mov     [cs:int21_4b_just_loaded], INT21_4B_WAIT_LOAD_TIME
-@@skip_setting_just_loaded_field:
+        je      @@skip_jumping_to_old_int21
         jmp     [dword ptr cs:old_int21]
+@@skip_jumping_to_old_int21:
+        ; INT 21h/4Bh
+        pushf
+        call    [dword ptr cs:old_int21]
+
+        pushf
+        mov     [cs:int21_4b_just_loaded], INT21_4B_WAIT_LOAD_TIME
+        test    [byte ptr cs:inject_right_after_load_once], 1
+        jnz     @@skip_injecting
+        pusha
+        push    ds
+        jne     @@skip_injecting
+        mov     [byte ptr cs:inject_right_after_load_once], 0
+        mov     ax, cs
+        mov     ds, ax
+        call    inject
+        pop     ds
+        popa
+@@skip_injecting:
+        popf
+        iret
+        assume  ds:cseg
 endp my_int21
 
 ; --------------------------------------------------------------------------
