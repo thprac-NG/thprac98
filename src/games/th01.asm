@@ -287,6 +287,39 @@ inject_def inf_item_combo, 0, reiiden, 17CAh, 07BDh, 6
 ; Original assembly: call text_clear (provided by master.lib)
 ; Modified assembly: call my_1924_0364
 ;
+; esc_in_hit_quit_bugfix1 {
+;   0B50:14A9 | 80 3E AF 00 01 -> 9A yy yy xx xx
+; }, where "xxxx" is cseg, and "yyyy" is (offset esc_in_hit_quit_bugfix_proc).
+; esc_in_hit_quit_bugfix2 {
+;   0B50:15D6 | 80 3E AF 00 01 -> 9A yy yy xx xx
+; }, where "xxxx" is cseg, and "yyyy" is (offset esc_in_hit_quit_bugfix_proc).
+; The modifications of these patches (almost identical, take
+; esc_in_hit_quit_bugfix1 as an example):
+; - 0B50:14A9 | 80 3E AF 00 01    cmp    [word ptr player_is_hit], 1
+; + 0B50:14A9 | 9A yy yy xx xx    callf  esc_in_hit_quit_bugfix_proc
+; Check https://github.com/H-J-Granger/ReC98/commit/2c124cf83ce1feed38628d593a703f407509d572
+; for the C version of this modification.
+;
+; display_orb_while_hit {
+;   0B50:1397 | 75 1D -> 89 F6
+; }
+; Modification:
+;   0B50:138B | 83 3E E6 00 00    cmp     [word ptr orb_in_portal], 0
+;   0B50:1390 | 75 24             jne     0B50:13B6  ; skip rendering the orb
+;   0B50:1392 | 80 3E AF 00 00    cmp     [word ptr player_is_hit], 0
+; - 0B50:1397 | 75 1D             jnz     0B50:13B6  ; skip rendering the orb
+; + 0B50:1397 | 89 F6             mov     si, si  ; effectively nop
+; Check https://github.com/H-J-Granger/ReC98/commit/8f0bb34d93327208999f406c654679b7a4ebdfb0
+; for the C version of this modification.
+;
+; lock_rank_patch {
+;   0B50:27A4 | 83 3E 84 22 01 -> 9A yy yy xx xx
+; }
+; Original assembly: cmp [word ptr player_invincibility_time], 1
+; Modified assembly: callf lock_rank_patch_proc
+; Check https://github.com/H-J-Granger/ReC98/commit/df1abb04c1918bf7d6046f6799081fb456dd90d7
+; for the C version of this modification.
+;
 ; -----------------------
 ; (*1) This is an absolute call, the segment address might differ.
 
