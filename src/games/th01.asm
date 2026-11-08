@@ -2586,7 +2586,118 @@ proc kikuri_init_proc far
         assume  ds:cseg
 endp kikuri_init_proc
 
-; Kongara warps
+; Kongara Warps
+; ============================
+; Check https://github.com/H-J-Granger/ReC98/commit/1b0845797755272536c28c97ccf8e110f6a3bb3b
+; for the C version of the modification in this section.
+;
+; kongara_init {
+;   2CDD:20CB | C6 06 2E 5D 01 -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is (offset kongara_init_proc).
+;
+; kongara_inc_p1_patterns_done {
+;   2CDD:21BD | A1 58 16 A3 8D 6B -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kongara_inc_p1_patterns_done_proc).
+; kongara_inc_p2_patterns_done {
+;   2CDD:240D | A1 58 16 A3 8D 6B -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kongara_inc_p2_patterns_done_proc).
+; kongara_inc_p3_patterns_done {
+;   2CDD:2650 | A1 58 16 A3 8D 6B -> 9A yy yy xx xx 90
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kongara_inc_p3_patterns_done_proc).
+; The modifications of these patches (almost identical, take
+; kongara_inc_p1_patterns_done as an example):
+; - 2CDD:21BD | A1 58 16          mov     ax, [phase.pattern_cur]
+; - 2CDD:21C0 | A3 8D 6B          mov     [pattern_prev], ax
+; + 2CDD:21BD | 9A yy yy xx xx    callf   kongara_inc_p1_patterns_done_proc
+; - 2CDD:21C2 | 90                nop
+;
+; kongara_chk_p1_patterns_done {
+;   2CDD:223B | 83 3E 5A 16 07 -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kongara_chk_p1_patterns_done_proc).
+; kongara_chk_p2_patterns_done {
+;   2CDD:248B | 83 3E 5A 16 09 -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kongara_chk_p2_patterns_done_proc).
+; kongara_chk_p3_patterns_done {
+;   2CDD:26CE | 83 3E 5A 16 06 -> 9A yy yy xx xx
+; } where "xxxx" is cseg, and "yyyy" is
+;   (offset kongara_chk_p3_patterns_done_proc).
+; The modifications of these patches (almost identical, take
+; kongara_chk_p1_patterns_done as an example):
+; - 2CDD:223B | 83 3E 5A 16 07    cmp     [phase.patterns_done], 7
+; + 2CDD:223B | 9A yy yy xx xx    callf   kongara_chk_p1_patterns_done_proc
+;
+; kongara_skip_opening1 {
+;   2CDD:01D2 | 57 9A 08 00 73 21 59 03 FE -> 9A yy yy xx xx E9 CF 00 90
+;             |             ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (offset kongara_skip_opening1_proc).
+; Modification:
+; - 2CDD:01D2 | 57                push    di
+; - 2CDD:01D3 | 9A 08 00 73 21    callf   z_vsync_wait_and_scrollup
+; - 2CDD:01D8 | 59                pop     cx
+; - 2CDD:01D9 | 03 FE             add     di, si
+; + 2CDD:01D2 | 9A yy yy xx xx    callf   kongara_skip_opening1_proc
+; + 2CDD:01D7 | E9 CF 00          jmp     2CDD:02A9   ; skip the entire loop
+; + 2CDD:01DA | 90                nop
+;
+; kongara_skip_opening2 {
+;   2CDD:030E | 6A 28 9A 04 00 36 1E 83 C4 0A 33 F6 ->
+;             |                ^^ ^^ (*1)
+;             | 83 C4 08 9A yy yy xx xx E9 91 00 90
+; } where "xxxx" is cseg, and "yyyy" is (offset kongara_skip_opening2_proc).
+;   2CDD:0301 | 6A 06             push    6
+;   2CDD:0303 | 1E                push    ds
+;   2CDD:0304 | 68 C3 16          push    16C3h  ; offset to "boss8.grz"
+;   2CDD:0307 | 6A 06             push    6
+;   2CDD:0309 | 9A 8C 0A 6F 20    call    grz_load_single         ; delayed sp+8
+; - 2CDD:030E | 6A 28             push    28h
+; - 2CDD:0310 | 9A 04 00 36 1E    call    frame_delay             ; delayed sp+2
+; - 2CDD:0315 | 83 C4 0A          add     sp, 10                  ; sp+10
+; - 2CDD:0318 | 33 F6             xor     si, si
+; + 2CDD:030E | 83 C4 08          add     sp, 8                   ; sp+8
+; + 2CDD:0311 | 9A yy yy xx xx    callf   kongara_skip_opening2_proc
+; + 2CDD:0316 | E9 91 00          jmp     2CDD:03AA  ; jump to siddham rendering
+; + 2CDD:0319 | 90                nop
+;
+; kongara_skip_opening3 {
+;   2CDD:03E2 | 33 FF EB 3A A0 0B 07 -> 9A yy yy xx xx EB 3C
+; } where "xxxx" is cseg, and "yyyy" is (offset kongara_skip_opening3_proc).
+; - 2CDD:03E2 | 33 FF             xor     di, di
+; - 2CDD:03E4 | EB 3A             jmp     2CDD:0420
+; - 2CDD:03E6 | A0 0B 07          mov     al, z_Palettes[0x9].c.r
+; + 2CDD:03E2 | 9A yy yy xx xx    callf   kongara_skip_opening3_proc
+; + 2CDD:03E7 | EB 3C             jmp     2CDD:0425  ; skip the entire loop
+;
+; kongara_set_p1_attack {
+;   2CDD:2196 | 9A 08 16 00 10 BB 03 00 -> 9A yy yy xx xx EB 20 90
+;             |          ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (kongara_set_p1_attack_proc).
+; kongara_set_p2_attack {
+;   2CDD:23E6 | 9A 08 16 00 10 BB 04 00 -> 9A yy yy xx xx EB 20 90
+;             |          ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (kongara_set_p2_attack_proc).
+; kongara_set_p3_attack {
+;   2CDD:2629 | 9A 08 16 00 10 BB 03 00 -> 9A yy yy xx xx EB 20 90
+;             |          ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (kongara_set_p3_attack_proc).
+; kongara_set_p4_attack {
+;   2CDD:291F | 9A 08 16 00 10 BB 0C 00 -> 9A yy yy xx xx EB 20 90
+;             |          ^^ ^^ (*1)
+; } where "xxxx" is cseg, and "yyyy" is (kongara_set_p4_attack_proc).
+; The modifications of these patches (almost identical, take
+; kongara_chk_p1_patterns_done as an example):
+; - 2CDD:2196 | 9A 08 16 00 10    callf   irand
+; - 2CDD:219B | BB 03 00          mov     bx, 3
+; + 2CDD:2196 | 9A yy yy xx xx    callf   kongara_set_p1_attack_proc
+; + 2CDD:219B | EB 20             jmp     2CDD:21BD  ; skip setting pattern_cur
+; + 2CDD:219D | 90                nop
+;
+; -----------------------
+; (*1) This is an absolute call, the segment address might differ.
 
 kongara_init_org                        db 0C6h, 006h, 02Eh, 05Dh, 001h
 kongara_init_pat                        db 09Ah
