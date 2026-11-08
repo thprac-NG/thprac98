@@ -2598,7 +2598,7 @@ kongara_inc_p1_patterns_done_pat \
         db 09Ah
         dw (offset kongara_inc_p1_patterns_done_proc), 0
         db NOP_1BYTE
-inject_def kongara_inc_p1_patterns_done 0, reiiden, 2CDDh, 218Dh, 6
+inject_def kongara_inc_p1_patterns_done 0, reiiden, 2CDDh, 21BDh, 6
 
 kongara_chk_p1_patterns_done_org        db 083h, 03Eh, 05Ah, 016h, 007h
 kongara_chk_p1_patterns_done_pat \
